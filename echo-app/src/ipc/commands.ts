@@ -1,0 +1,52 @@
+import { invoke } from "@tauri-apps/api/core";
+
+export interface AudioDevice {
+  name: string;
+  is_default: boolean;
+}
+
+export interface DictionaryEntry {
+  id: number | null;
+  phrase: string;
+  replacement: string;
+  enabled: boolean;
+  profile_id: number | null;
+  created_at: string;
+}
+
+export interface TranscriptionRecord {
+  id: number | null;
+  text: string;
+  language: string | null;
+  provider: string;
+  created_at: string;
+}
+
+export const commands = {
+  getAudioDevices: () => invoke<AudioDevice[]>("get_audio_devices"),
+
+  startRecording: (deviceName?: string, language?: string) =>
+    invoke<void>("start_recording", { deviceName, language }),
+
+  stopRecording: () => invoke<void>("stop_recording"),
+
+  isRecording: () => invoke<boolean>("is_recording"),
+
+  listDictionary: () => invoke<DictionaryEntry[]>("list_dictionary"),
+
+  addDictionaryEntry: (phrase: string, replacement: string) =>
+    invoke<number>("add_dictionary_entry", { phrase, replacement }),
+
+  deleteDictionaryEntry: (id: number) =>
+    invoke<void>("delete_dictionary_entry", { id }),
+
+  getHistory: (limit?: number) =>
+    invoke<TranscriptionRecord[]>("get_history", { limit }),
+
+  clearHistory: () => invoke<void>("clear_history"),
+
+  getSetting: (key: string) => invoke<string | null>("get_setting", { key }),
+
+  setSetting: (key: string, value: string) =>
+    invoke<void>("set_setting", { key, value }),
+};
