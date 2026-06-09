@@ -7,7 +7,8 @@ mod storage;
 
 use std::sync::{Arc, Mutex};
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
+use tauri_plugin_global_shortcut::ShortcutState;
 use tokio::sync::RwLock;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
@@ -30,7 +31,16 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    // On hotkey press, ask the frontend to toggle recording.
+                    if event.state == ShortcutState::Pressed {
+                        let _ = app.emit("echo://hotkey-toggle", ());
+                    }
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
@@ -139,6 +149,11 @@ pub fn run() {
                 }
             }
 
+            // Resolve the global hotkey (registered after state is managed).
+            let hotkey = storage::repositories::get_setting(&conn, "hotkey")
+                .unwrap_or(None)
+                .unwrap_or_else(|| commands::hotkey::DEFAULT_HOTKEY.to_string());
+
             let app_state = AppState {
                 db: Mutex::new(conn),
                 audio: Arc::new(AudioService::new().expect("Failed to initialize audio")),
@@ -153,6 +168,13 @@ pub fn run() {
             };
 
             app.manage(app_state);
+
+            // Register the global hotkey now that state is available.
+            use tauri_plugin_global_shortcut::GlobalShortcutExt;
+            if let Err(e) = app.global_shortcut().register(hotkey.as_str()) {
+                tracing::warn!("Failed to register global hotkey '{hotkey}': {e}");
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -172,6 +194,8 @@ pub fn run() {
             commands::history::get_history,
             commands::history::clear_history,
             commands::injection::check_accessibility_permission,
+            commands::hotkey::get_hotkey,
+            commands::hotkey::register_hotkey,
             commands::providers::set_api_key,
             commands::providers::get_api_key_set,
             commands::providers::remove_api_key,

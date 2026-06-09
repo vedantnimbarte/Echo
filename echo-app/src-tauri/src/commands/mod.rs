@@ -2,6 +2,7 @@ pub mod asr;
 pub mod audio;
 pub mod dictionary;
 pub mod history;
+pub mod hotkey;
 pub mod injection;
 pub mod plugins;
 pub mod providers;
