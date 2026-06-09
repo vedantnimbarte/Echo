@@ -178,6 +178,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::app::quit,
             commands::audio::get_audio_devices,
             commands::asr::list_models,
             commands::asr::download_model,

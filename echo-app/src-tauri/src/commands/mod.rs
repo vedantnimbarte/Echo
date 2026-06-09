@@ -1,3 +1,4 @@
+pub mod app;
 pub mod asr;
 pub mod audio;
 pub mod dictionary;
