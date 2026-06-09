@@ -48,10 +48,16 @@ chrono = { version = "0.4", features = ["serde"] }
 
 async-trait = "0.1"
 
-# HTTP client for downloading ASR models (uses platform default TLS — schannel
-# on Windows — to avoid extra native build deps).
-reqwest = { version = "0.12", features = ["stream"] }
+# HTTP client for downloading ASR models and calling cloud ASR APIs (uses
+# platform default TLS — schannel on Windows — to avoid extra native build deps).
+reqwest = { version = "0.12", features = ["stream", "multipart", "json"] }
 futures-util = "0.3"
+
+# WAV encoding for cloud ASR uploads.
+hound = "3.5"
+
+# Secure API-key storage in the OS keychain.
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 
 # Local Whisper (optional — see [features].whisper above).
 whisper-rs = { version = "0.13", optional = true }

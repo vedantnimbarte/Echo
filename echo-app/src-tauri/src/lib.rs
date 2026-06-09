@@ -87,6 +87,18 @@ pub fn run() {
                 }
             }
 
+            // Register any cloud ASR providers whose API keys are in the keychain.
+            for provider_name in ["openai", "groq", "deepgram"] {
+                if let Ok(Some(key)) = storage::keychain::get_api_key(provider_name) {
+                    if let Ok(provider) = commands::providers::build_provider(provider_name, key) {
+                        let asr = asr_manager.clone();
+                        tauri::async_runtime::block_on(async move {
+                            asr.register(provider).await;
+                        });
+                    }
+                }
+            }
+
             let app_state = AppState {
                 db: Mutex::new(conn),
                 audio: Arc::new(AudioService::new().expect("Failed to initialize audio")),
@@ -117,6 +129,9 @@ pub fn run() {
             commands::history::get_history,
             commands::history::clear_history,
             commands::injection::check_accessibility_permission,
+            commands::providers::set_api_key,
+            commands::providers::get_api_key_set,
+            commands::providers::remove_api_key,
             commands::settings::get_setting,
             commands::settings::set_setting,
         ])
