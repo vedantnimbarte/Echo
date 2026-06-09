@@ -63,6 +63,14 @@ pub fn delete_dictionary_entry(conn: &Connection, id: i64) -> Result<()> {
     Ok(())
 }
 
+pub fn set_dictionary_entry_enabled(conn: &Connection, id: i64, enabled: bool) -> Result<()> {
+    conn.execute(
+        "UPDATE dictionary_entries SET enabled = ?2 WHERE id = ?1",
+        params![id, enabled as i64],
+    )?;
+    Ok(())
+}
+
 // ── History ───────────────────────────────────────────────────────────────────
 
 pub fn insert_history(conn: &Connection, record: &TranscriptionRecord) -> Result<i64> {
