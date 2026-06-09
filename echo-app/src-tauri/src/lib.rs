@@ -115,6 +115,30 @@ pub fn run() {
                 })),
             );
 
+            // Plugins: ensure the directory exists and load any enabled plugins.
+            let plugins_dir = data_dir.join("plugins");
+            std::fs::create_dir_all(&plugins_dir)?;
+            let mut plugin_loader = core::plugins::loader::PluginLoader::new();
+            if let Ok(rows) = storage::repositories::list_plugins(&conn) {
+                let ctx = core::plugins::PluginContext {
+                    data_dir: plugins_dir.clone(),
+                    settings: Arc::new(|_| None),
+                };
+                for (name, _version, enabled, manifest_str) in rows {
+                    if !enabled {
+                        continue;
+                    }
+                    if let Ok(manifest) =
+                        serde_json::from_str::<core::plugins::PluginManifest>(&manifest_str)
+                    {
+                        let lib = plugins_dir.join(&name).join(&manifest.entry);
+                        if let Err(e) = plugin_loader.load(&lib, &ctx) {
+                            tracing::error!("Failed to load plugin '{name}': {e}");
+                        }
+                    }
+                }
+            }
+
             let app_state = AppState {
                 db: Mutex::new(conn),
                 audio: Arc::new(AudioService::new().expect("Failed to initialize audio")),
@@ -123,6 +147,8 @@ pub fn run() {
                 dictionary: Arc::new(RwLock::new(DictionaryEngine::new(entries))),
                 injector: Arc::from(platform_injector()),
                 telemetry,
+                plugins: Mutex::new(plugin_loader),
+                plugins_dir,
                 recording: Mutex::new(false),
             };
 
@@ -153,6 +179,11 @@ pub fn run() {
             commands::telemetry::clear_telemetry,
             commands::telemetry::set_telemetry_enabled,
             commands::telemetry::record_telemetry_event,
+            commands::plugins::list_plugins,
+            commands::plugins::install_plugin,
+            commands::plugins::enable_plugin,
+            commands::plugins::disable_plugin,
+            commands::plugins::uninstall_plugin,
             commands::settings::get_setting,
             commands::settings::set_setting,
         ])

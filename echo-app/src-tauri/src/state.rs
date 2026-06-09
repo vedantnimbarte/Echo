@@ -1,4 +1,5 @@
 use rusqlite::Connection;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 
@@ -8,6 +9,7 @@ use crate::core::{
     audio::AudioService,
     dictionary::DictionaryEngine,
     injection::TextInjector,
+    plugins::loader::PluginLoader,
     telemetry::TelemetryService,
 };
 
@@ -24,6 +26,8 @@ pub struct AppState {
     pub dictionary: Arc<RwLock<DictionaryEngine>>,
     pub injector: Arc<dyn TextInjector>,
     pub telemetry: TelemetryService,
+    pub plugins: Mutex<PluginLoader>,
+    pub plugins_dir: PathBuf,
     pub recording: Mutex<bool>,
 }
 

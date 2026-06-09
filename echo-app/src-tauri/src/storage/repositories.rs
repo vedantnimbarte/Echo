@@ -105,3 +105,52 @@ pub fn clear_history(conn: &Connection) -> Result<()> {
     conn.execute("DELETE FROM transcription_history", [])?;
     Ok(())
 }
+
+// ── Plugins ─────────────────────────────────────────────────────────────────
+
+/// Insert or replace a plugin registry row. `manifest` is the raw plugin.json.
+pub fn upsert_plugin(
+    conn: &Connection,
+    name: &str,
+    version: &str,
+    enabled: bool,
+    manifest: &str,
+) -> Result<()> {
+    conn.execute(
+        "INSERT INTO plugins (name, version, enabled, manifest) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(name) DO UPDATE SET version = excluded.version,
+            enabled = excluded.enabled, manifest = excluded.manifest",
+        params![name, version, enabled as i64, manifest],
+    )?;
+    Ok(())
+}
+
+/// Returns (name, version, enabled, manifest) rows for all installed plugins.
+pub fn list_plugins(conn: &Connection) -> Result<Vec<(String, String, bool, String)>> {
+    let mut stmt =
+        conn.prepare("SELECT name, version, enabled, manifest FROM plugins ORDER BY name")?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, i64>(2)? != 0,
+                r.get::<_, String>(3)?,
+            ))
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+pub fn set_plugin_enabled(conn: &Connection, name: &str, enabled: bool) -> Result<()> {
+    conn.execute(
+        "UPDATE plugins SET enabled = ?2 WHERE name = ?1",
+        params![name, enabled as i64],
+    )?;
+    Ok(())
+}
+
+pub fn delete_plugin(conn: &Connection, name: &str) -> Result<()> {
+    conn.execute("DELETE FROM plugins WHERE name = ?1", params![name])?;
+    Ok(())
+}
