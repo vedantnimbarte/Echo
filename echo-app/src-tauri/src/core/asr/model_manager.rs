@@ -10,32 +10,60 @@ use crate::error::{EchoError, Result};
 /// Catalog of downloadable Whisper models (ggml format, from Hugging Face).
 /// `size_mb` is approximate and used only for display in the UI.
 const MODEL_CATALOG: &[ModelSpec] = &[
+    // English-only models — smaller and more accurate for English speech.
+    ModelSpec {
+        name: "tiny.en",
+        url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin",
+        size_mb: 75,
+        english_only: true,
+    },
+    ModelSpec {
+        name: "base.en",
+        url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
+        size_mb: 142,
+        english_only: true,
+    },
+    ModelSpec {
+        name: "small.en",
+        url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin",
+        size_mb: 466,
+        english_only: true,
+    },
+    // Multilingual models.
     ModelSpec {
         name: "tiny",
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
         size_mb: 75,
+        english_only: false,
     },
     ModelSpec {
         name: "base",
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
         size_mb: 142,
+        english_only: false,
     },
     ModelSpec {
         name: "small",
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
         size_mb: 466,
+        english_only: false,
     },
     ModelSpec {
         name: "medium",
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
         size_mb: 1500,
+        english_only: false,
     },
 ];
+
+/// The model fetched on first run and used by default.
+pub const DEFAULT_MODEL: &str = "base.en";
 
 struct ModelSpec {
     name: &'static str,
     url: &'static str,
     size_mb: u32,
+    english_only: bool,
 }
 
 /// Information about a model returned to the frontend.
@@ -44,6 +72,7 @@ pub struct ModelInfo {
     pub name: String,
     pub downloaded: bool,
     pub size_mb: u32,
+    pub english_only: bool,
 }
 
 /// Manages local Whisper model files: listing, download, and path resolution.
@@ -72,6 +101,7 @@ impl ModelManager {
                 name: m.name.to_string(),
                 downloaded: self.is_downloaded(m.name),
                 size_mb: m.size_mb,
+                english_only: m.english_only,
             })
             .collect()
     }

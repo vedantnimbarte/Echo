@@ -3,9 +3,11 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
+pub mod binary_manager;
 pub mod manager;
 pub mod model_manager;
 pub mod wav;
+pub mod whisper_cli;
 
 pub mod deepgram;
 pub mod openai;
