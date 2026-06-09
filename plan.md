@@ -15,7 +15,7 @@
 | 2 | Local ASR (Whisper) | ✅ Code complete (build needs libclang) |
 | 3 | Text Injection | ✅ All platforms (macOS/Linux unverified on Win host) |
 | 4 | Dictionaries | ✅ Complete |
-| 5 | Cloud ASR Providers | 🔲 Not started |
+| 5 | Cloud ASR Providers | ✅ Complete (Deepgram via HTTP, not WS yet) |
 | 6 | Telemetry | 🔲 Not started |
 | 7 | Plugin System | 🔲 Not started |
 | 8 | Packaging | 🔲 Not started |
@@ -487,7 +487,9 @@ let processed = state.dictionary.read().await.process(&segment.text);
 
 ---
 
-## Phase 5 — Cloud ASR Providers 🔲
+## Phase 5 — Cloud ASR Providers ✅
+
+**Done:** OpenAI + Groq via shared `WhisperApiProvider` (5.1, 5.2), Deepgram via the pre-recorded `/v1/listen` HTTP API (5.3 — WebSocket streaming deferred), `keychain.rs` for OS-keychain key storage (5.4), `commands/providers.rs` with `set_api_key`/`get_api_key_set`/`remove_api_key` + startup registration (5.5), and the `CloudProviders` settings UI (5.6). Shared WAV encoder (`hound`) and a default buffered `transcribe_stream` on the trait support all batch providers.
 
 ### 5.1 OpenAI Whisper API
 
