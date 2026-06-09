@@ -70,4 +70,7 @@ export const commands = {
   downloadModel: (name: string) => invoke<void>("download_model", { name }),
 
   setAsrProvider: (name: string) => invoke<void>("set_asr_provider", { name }),
+
+  checkAccessibilityPermission: () =>
+    invoke<boolean>("check_accessibility_permission"),
 };
