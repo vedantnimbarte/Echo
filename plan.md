@@ -17,7 +17,7 @@
 | 4 | Dictionaries | ✅ Complete |
 | 5 | Cloud ASR Providers | ✅ Complete (Deepgram via HTTP, not WS yet) |
 | 6 | Telemetry | ✅ Complete |
-| 7 | Plugin System | 🔲 Not started |
+| 7 | Plugin System | ✅ Core complete (SDK crate deferred) |
 | 8 | Packaging | 🔲 Not started |
 | 9 | v1 Launch | 🔲 Not started |
 
@@ -647,7 +647,11 @@ Add to `SettingsPanel.tsx`:
 
 ---
 
-## Phase 7 — Plugin System 🔲
+## Phase 7 — Plugin System ✅
+
+**Done:** plugin traits + `PluginContext` (7.1), `PluginManifest`/`plugin.json` schema (7.2), `PluginLoader` via libloading (7.3), commands `list_plugins`/`install_plugin`/`enable_plugin`/`disable_plugin`/`uninstall_plugin` with DB+disk registry and startup loading (7.4), and the `PluginsPanel` UI + tab (7.6). **Deferred:** the standalone `echo-sdk` proc-macro crate (7.5) — it requires extracting the plugin API into a shared crate; the loader's `echo_plugin_create` contract is documented in `loader.rs` so plugins can be written against the traits today.
+
+**Safety:** plugins run in-process with full trust; the manifest permission list is advisory. True sandboxing (WASM) is a future goal.
 
 ### 7.1 Plugin trait
 
