@@ -1,5 +1,29 @@
-/// Simple energy-based Voice Activity Detector.
-/// Phase 1 uses this lightweight fallback; Silero VAD (ONNX) replaces it in Phase 2.
+//! Voice activity detection.
+//!
+//! Two engines implement the [`Vad`] trait:
+//! - [`SileroVad`] — a neural VAD (Silero v5, ONNX) that robustly ignores
+//!   non-speech noise (keyboard, fans). Default when the model loads.
+//! - [`EnergyVad`] — a lightweight RMS-threshold fallback used when the Silero
+//!   model is unavailable.
+//!
+//! The recording task owns a single boxed `Vad` for the session and reads a
+//! debounced speech/no-speech boolean from it per audio chunk.
+
+mod silero;
+
+pub use silero::{SileroModel, SileroVad};
+
+/// A voice activity detector. Implementations debounce internally so the caller
+/// sees a stable speech/silence signal across chunk boundaries.
+pub trait Vad: Send {
+    /// Returns whether speech is currently active given the next audio chunk.
+    fn is_speech(&mut self, samples: &[f32]) -> bool;
+
+    /// Reset internal state between recording sessions.
+    fn reset(&mut self);
+}
+
+/// Simple energy-based Voice Activity Detector — the fallback engine.
 pub struct EnergyVad {
     threshold: f32,
     /// Window of recent energy values used for dynamic thresholding.
@@ -20,8 +44,10 @@ impl EnergyVad {
             silent_count: 0,
         }
     }
+}
 
-    pub fn is_speech(&mut self, samples: &[f32]) -> bool {
+impl Vad for EnergyVad {
+    fn is_speech(&mut self, samples: &[f32]) -> bool {
         let rms = rms(samples);
         self.history.push(rms);
         if self.history.len() > self.history_max {
@@ -38,8 +64,7 @@ impl EnergyVad {
         active || self.silent_count < self.silence_frames
     }
 
-    /// Reset internal state between recordings.
-    pub fn reset(&mut self) {
+    fn reset(&mut self) {
         self.history.clear();
         self.silent_count = 0;
     }

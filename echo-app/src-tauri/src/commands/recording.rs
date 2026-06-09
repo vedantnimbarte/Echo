@@ -6,7 +6,7 @@ use crate::{
     core::{
         asr::TranscriptSegment,
         events::AppEvent,
-        vad::EnergyVad,
+        vad::{EnergyVad, SileroVad, Vad},
     },
     error::{EchoError, Result},
     state::AppState,
@@ -57,10 +57,23 @@ pub async fn start_recording(
     // It forwards only speech chunks and emits an empty-vec sentinel at each
     // speech→silence transition so the ASR provider knows an utterance ended.
     // The VAD instance belongs entirely to this task (see architectural rule 8).
+    // Pick the VAD engine: Silero (neural, ignores keyboard/fan noise) when its
+    // model loaded, else the energy fallback. `vad_engine` setting can force it.
+    let silero_model = state.silero.clone();
+    let vad_engine = {
+        let conn = state.db.lock().unwrap();
+        crate::storage::repositories::get_setting(&conn, "vad_engine")
+            .unwrap_or(None)
+            .unwrap_or_else(|| "silero".into())
+    };
+
     let (vad_tx, vad_rx) = mpsc::channel::<Vec<f32>>(256);
     let level_app = app.clone();
     tokio::spawn(async move {
-        let mut vad = EnergyVad::new(0.01);
+        let mut vad: Box<dyn Vad> = match silero_model {
+            Some(model) if vad_engine != "energy" => Box::new(SileroVad::new(model)),
+            _ => Box::new(EnergyVad::new(0.01)),
+        };
         let mut was_speaking = false;
         while let Some(chunk) = audio_rx.recv().await {
             if chunk.is_empty() {
