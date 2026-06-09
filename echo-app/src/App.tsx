@@ -1,19 +1,21 @@
 import { useState } from "react";
 import clsx from "clsx";
-import { Mic, BookOpen, Clock, Settings } from "lucide-react";
+import { Mic, BookOpen, Clock, Settings, Puzzle } from "lucide-react";
 
 import { useEchoEvents } from "./hooks/useEchoEvents";
 import { RecordingPanel } from "./components/recording/RecordingPanel";
 import { DictionaryPanel } from "./components/dictionary/DictionaryPanel";
 import { HistoryPanel } from "./components/history/HistoryPanel";
 import { SettingsPanel } from "./components/settings/SettingsPanel";
+import { PluginsPanel } from "./components/plugins/PluginsPanel";
 
-type Tab = "record" | "dictionary" | "history" | "settings";
+type Tab = "record" | "dictionary" | "history" | "plugins" | "settings";
 
 const TABS: { id: Tab; label: string; Icon: React.ElementType }[] = [
   { id: "record", label: "Record", Icon: Mic },
   { id: "dictionary", label: "Dictionary", Icon: BookOpen },
   { id: "history", label: "History", Icon: Clock },
+  { id: "plugins", label: "Plugins", Icon: Puzzle },
   { id: "settings", label: "Settings", Icon: Settings },
 ];
 
@@ -50,6 +52,7 @@ export default function App() {
         {tab === "record" && <RecordingPanel />}
         {tab === "dictionary" && <DictionaryPanel />}
         {tab === "history" && <HistoryPanel />}
+        {tab === "plugins" && <PluginsPanel />}
         {tab === "settings" && <SettingsPanel />}
       </main>
     </div>

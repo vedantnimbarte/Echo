@@ -33,6 +33,14 @@ export interface TelemetrySummaryItem {
   count: number;
 }
 
+export interface PluginInfo {
+  name: string;
+  version: string;
+  description: string;
+  author: string;
+  enabled: boolean;
+}
+
 export const commands = {
   getAudioDevices: () => invoke<AudioDevice[]>("get_audio_devices"),
 
@@ -98,4 +106,15 @@ export const commands = {
 
   recordTelemetryEvent: (eventType: string, payload?: unknown) =>
     invoke<void>("record_telemetry_event", { eventType, payload }),
+
+  listPlugins: () => invoke<PluginInfo[]>("list_plugins"),
+
+  installPlugin: (path: string) => invoke<void>("install_plugin", { path }),
+
+  enablePlugin: (name: string) => invoke<void>("enable_plugin", { name }),
+
+  disablePlugin: (name: string) => invoke<void>("disable_plugin", { name }),
+
+  uninstallPlugin: (name: string) =>
+    invoke<void>("uninstall_plugin", { name }),
 };
