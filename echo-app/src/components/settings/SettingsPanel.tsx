@@ -39,6 +39,15 @@ export function SettingsPanel() {
     setPermissionStatus(await commands.checkAccessibilityPermission());
   }
 
+  const { data: hotkey } = useQuery({
+    queryKey: ["hotkey"],
+    queryFn: commands.getHotkey,
+  });
+  const [hotkeyDraft, setHotkeyDraft] = useState<string | null>(null);
+  const registerHotkeyMutation = useMutation({
+    mutationFn: (v: string) => commands.registerHotkey(v),
+  });
+
   const setProviderMutation = useMutation({
     mutationFn: (v: string) => commands.setSetting("asr_provider", v),
   });
@@ -52,6 +61,33 @@ export function SettingsPanel() {
       <h2 className="text-lg font-semibold text-zinc-100">Settings</h2>
 
       <div className="space-y-4">
+        {/* Global hotkey */}
+        <label className="block space-y-1">
+          <span className="text-sm text-zinc-400">Global hotkey (toggle recording)</span>
+          <div className="flex gap-2">
+            <input
+              className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
+              value={hotkeyDraft ?? hotkey ?? ""}
+              placeholder="CommandOrControl+Shift+Space"
+              onChange={(e) => setHotkeyDraft(e.target.value)}
+            />
+            <button
+              onClick={() =>
+                registerHotkeyMutation.mutate(hotkeyDraft ?? hotkey ?? "")
+              }
+              disabled={registerHotkeyMutation.isPending}
+              className="rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 px-4 py-2 text-sm text-white"
+            >
+              Save
+            </button>
+          </div>
+          {registerHotkeyMutation.isError && (
+            <span className="text-xs text-red-400">
+              {String(registerHotkeyMutation.error)}
+            </span>
+          )}
+        </label>
+
         {/* ASR Provider */}
         <label className="block space-y-1">
           <span className="text-sm text-zinc-400">ASR Provider</span>

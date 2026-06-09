@@ -26,6 +26,15 @@ export function useEchoEvents() {
         });
       }),
       echoEvents.onError((msg) => setError(msg)),
+      echoEvents.onHotkeyToggle(() => {
+        // Read live state to avoid a stale closure, then toggle recording.
+        const { isRecording, selectedDevice } = useRecordingStore.getState();
+        if (isRecording) {
+          void commands.stopRecording();
+        } else {
+          void commands.startRecording(selectedDevice ?? undefined);
+        }
+      }),
     ]);
 
     return () => {

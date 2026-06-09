@@ -117,4 +117,9 @@ export const commands = {
 
   uninstallPlugin: (name: string) =>
     invoke<void>("uninstall_plugin", { name }),
+
+  getHotkey: () => invoke<string>("get_hotkey"),
+
+  registerHotkey: (shortcut: string) =>
+    invoke<void>("register_hotkey", { shortcut }),
 };

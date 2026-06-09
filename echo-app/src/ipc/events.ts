@@ -45,4 +45,6 @@ export const echoEvents = {
     listen<{ name: string }>("echo://model-download-complete", (e) =>
       cb(e.payload.name)
     ),
+
+  onHotkeyToggle: (cb: () => void) => listen("echo://hotkey-toggle", cb),
 };
