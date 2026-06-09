@@ -33,6 +33,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let data_dir = app
                 .path()
@@ -91,7 +92,7 @@ pub fn run() {
                 audio: Arc::new(AudioService::new().expect("Failed to initialize audio")),
                 asr: asr_manager,
                 models: model_manager,
-                dictionary: RwLock::new(DictionaryEngine::new(entries)),
+                dictionary: Arc::new(RwLock::new(DictionaryEngine::new(entries))),
                 injector: Arc::from(platform_injector()),
                 recording: Mutex::new(false),
             };
@@ -110,6 +111,9 @@ pub fn run() {
             commands::dictionary::list_dictionary,
             commands::dictionary::add_dictionary_entry,
             commands::dictionary::delete_dictionary_entry,
+            commands::dictionary::toggle_dictionary_entry,
+            commands::dictionary::export_dictionary,
+            commands::dictionary::import_dictionary,
             commands::history::get_history,
             commands::history::clear_history,
             commands::settings::get_setting,

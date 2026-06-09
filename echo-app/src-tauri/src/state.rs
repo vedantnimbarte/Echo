@@ -20,7 +20,7 @@ pub struct AppState {
     pub audio: Arc<AudioService>,
     pub asr: Arc<AsrManager>,
     pub models: Arc<ModelManager>,
-    pub dictionary: RwLock<DictionaryEngine>,
+    pub dictionary: Arc<RwLock<DictionaryEngine>>,
     pub injector: Arc<dyn TextInjector>,
     pub recording: Mutex<bool>,
 }

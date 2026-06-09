@@ -74,19 +74,47 @@ pub async fn start_recording(
         }
     });
 
+    // Capture shared handles before the spawn — `state` is not 'static.
+    let dictionary = state.dictionary.clone();
+    let injector = state.injector.clone();
+    let auto_inject = {
+        let conn = state.db.lock().unwrap();
+        crate::storage::repositories::get_setting(&conn, "auto_inject")
+            .unwrap_or(None)
+            .map(|v| v != "false")
+            .unwrap_or(true)
+    };
+
     let app_clone = app.clone();
     tokio::spawn(async move {
         while let Some(segment) = transcript_rx.recv().await {
-            let event = if segment.is_final {
-                AppEvent::TranscriptFinal {
-                    text: segment.text,
+            if segment.is_final {
+                // Apply dictionary replacements to the final transcript.
+                let processed = dictionary.read().await.process(&segment.text);
+                let event = AppEvent::TranscriptFinal {
+                    text: processed.clone(),
                     language: segment.language,
+                };
+                if let Err(e) = app_clone.emit(event.event_name(), &event) {
+                    error!("Failed to emit transcript event: {e}");
+                }
+
+                // Inject into the focused application if enabled.
+                if auto_inject && !processed.is_empty() {
+                    let inj = injector.clone();
+                    let result =
+                        tokio::task::spawn_blocking(move || inj.inject_text(&processed)).await;
+                    match result {
+                        Ok(Err(e)) => error!("Text injection failed: {e}"),
+                        Err(e) => error!("Injection task panicked: {e}"),
+                        Ok(Ok(())) => {}
+                    }
                 }
             } else {
-                AppEvent::TranscriptPartial { text: segment.text }
-            };
-            if let Err(e) = app_clone.emit(event.event_name(), &event) {
-                error!("Failed to emit transcript event: {e}");
+                let event = AppEvent::TranscriptPartial { text: segment.text };
+                if let Err(e) = app_clone.emit(event.event_name(), &event) {
+                    error!("Failed to emit transcript event: {e}");
+                }
             }
         }
     });
