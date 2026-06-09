@@ -59,6 +59,9 @@ hound = "3.5"
 # Secure API-key storage in the OS keychain.
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
 
+# Dynamic loading of native plugins (experimental, advisory permission model).
+libloading = "0.8"
+
 # Local Whisper (optional — see [features].whisper above).
 whisper-rs = { version = "0.13", optional = true }
 
