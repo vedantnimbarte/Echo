@@ -4,6 +4,7 @@ use tokio::sync::RwLock;
 
 use crate::core::{
     asr::manager::AsrManager,
+    asr::model_manager::ModelManager,
     audio::AudioService,
     dictionary::DictionaryEngine,
     injection::TextInjector,
@@ -18,6 +19,7 @@ pub struct AppState {
     pub db: Mutex<Connection>,
     pub audio: Arc<AudioService>,
     pub asr: Arc<AsrManager>,
+    pub models: Arc<ModelManager>,
     pub dictionary: RwLock<DictionaryEngine>,
     pub injector: Arc<dyn TextInjector>,
     pub recording: Mutex<bool>,

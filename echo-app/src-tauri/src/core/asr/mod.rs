@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
 pub mod manager;
+pub mod model_manager;
+
+#[cfg(feature = "whisper")]
+pub mod whisper;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TranscriptSegment {
