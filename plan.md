@@ -13,7 +13,7 @@
 | 0 | Foundation | ✅ Complete |
 | 1 | Audio Pipeline | ✅ Complete (Silero VAD deferred) |
 | 2 | Local ASR (Whisper) | ✅ Code complete (build needs libclang) |
-| 3 | Text Injection | 🟡 Windows done; macOS/Linux stubs |
+| 3 | Text Injection | ✅ All platforms (macOS/Linux unverified on Win host) |
 | 4 | Dictionaries | ✅ Complete |
 | 5 | Cloud ASR Providers | 🔲 Not started |
 | 6 | Telemetry | 🔲 Not started |
@@ -362,9 +362,11 @@ if model_path.exists() {
 
 ---
 
-## Phase 3 — Text Injection 🟡
+## Phase 3 — Text Injection ✅
 
 **Windows:** Complete. `platform/windows.rs` uses `SendInput` with `KEYEVENTF_UNICODE`.
+
+**macOS (3.1):** `platform/macos.rs` posts per-character CGEvents via core-graphics, gated on `AXIsProcessTrusted`. **Linux (3.2):** `platform/linux.rs` shells out to `ydotool`/`xdotool` with args after `--` (no shell, no flag injection). **Settings UI (3.3):** auto-inject toggle, inject delay, accessibility check. Also added `inject_delay_ms` handling and a `check_accessibility_permission` command. macOS/Linux paths are cfg-gated and were not compiled on the Windows dev host — verify on those platforms.
 
 ### 3.1 macOS injection
 
