@@ -46,6 +46,15 @@ export const commands = {
   deleteDictionaryEntry: (id: number) =>
     invoke<void>("delete_dictionary_entry", { id }),
 
+  toggleDictionaryEntry: (id: number, enabled: boolean) =>
+    invoke<void>("toggle_dictionary_entry", { id, enabled }),
+
+  exportDictionary: (path: string) =>
+    invoke<void>("export_dictionary", { path }),
+
+  importDictionary: (path: string) =>
+    invoke<number>("import_dictionary", { path }),
+
   getHistory: (limit?: number) =>
     invoke<TranscriptionRecord[]>("get_history", { limit }),
 

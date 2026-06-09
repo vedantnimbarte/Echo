@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, Download, Upload } from "lucide-react";
+import { save, open } from "@tauri-apps/plugin-dialog";
 import { commands } from "../../ipc/commands";
 
 export function DictionaryPanel() {
@@ -27,9 +28,50 @@ export function DictionaryPanel() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dictionary"] }),
   });
 
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) =>
+      commands.toggleDictionaryEntry(id, enabled),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["dictionary"] }),
+  });
+
+  async function handleExport() {
+    const path = await save({
+      defaultPath: "echo-dictionary.json",
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (path) await commands.exportDictionary(path);
+  }
+
+  async function handleImport() {
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: "JSON", extensions: ["json"] }],
+    });
+    if (typeof selected === "string") {
+      await commands.importDictionary(selected);
+      qc.invalidateQueries({ queryKey: ["dictionary"] });
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
-      <h2 className="text-lg font-semibold text-zinc-100">Custom Dictionary</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-zinc-100">Custom Dictionary</h2>
+        <div className="flex gap-2">
+          <button
+            onClick={handleImport}
+            className="flex items-center gap-1 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 transition-colors"
+          >
+            <Upload className="w-3.5 h-3.5" /> Import
+          </button>
+          <button
+            onClick={handleExport}
+            className="flex items-center gap-1 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" /> Export
+          </button>
+        </div>
+      </div>
 
       {/* Add entry form */}
       <form
@@ -73,9 +115,34 @@ export function DictionaryPanel() {
               key={entry.id}
               className="flex items-center gap-3 bg-zinc-800/50 border border-zinc-700 rounded-lg px-4 py-2 text-sm"
             >
-              <span className="text-zinc-300 font-mono">{entry.phrase}</span>
+              <input
+                type="checkbox"
+                className="w-4 h-4 accent-violet-500"
+                checked={entry.enabled}
+                disabled={entry.id == null}
+                onChange={(e) =>
+                  entry.id != null &&
+                  toggleMutation.mutate({ id: entry.id, enabled: e.target.checked })
+                }
+                aria-label={entry.enabled ? "Disable entry" : "Enable entry"}
+              />
+              <span
+                className={
+                  entry.enabled
+                    ? "text-zinc-300 font-mono"
+                    : "text-zinc-500 font-mono line-through"
+                }
+              >
+                {entry.phrase}
+              </span>
               <span className="text-zinc-600">→</span>
-              <span className="text-zinc-400 font-mono flex-1">
+              <span
+                className={
+                  entry.enabled
+                    ? "text-zinc-400 font-mono flex-1"
+                    : "text-zinc-600 font-mono flex-1 line-through"
+                }
+              >
                 {entry.replacement}
               </span>
               <button
