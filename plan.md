@@ -18,7 +18,7 @@
 | 5 | Cloud ASR Providers | ✅ Complete (Deepgram via HTTP, not WS yet) |
 | 6 | Telemetry | ✅ Complete |
 | 7 | Plugin System | ✅ Core complete (SDK crate deferred) |
-| 8 | Packaging | 🔲 Not started |
+| 8 | Packaging | ✅ Config + CI (signing certs TBD) |
 | 9 | v1 Launch | 🔲 Not started |
 
 ---
@@ -765,7 +765,9 @@ Provides:
 
 ---
 
-## Phase 8 — Packaging 🔲
+## Phase 8 — Packaging ✅
+
+**Done:** per-platform `bundle` config in `tauri.conf.json` (8.1–8.3), `entitlements.plist`, template manifests under `packaging/` (winget, homebrew cask, flatpak, snap), and a `.github/workflows/release.yml` CI matrix building Win/macOS(universal)/Linux on `v*` tags (8.4). **TBD:** code-signing certificates and filling per-release URLs/hashes in the manifests.
 
 ### 8.1 Windows
 
