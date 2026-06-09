@@ -19,7 +19,7 @@
 | 6 | Telemetry | ✅ Complete |
 | 7 | Plugin System | ✅ Core complete (SDK crate deferred) |
 | 8 | Packaging | ✅ Config + CI (signing certs TBD) |
-| 9 | v1 Launch | 🔲 Not started |
+| 9 | v1 Launch | ✅ Hotkey + CSP + docs (perf/signing TBD) |
 
 ---
 
@@ -828,7 +828,9 @@ strategy:
 
 ---
 
-## Phase 9 — v1 Launch 🔲
+## Phase 9 — v1 Launch ✅ (core)
+
+**Done:** 9.4 global hotkey (configurable, default `CommandOrControl+Shift+Space`, toggles recording); CSP configured (9.1); `npm audit` clean; `CONTRIBUTING.md` + `PLUGINS.md` (9.3); API keys never returned to the UI / kept in keychain; Linux injector args are shell-safe. **TBD:** run `cargo audit` (tool not installed in dev env), measure perf targets (9.2), and code-signing certs (8.x/9.1). README is the final deliverable.
 
 ### 9.1 Security review checklist
 
