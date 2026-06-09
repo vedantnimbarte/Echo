@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 
 use crate::core::{
+    asr::binary_manager::BinaryManager,
     asr::manager::AsrManager,
     asr::model_manager::ModelManager,
     audio::AudioService,
@@ -11,6 +12,7 @@ use crate::core::{
     injection::TextInjector,
     plugins::loader::PluginLoader,
     telemetry::TelemetryService,
+    vad::SileroModel,
 };
 
 /// Shared application state — stored in Tauri's managed state.
@@ -23,6 +25,10 @@ pub struct AppState {
     pub audio: Arc<AudioService>,
     pub asr: Arc<AsrManager>,
     pub models: Arc<ModelManager>,
+    pub binaries: Arc<BinaryManager>,
+    /// Loaded Silero VAD model, shared read-only across recording sessions.
+    /// `None` if the ONNX model failed to load (falls back to energy VAD).
+    pub silero: Option<Arc<SileroModel>>,
     pub dictionary: Arc<RwLock<DictionaryEngine>>,
     pub injector: Arc<dyn TextInjector>,
     pub telemetry: TelemetryService,
