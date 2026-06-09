@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { BookOpen, Clock, Settings, Puzzle } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { useEchoEvents } from "./hooks/useEchoEvents";
+import { commands } from "./ipc/commands";
 import { DictionaryPanel } from "./components/dictionary/DictionaryPanel";
 import { HistoryPanel } from "./components/history/HistoryPanel";
 import { SettingsPanel } from "./components/settings/SettingsPanel";
 import { PluginsPanel } from "./components/plugins/PluginsPanel";
+import { Onboarding } from "./components/onboarding/Onboarding";
 
 type Tab = "settings" | "dictionary" | "history" | "plugins";
 
@@ -23,6 +26,12 @@ export default function App() {
   useEchoEvents();
   const [tab, setTab] = useState<Tab>("settings");
 
+  // First run shows the onboarding wizard until it's marked complete.
+  const { data: onboardingDone, isLoading: onboardingLoading } = useQuery({
+    queryKey: ["setting", "onboarding_complete"],
+    queryFn: () => commands.getSetting("onboarding_complete"),
+  });
+
   // Keep this window alive when closed so the pill's gear can reopen it.
   useEffect(() => {
     const win = getCurrentWindow();
@@ -37,6 +46,12 @@ export default function App() {
       });
     return () => unlisten?.();
   }, []);
+
+  if (!onboardingLoading && onboardingDone !== "true") {
+    // onDone is a no-op: finishing invalidates the query above, which refetches
+    // "true" and re-renders into the settings shell.
+    return <Onboarding onDone={() => undefined} />;
+  }
 
   return (
     <div className="relative flex h-screen flex-col overflow-hidden bg-[#0a0b11] text-[var(--ink)] select-none">
