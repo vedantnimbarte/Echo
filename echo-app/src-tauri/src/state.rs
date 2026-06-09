@@ -8,6 +8,7 @@ use crate::core::{
     audio::AudioService,
     dictionary::DictionaryEngine,
     injection::TextInjector,
+    telemetry::TelemetryService,
 };
 
 /// Shared application state — stored in Tauri's managed state.
@@ -22,6 +23,7 @@ pub struct AppState {
     pub models: Arc<ModelManager>,
     pub dictionary: Arc<RwLock<DictionaryEngine>>,
     pub injector: Arc<dyn TextInjector>,
+    pub telemetry: TelemetryService,
     pub recording: Mutex<bool>,
 }
 
