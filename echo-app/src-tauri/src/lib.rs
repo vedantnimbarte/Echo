@@ -99,6 +99,22 @@ pub fn run() {
                 }
             }
 
+            // Telemetry (local-only). Mirror the persisted opt-in flag, default on.
+            let telemetry_enabled = storage::repositories::get_setting(&conn, "telemetry_enabled")
+                .unwrap_or(None)
+                .map(|v| v != "false")
+                .unwrap_or(true);
+            let telemetry = core::telemetry::TelemetryService::new(telemetry_enabled);
+            telemetry.record(
+                &conn,
+                "app_started",
+                Some(serde_json::json!({
+                    "version": env!("CARGO_PKG_VERSION"),
+                    "os": std::env::consts::OS,
+                    "arch": std::env::consts::ARCH,
+                })),
+            );
+
             let app_state = AppState {
                 db: Mutex::new(conn),
                 audio: Arc::new(AudioService::new().expect("Failed to initialize audio")),
@@ -106,6 +122,7 @@ pub fn run() {
                 models: model_manager,
                 dictionary: Arc::new(RwLock::new(DictionaryEngine::new(entries))),
                 injector: Arc::from(platform_injector()),
+                telemetry,
                 recording: Mutex::new(false),
             };
 
@@ -132,6 +149,10 @@ pub fn run() {
             commands::providers::set_api_key,
             commands::providers::get_api_key_set,
             commands::providers::remove_api_key,
+            commands::telemetry::get_telemetry_summary,
+            commands::telemetry::clear_telemetry,
+            commands::telemetry::set_telemetry_enabled,
+            commands::telemetry::record_telemetry_event,
             commands::settings::get_setting,
             commands::settings::set_setting,
         ])

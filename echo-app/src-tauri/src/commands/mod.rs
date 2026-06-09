@@ -6,3 +6,4 @@ pub mod injection;
 pub mod providers;
 pub mod recording;
 pub mod settings;
+pub mod telemetry;

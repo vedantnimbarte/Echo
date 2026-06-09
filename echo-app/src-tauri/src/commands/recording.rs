@@ -31,6 +31,16 @@ pub async fn start_recording(
         .map_err(|e| EchoError::Plugin(e.to_string()))?;
     info!("Recording started");
 
+    let provider = state.asr.active_provider_name().await;
+    {
+        let conn = state.db.lock().unwrap();
+        state.telemetry.record(
+            &conn,
+            "recording_started",
+            Some(serde_json::json!({ "provider": provider })),
+        );
+    }
+
     let mut audio_rx = state.audio.start_capture(device_name.as_deref())?;
     let (transcript_tx, mut transcript_rx) = mpsc::channel::<TranscriptSegment>(32);
 
