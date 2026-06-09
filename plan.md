@@ -11,7 +11,7 @@
 | Phase | Name | Status |
 |---|---|---|
 | 0 | Foundation | ✅ Complete |
-| 1 | Audio Pipeline | 🔲 Not started |
+| 1 | Audio Pipeline | ✅ Complete (Silero VAD deferred) |
 | 2 | Local ASR (Whisper) | 🔲 Not started |
 | 3 | Text Injection | 🟡 Windows done; macOS/Linux stubs |
 | 4 | Dictionaries | 🟡 Backend + UI done; import/export missing |
@@ -87,9 +87,11 @@ components/settings/SettingsPanel.tsx
 
 ---
 
-## Phase 1 — Audio Pipeline 🔲
+## Phase 1 — Audio Pipeline ✅
 
 **Goal:** Audio flows end-to-end from microphone through VAD into the ASR pipeline.
+
+**Done:** 1.1 VAD gating wired into `start_recording` (VAD removed from `AppState`, lives in the audio task); 1.2 device selector UI; 1.4 audio resample tests (also fixed a mono-channel down-mix bug). **Deferred:** 1.3 Silero ONNX VAD — requires bundling `silero_vad.onnx` and the `ort` runtime; `EnergyVad` is sufficient for the pipeline for now.
 
 ### 1.1 Wire VAD into `start_recording`
 
