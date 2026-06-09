@@ -12,7 +12,7 @@
 |---|---|---|
 | 0 | Foundation | ✅ Complete |
 | 1 | Audio Pipeline | ✅ Complete (Silero VAD deferred) |
-| 2 | Local ASR (Whisper) | 🔲 Not started |
+| 2 | Local ASR (Whisper) | ✅ Code complete (build needs libclang) |
 | 3 | Text Injection | 🟡 Windows done; macOS/Linux stubs |
 | 4 | Dictionaries | 🟡 Backend + UI done; import/export missing |
 | 5 | Cloud ASR Providers | 🔲 Not started |
@@ -196,9 +196,13 @@ mod tests {
 
 ---
 
-## Phase 2 — Local ASR (Whisper) 🔲
+## Phase 2 — Local ASR (Whisper) ✅
 
 **Goal:** Offline transcription using whisper.cpp via Rust bindings.
+
+**Done:** `WhisperProvider` (2.2), `ModelManager` download manager (2.3), `commands/asr.rs` with `list_models`/`download_model`/`set_asr_provider` (2.3), `ModelSelector` UI with progress bar (2.4), startup registration in `lib.rs` (2.5).
+
+**Build note:** `whisper-rs` is behind an off-by-default `whisper` Cargo feature because `whisper-rs-sys` runs `bindgen`, which needs **libclang** (LLVM) plus **cmake** at build time. The default build excludes it and stays green; `WhisperProvider` code is verified against the whisper-rs 0.13 API but compiles only with `cargo build --features whisper` on a machine with libclang installed. reqwest uses platform-default TLS (schannel on Windows) to avoid extra native build deps. See README for local setup.
 
 ### 2.1 Add whisper-rs
 
