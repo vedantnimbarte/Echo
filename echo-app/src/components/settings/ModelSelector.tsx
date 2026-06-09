@@ -5,8 +5,10 @@ import { commands } from "../../ipc/commands";
 import { echoEvents } from "../../ipc/events";
 
 /**
- * Lists local Whisper models with download status, lets the user download one
- * (with a live progress bar) and select it as the active local ASR provider.
+ * Lists local Whisper models with download status and lets the user download
+ * one (live progress) and select it as the active local model. Model choice is
+ * stored separately from the provider: selecting one sets `whisper_model` and
+ * switches the active provider to `local`.
  */
 export function ModelSelector() {
   const queryClient = useQueryClient();
@@ -14,10 +16,13 @@ export function ModelSelector() {
     queryKey: ["asr-models"],
     queryFn: commands.listModels,
   });
-
   const { data: activeProvider } = useQuery({
     queryKey: ["setting", "asr_provider"],
     queryFn: () => commands.getSetting("asr_provider"),
+  });
+  const { data: activeModel } = useQuery({
+    queryKey: ["setting", "whisper_model"],
+    queryFn: () => commands.getSetting("whisper_model"),
   });
 
   // Map of model name → download progress (0..1). Present only while downloading.
@@ -56,41 +61,58 @@ export function ModelSelector() {
   }
 
   async function select(name: string) {
-    await commands.setAsrProvider(name);
+    await commands.setWhisperModel(name);
+    await commands.setAsrProvider("local");
+    queryClient.invalidateQueries({ queryKey: ["setting", "whisper_model"] });
     queryClient.invalidateQueries({ queryKey: ["setting", "asr_provider"] });
   }
 
+  // Default to base.en in the highlight when nothing is explicitly chosen yet.
+  const effectiveModel = activeModel || "base.en";
+
   return (
-    <div className="space-y-2">
-      <span className="text-sm text-zinc-400">Local Whisper models</span>
-      <div className="space-y-2">
+    <div className="space-y-1.5">
+      <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-faint)]">
+        Local model
+      </span>
+      <div className="space-y-1.5">
         {models.map((m) => {
           const downloading = m.name in progress;
-          const isActive = activeProvider === m.name;
+          const isActive = activeProvider === "local" && effectiveModel === m.name;
           return (
             <div
               key={m.name}
-              className="flex items-center justify-between rounded-lg border border-zinc-700 bg-zinc-800/50 px-3 py-2"
+              className="flex items-center justify-between rounded-lg border border-white/8 bg-white/[0.025] px-3 py-2"
             >
-              <div className="flex flex-col">
-                <span className="text-sm text-zinc-100 capitalize">{m.name}</span>
-                <span className="text-xs text-zinc-500">{m.size_mb} MB</span>
+              <div className="flex min-w-0 flex-col">
+                <span className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--ink)]">
+                  {m.name}
+                  <span className="rounded bg-white/8 px-1 py-px text-[9px] uppercase tracking-wide text-[var(--ink-muted)]">
+                    {m.english_only ? "EN" : "multi"}
+                  </span>
+                </span>
+                <span className="text-[10.5px] text-[var(--ink-faint)]">{m.size_mb} MB</span>
               </div>
 
               {downloading ? (
-                <div className="flex items-center gap-2 text-xs text-zinc-400">
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                <div className="flex items-center gap-1.5 text-[11px] text-[var(--ink-muted)]">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   {Math.round((progress[m.name] ?? 0) * 100)}%
                 </div>
               ) : m.downloaded ? (
                 <button
                   onClick={() => select(m.name)}
                   disabled={isActive}
-                  className="flex items-center gap-1 rounded-md px-3 py-1 text-xs transition-colors disabled:opacity-60 bg-violet-600 hover:bg-violet-700 text-white"
+                  className={
+                    "flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition disabled:opacity-100 " +
+                    (isActive
+                      ? "bg-[var(--aurora-2)]/20 text-[var(--aurora-1)]"
+                      : "bg-[var(--aurora-2)] text-white hover:brightness-110")
+                  }
                 >
                   {isActive ? (
                     <>
-                      <Check className="w-3.5 h-3.5" /> Active
+                      <Check className="h-3.5 w-3.5" /> Active
                     </>
                   ) : (
                     "Use"
@@ -99,9 +121,9 @@ export function ModelSelector() {
               ) : (
                 <button
                   onClick={() => download(m.name)}
-                  className="flex items-center gap-1 rounded-md border border-zinc-600 px-3 py-1 text-xs text-zinc-200 hover:bg-zinc-700"
+                  className="flex items-center gap-1 rounded-md border border-white/12 px-2.5 py-1 text-[11px] text-[var(--ink)] transition hover:bg-white/8"
                 >
-                  <Download className="w-3.5 h-3.5" /> Download
+                  <Download className="h-3.5 w-3.5" /> Download
                 </button>
               )}
             </div>

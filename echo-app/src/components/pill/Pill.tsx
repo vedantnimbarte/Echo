@@ -33,8 +33,17 @@ function prettyHotkey(raw: string): string[] {
 }
 
 export function Pill() {
-  const { isRecording, speaking, transcribing, mode, finalTranscript, error, setError, setTranscribing } =
-    useRecordingStore();
+  const {
+    isRecording,
+    speaking,
+    transcribing,
+    mode,
+    finalTranscript,
+    partialTranscript,
+    error,
+    setError,
+    setTranscribing,
+  } = useRecordingStore();
 
   const [elapsed, setElapsed] = useState(0);
   const [flash, setFlash] = useState(false);
@@ -102,8 +111,12 @@ export function Pill() {
   const liveDot = view === "transcribing" || speaking || (isRecording && mode === "manual");
 
   function toggle() {
-    if (isRecording) void commands.stopRecording();
-    else void commands.startRecording();
+    if (isRecording) {
+      void commands.stopRecording();
+    } else {
+      // Surface capture failures (no mic, permission denied) in the pill.
+      void commands.startRecording().catch((e) => setError(String(e)));
+    }
   }
 
   return (
@@ -118,9 +131,17 @@ export function Pill() {
       >
         {/* ---- Left control --------------------------------------------- */}
         {view === "error" ? (
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-rose-500/15 text-rose-400">
+          <button
+            onClick={() => {
+              setError(null);
+              toggle();
+            }}
+            aria-label="Retry"
+            title="Retry"
+            className="flex h-7 w-7 items-center justify-center rounded-full bg-rose-500/15 text-rose-400 transition hover:bg-rose-500/25"
+          >
             <AlertTriangle className="h-3.5 w-3.5" />
-          </span>
+          </button>
         ) : view === "done" ? (
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400">
             <Check className="h-3.5 w-3.5" />
@@ -147,7 +168,18 @@ export function Pill() {
 
         {/* ---- Center ---------------------------------------------------- */}
         <div className="flex min-w-0 items-center px-2.5">
-          {view === "active" && <Waveform mode={waveMode} />}
+          {view === "active" &&
+            (partialTranscript ? (
+              // Live interim words (streaming providers) next to the meter.
+              <div className="flex max-w-[240px] items-center gap-2">
+                <Waveform mode={waveMode} />
+                <span className="truncate text-[11px] tracking-tight text-[var(--ink-muted)]">
+                  {partialTranscript}
+                </span>
+              </div>
+            ) : (
+              <Waveform mode={waveMode} />
+            ))}
 
           {view === "transcribing" && (
             <div className="flex items-center gap-2">

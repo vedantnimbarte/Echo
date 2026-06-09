@@ -47,6 +47,10 @@ export const echoEvents = {
       cb(e.payload.name)
     ),
 
+  // whisper-cli binary download progress (bare 0..1 fraction).
+  onWhisperBinaryProgress: (cb: (progress: number) => void) =>
+    listen<number>("echo://whisper-binary-progress", (e) => cb(e.payload)),
+
   onHotkeyToggle: (cb: () => void) => listen("echo://hotkey-toggle", cb),
 
   // Per-chunk RMS level (0..~1) of the audio currently being captured. Emitted

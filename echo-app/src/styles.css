@@ -181,6 +181,23 @@ body {
   animation: shimmer 1.8s linear infinite;
 }
 
+/* ---- Reduced motion ------------------------------------------------------- */
+/* Honour the OS "reduce motion" setting: drop entrance/looping animations and
+   render the shimmering "Transcribing" label as plain solid text. The live
+   waveform separately falls back to a static meter (see Waveform.tsx). */
+@media (prefers-reduced-motion: reduce) {
+  .animate-rise,
+  .animate-rec,
+  .text-shimmer {
+    animation: none !important;
+  }
+  .text-shimmer {
+    background: none;
+    color: var(--ink);
+    -webkit-text-fill-color: var(--ink);
+  }
+}
+
 /* Thin custom scrollbar for the settings window. */
 *::-webkit-scrollbar {
   width: 10px;

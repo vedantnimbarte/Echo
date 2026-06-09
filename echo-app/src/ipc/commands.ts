@@ -26,6 +26,7 @@ export interface ModelInfo {
   name: string;
   downloaded: boolean;
   size_mb: number;
+  english_only: boolean;
 }
 
 export interface TelemetrySummaryItem {
@@ -84,8 +85,17 @@ export const commands = {
 
   setAsrProvider: (name: string) => invoke<void>("set_asr_provider", { name }),
 
+  setWhisperModel: (name: string) =>
+    invoke<void>("set_whisper_model", { name }),
+
+  whisperReady: () => invoke<boolean>("whisper_ready"),
+
+  downloadWhisperBinary: () => invoke<void>("download_whisper_binary"),
+
   checkAccessibilityPermission: () =>
     invoke<boolean>("check_accessibility_permission"),
+
+  injectText: (text: string) => invoke<void>("inject_text", { text }),
 
   setApiKey: (provider: string, key: string) =>
     invoke<void>("set_api_key", { provider, key }),

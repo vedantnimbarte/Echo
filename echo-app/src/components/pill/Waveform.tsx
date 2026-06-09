@@ -18,6 +18,13 @@ export function Waveform({ mode }: { mode: WaveMode }) {
   const modeRef = useRef<WaveMode>(mode);
   modeRef.current = mode;
 
+  // When the OS asks to reduce motion we keep the live meter (it's essential
+  // feedback) but drop the synthetic idle "breathing" and transcribing sweep.
+  const reduced = useRef(
+    typeof matchMedia === "function" &&
+      matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -35,6 +42,9 @@ export function Waveform({ mode }: { mode: WaveMode }) {
         let target: number;
         if (m === "listening") {
           target = levels.current[i];
+        } else if (reduced.current) {
+          // Reduced motion: static bars for non-listening states.
+          target = m === "transcribing" ? 0.4 : 0.12;
         } else if (m === "transcribing") {
           // A bright pulse sweeping left→right over a low rolling base.
           const head = (t * 13) % (BARS + 8);

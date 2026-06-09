@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Keyboard, AudioWaveform } from "lucide-react";
+import { Keyboard, AudioWaveform, Search } from "lucide-react";
 import { commands } from "../../ipc/commands";
 import { echoEvents } from "../../ipc/events";
 import { useRecordingStore, type RecordingMode } from "../../store/recordingStore";
 import { ModelSelector } from "./ModelSelector";
 import { CloudProviders } from "./CloudProviders";
 import { TelemetrySettings } from "./TelemetrySettings";
+import { HotkeyCapture } from "../common/HotkeyCapture";
 
 /* ---- compact field primitives -------------------------------------------- */
 
@@ -45,6 +46,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export function SettingsPanel() {
   const qc = useQueryClient();
   const setStoreMode = useRecordingStore((s) => s.setMode);
+
+  /* ---- section search ---- */
+  const [q, setQ] = useState("");
+  const show = (terms: string[]) =>
+    !q.trim() || terms.some((t) => t.toLowerCase().includes(q.trim().toLowerCase()));
 
   /* ---- recording mode + device ---- */
   const { data: savedMode } = useQuery({
@@ -98,8 +104,10 @@ export function SettingsPanel() {
   const setInjectDelayMutation = useMutation({
     mutationFn: (v: string) => commands.setSetting("inject_delay_ms", v),
   });
+  // Selecting a provider must register/activate it (not just persist a string),
+  // so this goes through set_asr_provider rather than set_setting.
   const setProviderMutation = useMutation({
-    mutationFn: (v: string) => commands.setSetting("asr_provider", v),
+    mutationFn: (v: string) => commands.setAsrProvider(v),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["setting", "asr_provider"] }),
   });
   const setHistoryMutation = useMutation({
@@ -112,10 +120,12 @@ export function SettingsPanel() {
   }
 
   const { data: hotkey } = useQuery({ queryKey: ["hotkey"], queryFn: commands.getHotkey });
-  const [hotkeyDraft, setHotkeyDraft] = useState<string | null>(null);
   const registerHotkeyMutation = useMutation({
     mutationFn: (v: string) => commands.registerHotkey(v),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["hotkey"] }),
   });
+
+  const activeProvider = provider ?? "local";
 
   return (
     <div className="mx-auto max-w-[560px] space-y-4 p-5">
@@ -129,172 +139,191 @@ export function SettingsPanel() {
         </button>
       </div>
 
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--ink-faint)]" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search settings…"
+          className="w-full rounded-lg border border-white/10 bg-white/5 py-1.5 pl-8 pr-2.5 text-[13px] text-[var(--ink)] outline-none transition focus:border-[var(--aurora-2)]/60 focus:bg-white/8"
+        />
+      </div>
+
       {/* ---- Dictation ------------------------------------------------ */}
-      <Section
-        title="Dictation"
-        desc="How recording starts and which microphone to listen to."
-      >
-        <Field label="Mode">
-          <div className="grid grid-cols-2 gap-1.5">
-            {(
-              [
-                {
-                  id: "manual" as const,
-                  Icon: Keyboard,
-                  title: "Push to talk",
-                  sub: "Start & stop with the hotkey",
-                },
-                {
-                  id: "auto" as const,
-                  Icon: AudioWaveform,
-                  title: "Voice activated",
-                  sub: "Records when you speak, stops on silence",
-                },
-              ]
-            ).map(({ id, Icon, title, sub }) => {
-              const active = mode === id;
-              return (
-                <button
-                  key={id}
-                  onClick={() => changeMode(id)}
-                  className={
-                    "flex flex-col gap-1 rounded-lg border p-2.5 text-left transition " +
-                    (active
-                      ? "border-[var(--aurora-2)]/60 bg-[var(--aurora-2)]/12"
-                      : "border-white/10 bg-white/[0.02] hover:bg-white/5")
-                  }
-                >
-                  <span className="flex items-center gap-1.5 text-[12px] font-medium">
-                    <Icon
-                      className="h-3.5 w-3.5"
-                      style={{ color: active ? "var(--aurora-1)" : "var(--ink-muted)" }}
-                    />
-                    {title}
-                  </span>
-                  <span className="text-[10.5px] leading-tight text-[var(--ink-muted)]">{sub}</span>
-                </button>
-              );
-            })}
-          </div>
-        </Field>
+      {show(["dictation", "mode", "microphone", "mic", "hotkey", "push to talk", "voice", "shortcut"]) && (
+        <Section
+          title="Dictation"
+          desc="How recording starts and which microphone to listen to."
+        >
+          <Field label="Mode">
+            <div className="grid grid-cols-2 gap-1.5">
+              {(
+                [
+                  {
+                    id: "manual" as const,
+                    Icon: Keyboard,
+                    title: "Push to talk",
+                    sub: "Start & stop with the hotkey",
+                  },
+                  {
+                    id: "auto" as const,
+                    Icon: AudioWaveform,
+                    title: "Voice activated",
+                    sub: "Records when you speak, stops on silence",
+                  },
+                ]
+              ).map(({ id, Icon, title, sub }) => {
+                const active = mode === id;
+                return (
+                  <button
+                    key={id}
+                    onClick={() => changeMode(id)}
+                    className={
+                      "flex flex-col gap-1 rounded-lg border p-2.5 text-left transition " +
+                      (active
+                        ? "border-[var(--aurora-2)]/60 bg-[var(--aurora-2)]/12"
+                        : "border-white/10 bg-white/[0.02] hover:bg-white/5")
+                    }
+                  >
+                    <span className="flex items-center gap-1.5 text-[12px] font-medium">
+                      <Icon
+                        className="h-3.5 w-3.5"
+                        style={{ color: active ? "var(--aurora-1)" : "var(--ink-muted)" }}
+                      />
+                      {title}
+                    </span>
+                    <span className="text-[10.5px] leading-tight text-[var(--ink-muted)]">
+                      {sub}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
 
-        <Field label="Microphone">
-          <select
-            className={fieldCls}
-            value={savedDevice ?? ""}
-            onChange={(e) => setDeviceMutation.mutate(e.target.value)}
-          >
-            <option value="">System default</option>
-            {devices.map((d) => (
-              <option key={d.name} value={d.name}>
-                {d.name}
-                {d.is_default ? " (default)" : ""}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <Field label="Global hotkey">
-          <div className="flex gap-1.5">
-            <input
-              className={fieldCls + " font-mono"}
-              value={hotkeyDraft ?? hotkey ?? ""}
-              placeholder="CommandOrControl+Shift+Space"
-              onChange={(e) => setHotkeyDraft(e.target.value)}
-            />
-            <button
-              onClick={() => registerHotkeyMutation.mutate(hotkeyDraft ?? hotkey ?? "")}
-              disabled={registerHotkeyMutation.isPending}
-              className="shrink-0 rounded-lg bg-[var(--aurora-2)] px-3 text-[12px] font-medium text-white transition hover:brightness-110 disabled:opacity-50"
+          <Field label="Microphone">
+            <select
+              className={fieldCls}
+              value={savedDevice ?? ""}
+              onChange={(e) => setDeviceMutation.mutate(e.target.value)}
             >
-              Save
-            </button>
-          </div>
-          {registerHotkeyMutation.isError && (
-            <span className="text-[11px] text-rose-400">
-              {String(registerHotkeyMutation.error)}
-            </span>
-          )}
-        </Field>
-      </Section>
+              <option value="">System default</option>
+              {devices.map((d) => (
+                <option key={d.name} value={d.name}>
+                  {d.name}
+                  {d.is_default ? " (default)" : ""}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Global hotkey">
+            <HotkeyCapture
+              value={hotkey ?? ""}
+              onChange={(accel) => registerHotkeyMutation.mutate(accel)}
+            />
+            {registerHotkeyMutation.isError && (
+              <span className="text-[11px] text-rose-400">
+                {String(registerHotkeyMutation.error)}
+              </span>
+            )}
+          </Field>
+        </Section>
+      )}
 
       {/* ---- Transcription ------------------------------------------- */}
-      <Section title="Transcription" desc="The engine that turns speech into text.">
-        <Field label="Provider">
-          <select
-            className={fieldCls}
-            value={provider ?? "none"}
-            onChange={(e) => setProviderMutation.mutate(e.target.value)}
-          >
-            <option value="none">None (no transcription)</option>
-            <option value="openai">OpenAI Whisper API</option>
-            <option value="groq">Groq</option>
-            <option value="deepgram">Deepgram</option>
-          </select>
-        </Field>
-        <ModelSelector />
-        <CloudProviders />
-      </Section>
-
-      {/* ---- Text injection ------------------------------------------ */}
-      <Section
-        title="Text output"
-        desc="Echo types the transcript into whatever app is focused."
-      >
-        <label className="flex items-center gap-2.5">
-          <input
-            type="checkbox"
-            className="h-4 w-4 accent-[var(--aurora-2)]"
-            checked={autoInject !== "false"}
-            onChange={(e) => setAutoInjectMutation.mutate(e.target.checked ? "true" : "false")}
-          />
-          <span className="text-[12px] text-[var(--ink)]">
-            Insert text into the focused app after transcription
-          </span>
-        </label>
-
-        <Field label="Insert delay (ms)">
-          <input
-            type="number"
-            min={0}
-            className={fieldCls + " w-28"}
-            defaultValue={injectDelay ?? "0"}
-            onBlur={(e) => setInjectDelayMutation.mutate(e.target.value || "0")}
-          />
-        </Field>
-
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={checkPermission}
-            className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-[var(--ink-muted)] transition hover:bg-white/5 hover:text-[var(--ink)]"
-          >
-            Check accessibility permission
-          </button>
-          {permissionStatus !== null && (
-            <span className={permissionStatus ? "text-[11px] text-emerald-400" : "text-[11px] text-rose-400"}>
-              {permissionStatus ? "Granted" : "Not granted"}
+      {show(["transcription", "provider", "whisper", "local", "openai", "groq", "deepgram", "model", "engine", "api key", "cloud"]) && (
+        <Section title="Transcription" desc="The engine that turns speech into text.">
+          <Field label="Provider">
+            <select
+              className={fieldCls}
+              value={activeProvider}
+              onChange={(e) => setProviderMutation.mutate(e.target.value)}
+            >
+              <option value="local">Local Whisper (offline)</option>
+              <option value="none">None (no transcription)</option>
+              <option value="openai">OpenAI Whisper API</option>
+              <option value="groq">Groq</option>
+              <option value="deepgram">Deepgram (streaming)</option>
+            </select>
+          </Field>
+          {setProviderMutation.isError && (
+            <span className="text-[11px] text-rose-400">
+              {String(setProviderMutation.error)}
             </span>
           )}
-        </div>
-        <p className="text-[10.5px] leading-snug text-[var(--ink-faint)]">
-          macOS needs Accessibility permission. Linux needs <code>xdotool</code> (X11) or{" "}
-          <code>ydotool</code> (Wayland). Windows works out of the box.
-        </p>
-      </Section>
+          {activeProvider === "local" && <ModelSelector />}
+          <CloudProviders />
+        </Section>
+      )}
+
+      {/* ---- Text injection ------------------------------------------ */}
+      {show(["text output", "inject", "type", "keyboard", "accessibility", "delay", "focused app"]) && (
+        <Section
+          title="Text output"
+          desc="Echo types the transcript into whatever app is focused."
+        >
+          <label className="flex items-center gap-2.5">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-[var(--aurora-2)]"
+              checked={autoInject !== "false"}
+              onChange={(e) => setAutoInjectMutation.mutate(e.target.checked ? "true" : "false")}
+            />
+            <span className="text-[12px] text-[var(--ink)]">
+              Insert text into the focused app after transcription
+            </span>
+          </label>
+
+          <Field label="Insert delay (ms)">
+            <input
+              type="number"
+              min={0}
+              className={fieldCls + " w-28"}
+              defaultValue={injectDelay ?? "0"}
+              onBlur={(e) => setInjectDelayMutation.mutate(e.target.value || "0")}
+            />
+          </Field>
+
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={checkPermission}
+              className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-[var(--ink-muted)] transition hover:bg-white/5 hover:text-[var(--ink)]"
+            >
+              Check accessibility permission
+            </button>
+            {permissionStatus !== null && (
+              <span
+                className={
+                  permissionStatus ? "text-[11px] text-emerald-400" : "text-[11px] text-rose-400"
+                }
+              >
+                {permissionStatus ? "Granted" : "Not granted"}
+              </span>
+            )}
+          </div>
+          <p className="text-[10.5px] leading-snug text-[var(--ink-faint)]">
+            macOS needs Accessibility permission. Linux needs <code>xdotool</code> (X11) or{" "}
+            <code>ydotool</code> (Wayland). Windows works out of the box.
+          </p>
+        </Section>
+      )}
 
       {/* ---- Privacy ------------------------------------------------- */}
-      <Section title="Privacy">
-        <TelemetrySettings />
-        <label className="flex items-center gap-2.5 border-t border-white/6 pt-3">
-          <input
-            type="checkbox"
-            className="h-4 w-4 accent-[var(--aurora-2)]"
-            checked={historyEnabled !== "false"}
-            onChange={(e) => setHistoryMutation.mutate(e.target.checked ? "true" : "false")}
-          />
-          <span className="text-[12px] text-[var(--ink)]">Save transcription history</span>
-        </label>
-      </Section>
+      {show(["privacy", "telemetry", "history", "data", "save"]) && (
+        <Section title="Privacy">
+          <TelemetrySettings />
+          <label className="flex items-center gap-2.5 border-t border-white/6 pt-3">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-[var(--aurora-2)]"
+              checked={historyEnabled !== "false"}
+              onChange={(e) => setHistoryMutation.mutate(e.target.checked ? "true" : "false")}
+            />
+            <span className="text-[12px] text-[var(--ink)]">Save transcription history</span>
+          </label>
+        </Section>
+      )}
     </div>
   );
 }
