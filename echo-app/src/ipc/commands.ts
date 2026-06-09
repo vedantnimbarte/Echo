@@ -118,6 +118,8 @@ export const commands = {
   uninstallPlugin: (name: string) =>
     invoke<void>("uninstall_plugin", { name }),
 
+  quit: () => invoke<void>("quit"),
+
   getHotkey: () => invoke<string>("get_hotkey"),
 
   registerHotkey: (shortcut: string) =>

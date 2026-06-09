@@ -1,1 +1,198 @@
 @import "tailwindcss";
+
+/*
+  Echo — "Obsidian Aurora" design language.
+  A frameless translucent pill floats over the OS; the settings window reuses
+  the same tokens. No external font/asset fetches (offline + strict CSP), so we
+  lean on a refined system stack with deliberate tracking and tabular numerals.
+*/
+
+:root {
+  --font-ui: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system,
+    "SF Pro Display", sans-serif;
+
+  /* Aurora accents */
+  --aurora-1: #34e7e4; /* teal  */
+  --aurora-2: #5b8def; /* azure */
+  --aurora-3: #a06bff; /* violet */
+  --rec: #ff5d6c; /* live record */
+
+  /* Glass surfaces */
+  --glass: rgba(13, 14, 20, 0.66);
+  --glass-strong: rgba(15, 16, 24, 0.82);
+  --hairline: rgba(255, 255, 255, 0.12);
+  --ink: #f3f4f8;
+  --ink-muted: #9aa0b4;
+  --ink-faint: #5e6377;
+}
+
+/* Both webview windows share one bundle. Keep the canvas transparent so the
+   frameless pill window shows only its own pill, not a rectangle. */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: transparent;
+}
+
+body {
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ---- Pill chrome ---------------------------------------------------------- */
+
+.pill-shell {
+  position: relative;
+  background: var(--glass);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+  backdrop-filter: blur(28px) saturate(150%);
+  box-shadow:
+    0 18px 50px -12px rgba(0, 0, 0, 0.7),
+    0 2px 10px -2px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Luminous gradient hairline that traces the pill border. */
+.pill-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    120deg,
+    var(--aurora-1),
+    var(--aurora-2) 45%,
+    var(--aurora-3)
+  );
+  opacity: 0.55;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Soft aurora glow that intensifies while listening. */
+.pill-shell::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: linear-gradient(
+    120deg,
+    var(--aurora-1),
+    var(--aurora-2),
+    var(--aurora-3)
+  );
+  filter: blur(18px);
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  z-index: -1;
+}
+.pill-shell.is-live::after {
+  opacity: 0.28;
+}
+
+/* ---- Animations ----------------------------------------------------------- */
+
+@keyframes pill-rise {
+  from {
+    transform: translateY(14px) scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+.animate-rise {
+  animation: pill-rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes rec-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 93, 108, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(255, 93, 108, 0);
+  }
+}
+.animate-rec {
+  animation: rec-pulse 1.6s ease-out infinite;
+}
+
+@keyframes idle-bob {
+  0%,
+  100% {
+    transform: scaleY(0.5);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 0.85;
+  }
+}
+
+@keyframes dot-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -120% 0;
+  }
+  100% {
+    background-position: 220% 0;
+  }
+}
+.text-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--ink-muted) 0%,
+    var(--ink) 45%,
+    var(--aurora-1) 55%,
+    var(--ink-muted) 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 1.8s linear infinite;
+}
+
+/* Thin custom scrollbar for the settings window. */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+  background-clip: content-box;
+}
