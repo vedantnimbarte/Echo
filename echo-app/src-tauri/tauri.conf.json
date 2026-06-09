@@ -12,9 +12,32 @@
   "app": {
     "windows": [
       {
+        "label": "pill",
         "title": "Echo",
-        "width": 800,
-        "height": 600
+        "width": 360,
+        "height": 80,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "shadow": false,
+        "visible": true,
+        "center": false
+      },
+      {
+        "label": "main",
+        "title": "Echo Settings",
+        "width": 820,
+        "height": 640,
+        "minWidth": 560,
+        "minHeight": 480,
+        "decorations": true,
+        "resizable": true,
+        "visible": false,
+        "center": true
       }
     ],
     "security": {
