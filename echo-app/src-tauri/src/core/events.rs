@@ -10,6 +10,8 @@ pub enum AppEvent {
     TranscriptFinal { text: String, language: Option<String> },
     DeviceChanged { device_name: String },
     ErrorOccurred { message: String },
+    ModelDownloadProgress { name: String, progress: f32 },
+    ModelDownloadComplete { name: String },
 }
 
 impl AppEvent {
@@ -21,6 +23,8 @@ impl AppEvent {
             AppEvent::TranscriptFinal { .. } => "echo://transcript-final",
             AppEvent::DeviceChanged { .. } => "echo://device-changed",
             AppEvent::ErrorOccurred { .. } => "echo://error",
+            AppEvent::ModelDownloadProgress { .. } => "echo://model-download-progress",
+            AppEvent::ModelDownloadComplete { .. } => "echo://model-download-complete",
         }
     }
 }
