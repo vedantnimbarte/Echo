@@ -1,0 +1,23 @@
+# Flatpak manifest (template). Build the .deb/AppImage first, then package.
+app-id: com.echo.app
+runtime: org.gnome.Platform
+runtime-version: "46"
+sdk: org.gnome.Sdk
+command: echo
+finish-args:
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --device=dri
+  # Microphone capture + global keystroke injection.
+  - --talk-name=org.freedesktop.portal.Desktop
+  - --share=network
+modules:
+  - name: echo
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 echo /app/bin/echo
+    sources:
+      - type: file
+        path: ../../echo-app/src-tauri/target/release/echo

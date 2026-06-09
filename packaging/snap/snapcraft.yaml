@@ -1,0 +1,30 @@
+name: echo
+base: core22
+version: "0.1.0"
+summary: Privacy-first universal voice keyboard
+description: |
+  Echo transcribes your speech locally (Whisper) or via cloud providers and
+  types the result into any focused application.
+
+grade: stable
+confinement: strict
+
+apps:
+  echo:
+    command: usr/bin/echo
+    extensions: [gnome]
+    plugs:
+      - home
+      - network
+      - audio-record
+      - x11
+      - wayland
+
+parts:
+  echo:
+    plugin: dump
+    source: ../../echo-app/src-tauri/target/release/
+    organize:
+      echo: usr/bin/echo
+    stage-packages:
+      - libwebkit2gtk-4.1-0
