@@ -22,6 +22,12 @@ export interface TranscriptionRecord {
   created_at: string;
 }
 
+export interface ModelInfo {
+  name: string;
+  downloaded: boolean;
+  size_mb: number;
+}
+
 export const commands = {
   getAudioDevices: () => invoke<AudioDevice[]>("get_audio_devices"),
 
@@ -49,4 +55,10 @@ export const commands = {
 
   setSetting: (key: string, value: string) =>
     invoke<void>("set_setting", { key, value }),
+
+  listModels: () => invoke<ModelInfo[]>("list_models"),
+
+  downloadModel: (name: string) => invoke<void>("download_model", { name }),
+
+  setAsrProvider: (name: string) => invoke<void>("set_asr_provider", { name }),
 };

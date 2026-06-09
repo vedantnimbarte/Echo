@@ -1,5 +1,6 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { commands } from "../../ipc/commands";
+import { ModelSelector } from "./ModelSelector";
 
 export function SettingsPanel() {
   const { data: provider } = useQuery({
@@ -39,6 +40,9 @@ export function SettingsPanel() {
             <option value="deepgram">Deepgram</option>
           </select>
         </label>
+
+        {/* Local Whisper models */}
+        <ModelSelector />
 
         {/* History toggle */}
         <label className="flex items-center gap-3 cursor-pointer">

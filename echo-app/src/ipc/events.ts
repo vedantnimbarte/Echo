@@ -32,4 +32,17 @@ export const echoEvents = {
 
   onError: (cb: (message: string) => void) =>
     listen<{ message: string }>("echo://error", (e) => cb(e.payload.message)),
+
+  onModelDownloadProgress: (
+    cb: (name: string, progress: number) => void
+  ) =>
+    listen<{ name: string; progress: number }>(
+      "echo://model-download-progress",
+      (e) => cb(e.payload.name, e.payload.progress)
+    ),
+
+  onModelDownloadComplete: (cb: (name: string) => void) =>
+    listen<{ name: string }>("echo://model-download-complete", (e) =>
+      cb(e.payload.name)
+    ),
 };
