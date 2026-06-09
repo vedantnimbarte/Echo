@@ -41,6 +41,15 @@ pub async fn start_recording(
         );
     }
 
+    // Fall back to the device configured in Settings when the caller doesn't
+    // pin one (the floating pill triggers recording without knowing the device).
+    let device_name = device_name.filter(|s| !s.is_empty()).or_else(|| {
+        let conn = state.db.lock().unwrap();
+        crate::storage::repositories::get_setting(&conn, "audio_device")
+            .unwrap_or(None)
+            .filter(|s| !s.is_empty())
+    });
+
     let mut audio_rx = state.audio.start_capture(device_name.as_deref())?;
     let (transcript_tx, mut transcript_rx) = mpsc::channel::<TranscriptSegment>(32);
 
@@ -49,6 +58,7 @@ pub async fn start_recording(
     // speech→silence transition so the ASR provider knows an utterance ended.
     // The VAD instance belongs entirely to this task (see architectural rule 8).
     let (vad_tx, vad_rx) = mpsc::channel::<Vec<f32>>(256);
+    let level_app = app.clone();
     tokio::spawn(async move {
         let mut vad = EnergyVad::new(0.01);
         let mut was_speaking = false;
@@ -58,14 +68,27 @@ pub async fn start_recording(
                 let _ = vad_tx.send(Vec::new()).await;
                 break;
             }
+            // Emit a per-chunk RMS level so the floating pill can render a live
+            // waveform that reflects the audio actually being captured. Computed
+            // before the VAD gate so the visualization stays responsive in near-
+            // silence. Payload is the bare f32 (read as `event.payload` in JS).
+            let rms = (chunk.iter().map(|s| s * s).sum::<f32>() / chunk.len() as f32).sqrt();
+            let _ = level_app.emit("echo://audio-level", rms);
             if vad.is_speech(&chunk) {
-                was_speaking = true;
+                if !was_speaking {
+                    // Rising edge: the user just started talking. Drives the
+                    // pill's listening state in voice-activated mode.
+                    was_speaking = true;
+                    let _ = level_app.emit("echo://speech-started", ());
+                }
                 if vad_tx.send(chunk).await.is_err() {
                     break;
                 }
             } else if was_speaking {
-                // Speech just ended: signal end of utterance.
+                // Falling edge: speech ended — flush the utterance to ASR and
+                // tell the pill we're now transcribing.
                 was_speaking = false;
+                let _ = level_app.emit("echo://speech-ended", ());
                 if vad_tx.send(Vec::new()).await.is_err() {
                     break;
                 }
@@ -106,11 +129,12 @@ pub async fn start_recording(
             if segment.is_final {
                 // Apply dictionary replacements to the final transcript.
                 let processed = dictionary.read().await.process(&segment.text);
-                let event = AppEvent::TranscriptFinal {
-                    text: processed.clone(),
-                    language: segment.language,
-                };
-                if let Err(e) = app_clone.emit(event.event_name(), &event) {
+                // Emit the transcript fields directly (not the tagged AppEvent
+                // wrapper) so the frontend reads `event.payload.text` naturally.
+                if let Err(e) = app_clone.emit(
+                    "echo://transcript-final",
+                    serde_json::json!({ "text": processed, "language": segment.language }),
+                ) {
                     error!("Failed to emit transcript event: {e}");
                 }
 
@@ -129,8 +153,10 @@ pub async fn start_recording(
                     }
                 }
             } else {
-                let event = AppEvent::TranscriptPartial { text: segment.text };
-                if let Err(e) = app_clone.emit(event.event_name(), &event) {
+                if let Err(e) = app_clone.emit(
+                    "echo://transcript-partial",
+                    serde_json::json!({ "text": segment.text }),
+                ) {
                     error!("Failed to emit transcript event: {e}");
                 }
             }
