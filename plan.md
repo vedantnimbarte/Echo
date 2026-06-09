@@ -14,7 +14,7 @@
 | 1 | Audio Pipeline | ✅ Complete (Silero VAD deferred) |
 | 2 | Local ASR (Whisper) | ✅ Code complete (build needs libclang) |
 | 3 | Text Injection | 🟡 Windows done; macOS/Linux stubs |
-| 4 | Dictionaries | 🟡 Backend + UI done; import/export missing |
+| 4 | Dictionaries | ✅ Complete |
 | 5 | Cloud ASR Providers | 🔲 Not started |
 | 6 | Telemetry | 🔲 Not started |
 | 7 | Plugin System | 🔲 Not started |
@@ -430,9 +430,11 @@ Add:
 
 ---
 
-## Phase 4 — Dictionaries 🟡
+## Phase 4 — Dictionaries ✅
 
-Backend and UI CRUD are complete. Missing:
+**Done:** 4.1 JSON import/export (commands + dialog-plugin UI), 4.2 per-entry enable/disable toggle, 4.3 dictionary applied to final transcripts + auto-inject into the focused app (`auto_inject` setting, default on). `state.dictionary` is now `Arc<RwLock<..>>` so the transcript task can share it.
+
+Original remaining items (now complete):
 
 ### 4.1 Import/export
 
