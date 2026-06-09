@@ -1,17 +1,31 @@
 import { Mic, MicOff } from "lucide-react";
 import clsx from "clsx";
+import { useQuery } from "@tanstack/react-query";
 import { useRecordingStore } from "../../store/recordingStore";
 import { commands } from "../../ipc/commands";
 
 export function RecordingPanel() {
-  const { isRecording, mode, partialTranscript, finalTranscript, error, setMode } =
-    useRecordingStore();
+  const {
+    isRecording,
+    mode,
+    selectedDevice,
+    partialTranscript,
+    finalTranscript,
+    error,
+    setMode,
+    setSelectedDevice,
+  } = useRecordingStore();
+
+  const { data: devices = [] } = useQuery({
+    queryKey: ["audio-devices"],
+    queryFn: commands.getAudioDevices,
+  });
 
   async function toggleRecording() {
     if (isRecording) {
       await commands.stopRecording();
     } else {
-      await commands.startRecording();
+      await commands.startRecording(selectedDevice ?? undefined);
     }
   }
 
@@ -33,6 +47,25 @@ export function RecordingPanel() {
             {m === "toggle" ? "Toggle" : "Push-to-Talk"}
           </button>
         ))}
+      </div>
+
+      {/* Microphone selector */}
+      <div className="flex flex-col items-center gap-1">
+        <label className="text-xs text-zinc-500">Microphone</label>
+        <select
+          value={selectedDevice ?? ""}
+          onChange={(e) => setSelectedDevice(e.target.value || null)}
+          disabled={isRecording}
+          className="min-w-[220px] rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-200 disabled:opacity-50"
+        >
+          <option value="">System default</option>
+          {devices.map((d) => (
+            <option key={d.name} value={d.name}>
+              {d.name}
+              {d.is_default ? " (default)" : ""}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Record button */}

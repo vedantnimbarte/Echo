@@ -5,6 +5,7 @@ type RecordingMode = "push-to-talk" | "toggle";
 interface RecordingState {
   isRecording: boolean;
   mode: RecordingMode;
+  selectedDevice: string | null;
   partialTranscript: string;
   finalTranscript: string;
   language: string | null;
@@ -12,6 +13,7 @@ interface RecordingState {
 
   setRecording: (v: boolean) => void;
   setMode: (mode: RecordingMode) => void;
+  setSelectedDevice: (name: string | null) => void;
   setPartialTranscript: (text: string) => void;
   appendFinalTranscript: (text: string, language: string | null) => void;
   clearTranscript: () => void;
@@ -21,6 +23,7 @@ interface RecordingState {
 export const useRecordingStore = create<RecordingState>((set) => ({
   isRecording: false,
   mode: "toggle",
+  selectedDevice: null,
   partialTranscript: "",
   finalTranscript: "",
   language: null,
@@ -28,6 +31,7 @@ export const useRecordingStore = create<RecordingState>((set) => ({
 
   setRecording: (v) => set({ isRecording: v }),
   setMode: (mode) => set({ mode }),
+  setSelectedDevice: (selectedDevice) => set({ selectedDevice }),
   setPartialTranscript: (text) => set({ partialTranscript: text }),
   appendFinalTranscript: (text, language) =>
     set((s) => ({
