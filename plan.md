@@ -16,7 +16,7 @@
 | 3 | Text Injection | ✅ All platforms (macOS/Linux unverified on Win host) |
 | 4 | Dictionaries | ✅ Complete |
 | 5 | Cloud ASR Providers | ✅ Complete (Deepgram via HTTP, not WS yet) |
-| 6 | Telemetry | 🔲 Not started |
+| 6 | Telemetry | ✅ Complete |
 | 7 | Plugin System | 🔲 Not started |
 | 8 | Packaging | 🔲 Not started |
 | 9 | v1 Launch | 🔲 Not started |
@@ -600,7 +600,9 @@ for provider_name in ["openai", "groq", "deepgram"] {
 
 ---
 
-## Phase 6 — Telemetry 🔲
+## Phase 6 — Telemetry ✅
+
+**Done:** `TelemetryService` (6.1, local-only, gated by opt-in flag), commands `get_telemetry_summary`/`clear_telemetry`/`set_telemetry_enabled`/`record_telemetry_event` (6.2), and `TelemetrySettings` UI (6.3). Records `app_started`, `recording_started`, and `transcription_complete` (word count only). Nothing is sent off-device.
 
 ### 6.1 Telemetry service
 
