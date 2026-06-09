@@ -9,6 +9,12 @@ edition = "2021"
 name = "echo_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+# Local Whisper transcription via whisper-rs. Off by default because building
+# whisper.cpp requires cmake + libclang (LLVM) on the build machine.
+# Enable with: cargo build --features whisper
+whisper = ["dep:whisper-rs"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -40,6 +46,14 @@ uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 async-trait = "0.1"
+
+# HTTP client for downloading ASR models (uses platform default TLS — schannel
+# on Windows — to avoid extra native build deps).
+reqwest = { version = "0.12", features = ["stream"] }
+futures-util = "0.3"
+
+# Local Whisper (optional — see [features].whisper above).
+whisper-rs = { version = "0.13", optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = [
