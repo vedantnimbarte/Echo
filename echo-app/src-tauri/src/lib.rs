@@ -116,6 +116,7 @@ pub fn run() {
             commands::dictionary::import_dictionary,
             commands::history::get_history,
             commands::history::clear_history,
+            commands::injection::check_accessibility_permission,
             commands::settings::get_setting,
             commands::settings::set_setting,
         ])

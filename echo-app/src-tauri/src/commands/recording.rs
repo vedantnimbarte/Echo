@@ -77,12 +77,17 @@ pub async fn start_recording(
     // Capture shared handles before the spawn — `state` is not 'static.
     let dictionary = state.dictionary.clone();
     let injector = state.injector.clone();
-    let auto_inject = {
+    let (auto_inject, inject_delay_ms) = {
         let conn = state.db.lock().unwrap();
-        crate::storage::repositories::get_setting(&conn, "auto_inject")
+        let auto = crate::storage::repositories::get_setting(&conn, "auto_inject")
             .unwrap_or(None)
             .map(|v| v != "false")
-            .unwrap_or(true)
+            .unwrap_or(true);
+        let delay = crate::storage::repositories::get_setting(&conn, "inject_delay_ms")
+            .unwrap_or(None)
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(0);
+        (auto, delay)
     };
 
     let app_clone = app.clone();
@@ -101,6 +106,9 @@ pub async fn start_recording(
 
                 // Inject into the focused application if enabled.
                 if auto_inject && !processed.is_empty() {
+                    if inject_delay_ms > 0 {
+                        tokio::time::sleep(std::time::Duration::from_millis(inject_delay_ms)).await;
+                    }
                     let inj = injector.clone();
                     let result =
                         tokio::task::spawn_blocking(move || inj.inject_text(&processed)).await;
