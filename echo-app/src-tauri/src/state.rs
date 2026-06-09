@@ -7,16 +7,18 @@ use crate::core::{
     audio::AudioService,
     dictionary::DictionaryEngine,
     injection::TextInjector,
-    vad::EnergyVad,
 };
 
 /// Shared application state — stored in Tauri's managed state.
+///
+/// Note: the VAD is intentionally not stored here. It is created fresh inside
+/// the audio-capture task per recording session, keeping latency stages
+/// separate (architectural rule 8).
 pub struct AppState {
     pub db: Mutex<Connection>,
     pub audio: Arc<AudioService>,
     pub asr: Arc<AsrManager>,
     pub dictionary: RwLock<DictionaryEngine>,
-    pub vad: Mutex<EnergyVad>,
     pub injector: Arc<dyn TextInjector>,
     pub recording: Mutex<bool>,
 }

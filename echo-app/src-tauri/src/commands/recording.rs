@@ -6,6 +6,7 @@ use crate::{
     core::{
         asr::TranscriptSegment,
         events::AppEvent,
+        vad::EnergyVad,
     },
     error::{EchoError, Result},
     state::AppState,
@@ -30,14 +31,45 @@ pub async fn start_recording(
         .map_err(|e| EchoError::Plugin(e.to_string()))?;
     info!("Recording started");
 
-    let audio_rx = state.audio.start_capture(device_name.as_deref())?;
+    let mut audio_rx = state.audio.start_capture(device_name.as_deref())?;
     let (transcript_tx, mut transcript_rx) = mpsc::channel::<TranscriptSegment>(32);
+
+    // VAD gating stage: sits between raw audio capture and the ASR pipeline.
+    // It forwards only speech chunks and emits an empty-vec sentinel at each
+    // speech→silence transition so the ASR provider knows an utterance ended.
+    // The VAD instance belongs entirely to this task (see architectural rule 8).
+    let (vad_tx, vad_rx) = mpsc::channel::<Vec<f32>>(256);
+    tokio::spawn(async move {
+        let mut vad = EnergyVad::new(0.01);
+        let mut was_speaking = false;
+        while let Some(chunk) = audio_rx.recv().await {
+            if chunk.is_empty() {
+                // Audio error/stop sentinel from the capture layer — flush and exit.
+                let _ = vad_tx.send(Vec::new()).await;
+                break;
+            }
+            if vad.is_speech(&chunk) {
+                was_speaking = true;
+                if vad_tx.send(chunk).await.is_err() {
+                    break;
+                }
+            } else if was_speaking {
+                // Speech just ended: signal end of utterance.
+                was_speaking = false;
+                if vad_tx.send(Vec::new()).await.is_err() {
+                    break;
+                }
+            }
+        }
+        // Capture closed (recording stopped): flush any trailing utterance.
+        let _ = vad_tx.send(Vec::new()).await;
+    });
 
     let asr = state.asr.clone();
     let lang = language.clone();
 
     tokio::spawn(async move {
-        if let Err(e) = asr.transcribe_stream(audio_rx, transcript_tx, lang.as_deref()).await {
+        if let Err(e) = asr.transcribe_stream(vad_rx, transcript_tx, lang.as_deref()).await {
             error!("ASR stream error: {e}");
         }
     });

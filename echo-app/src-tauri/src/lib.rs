@@ -17,7 +17,6 @@ use core::{
     audio::AudioService,
     dictionary::DictionaryEngine,
     injection::platform_injector,
-    vad::EnergyVad,
 };
 use state::AppState;
 use storage::db;
@@ -63,7 +62,6 @@ pub fn run() {
                 audio: Arc::new(AudioService::new().expect("Failed to initialize audio")),
                 asr: asr_manager,
                 dictionary: RwLock::new(DictionaryEngine::new(entries)),
-                vad: Mutex::new(EnergyVad::new(0.01)),
                 injector: Arc::from(platform_injector()),
                 recording: Mutex::new(false),
             };
