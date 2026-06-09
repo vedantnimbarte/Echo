@@ -64,11 +64,13 @@ impl AudioService {
         let (tx, rx) = mpsc::channel::<Vec<f32>>(256);
         let tx_err = tx.clone();
 
+        let channels = config.channels;
+        let source_rate = config.sample_rate.0;
         let stream = device
             .build_input_stream(
                 &config,
                 move |data: &[f32], _| {
-                    let chunk = resample_to_16k(data, config.sample_rate.0);
+                    let chunk = resample_to_16k(data, source_rate, channels);
                     let _ = tx.try_send(chunk);
                 },
                 move |err| {
@@ -126,10 +128,18 @@ impl AudioService {
     }
 }
 
-/// Naive linear resampler: down-mix to mono and resample to 16000 Hz.
-fn resample_to_16k(data: &[f32], source_rate: u32) -> Vec<f32> {
-    // Down-mix channels to mono first (assume interleaved stereo or mono).
-    let mono: Vec<f32> = data.chunks(2).map(|s| s.iter().sum::<f32>() / s.len() as f32).collect();
+/// Naive linear resampler: down-mix interleaved frames to mono and resample to 16000 Hz.
+/// `channels` is the source channel count so mono (1ch) input is not corrupted.
+fn resample_to_16k(data: &[f32], source_rate: u32, channels: u16) -> Vec<f32> {
+    // Down-mix interleaved frames to mono by averaging each frame's channels.
+    let mono: Vec<f32> = if channels <= 1 {
+        data.to_vec()
+    } else {
+        let ch = channels as usize;
+        data.chunks(ch)
+            .map(|frame| frame.iter().sum::<f32>() / frame.len() as f32)
+            .collect()
+    };
 
     if source_rate == 16000 {
         return mono;
@@ -145,4 +155,34 @@ fn resample_to_16k(data: &[f32], source_rate: u32) -> Vec<f32> {
     }
 
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resample_to_16k;
+
+    #[test]
+    fn resample_passthrough_16k() {
+        // Mono input already at 16 kHz should pass through unchanged.
+        let input = vec![0.1, -0.2, 0.3, -0.4];
+        let out = resample_to_16k(&input, 16000, 1);
+        assert_eq!(out, input);
+    }
+
+    #[test]
+    fn resample_48k_to_16k_length() {
+        // 48 kHz mono → 16 kHz should be ~1/3 the length.
+        let input: Vec<f32> = (0..480).map(|i| (i as f32) * 0.001).collect();
+        let out = resample_to_16k(&input, 48000, 1);
+        // ratio = 3.0, ceil(480 / 3) = 160
+        assert_eq!(out.len(), 160);
+    }
+
+    #[test]
+    fn mono_downmix() {
+        // Interleaved stereo [L, R, L, R] is averaged into mono.
+        let stereo = vec![1.0, 3.0, 2.0, 4.0];
+        let out = resample_to_16k(&stereo, 16000, 2);
+        assert_eq!(out, vec![2.0, 3.0]); // (1+3)/2, (2+4)/2
+    }
 }
