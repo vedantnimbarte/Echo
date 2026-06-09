@@ -10,8 +10,10 @@ name = "echo_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
-# Local Whisper transcription via whisper-rs. Off by default because building
-# whisper.cpp requires cmake + libclang (LLVM) on the build machine.
+# In-process local Whisper via whisper-rs (whisper.cpp compiled in). Off by
+# default because building whisper.cpp needs cmake + libclang (LLVM). The
+# default local engine instead shells out to a bundled `whisper-cli` binary
+# (see core/asr/whisper_cli.rs) which needs no build toolchain.
 # Enable with: cargo build --features whisper
 whisper = ["dep:whisper-rs"]
 
@@ -52,6 +54,19 @@ async-trait = "0.1"
 # platform default TLS — schannel on Windows — to avoid extra native build deps).
 reqwest = { version = "0.12", features = ["stream", "multipart", "json"] }
 futures-util = "0.3"
+
+# WebSocket client for true streaming ASR (Deepgram). native-tls uses the OS
+# TLS stack (schannel on Windows) so it adds no openssl/cmake build deps.
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+
+# Extract the bundled whisper.cpp release archive (downloaded on first run).
+# Pure-Rust deflate, no native build deps.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+# Silero VAD inference. `ort` downloads a prebuilt ONNX Runtime at build time,
+# so it needs no cmake/libclang. `ndarray` builds the input tensors.
+ort = { version = "2.0.0-rc.10", features = ["download-binaries", "ndarray"] }
+ndarray = "0.16"
 
 # WAV encoding for cloud ASR uploads.
 hound = "3.5"
