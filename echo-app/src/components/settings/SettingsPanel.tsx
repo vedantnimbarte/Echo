@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { commands } from "../../ipc/commands";
 import { ModelSelector } from "./ModelSelector";
 import { CloudProviders } from "./CloudProviders";
+import { TelemetrySettings } from "./TelemetrySettings";
 
 export function SettingsPanel() {
   const { data: provider } = useQuery({
@@ -124,6 +125,9 @@ export function SettingsPanel() {
             or <code>ydotool</code> (Wayland).
           </p>
         </div>
+
+        {/* Telemetry */}
+        <TelemetrySettings />
 
         {/* History toggle */}
         <label className="flex items-center gap-3 cursor-pointer border-t border-zinc-800 pt-4">

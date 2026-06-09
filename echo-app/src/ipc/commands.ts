@@ -28,6 +28,11 @@ export interface ModelInfo {
   size_mb: number;
 }
 
+export interface TelemetrySummaryItem {
+  event_type: string;
+  count: number;
+}
+
 export const commands = {
   getAudioDevices: () => invoke<AudioDevice[]>("get_audio_devices"),
 
@@ -82,4 +87,15 @@ export const commands = {
 
   removeApiKey: (provider: string) =>
     invoke<void>("remove_api_key", { provider }),
+
+  getTelemetrySummary: () =>
+    invoke<TelemetrySummaryItem[]>("get_telemetry_summary"),
+
+  clearTelemetry: () => invoke<void>("clear_telemetry"),
+
+  setTelemetryEnabled: (enabled: boolean) =>
+    invoke<void>("set_telemetry_enabled", { enabled }),
+
+  recordTelemetryEvent: (eventType: string, payload?: unknown) =>
+    invoke<void>("record_telemetry_event", { eventType, payload }),
 };
