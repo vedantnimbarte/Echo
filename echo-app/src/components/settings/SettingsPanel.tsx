@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { commands } from "../../ipc/commands";
 import { ModelSelector } from "./ModelSelector";
+import { CloudProviders } from "./CloudProviders";
 
 export function SettingsPanel() {
   const { data: provider } = useQuery({
@@ -67,6 +68,9 @@ export function SettingsPanel() {
 
         {/* Local Whisper models */}
         <ModelSelector />
+
+        {/* Cloud provider API keys */}
+        <CloudProviders />
 
         {/* Text injection */}
         <div className="space-y-3 border-t border-zinc-800 pt-4">

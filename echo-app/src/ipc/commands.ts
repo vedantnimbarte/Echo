@@ -73,4 +73,13 @@ export const commands = {
 
   checkAccessibilityPermission: () =>
     invoke<boolean>("check_accessibility_permission"),
+
+  setApiKey: (provider: string, key: string) =>
+    invoke<void>("set_api_key", { provider, key }),
+
+  getApiKeySet: (provider: string) =>
+    invoke<boolean>("get_api_key_set", { provider }),
+
+  removeApiKey: (provider: string) =>
+    invoke<void>("remove_api_key", { provider }),
 };
