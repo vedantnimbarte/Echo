@@ -6,14 +6,8 @@ use super::{Plugin, PluginContext};
 use crate::error::{EchoError, Result};
 
 /// Symbol a plugin shared library must export. It returns a heap-allocated boxed
-/// trait object that the host takes ownership of.
-///
-/// ```ignore
-/// #[no_mangle]
-/// pub extern "C" fn echo_plugin_create() -> *mut Box<dyn echo_sdk::Plugin> {
-///     Box::into_raw(Box::new(Box::new(MyPlugin::default())))
-/// }
-/// ```
+/// trait object that the host takes ownership of. Plugin authors generate this
+/// with `echo_sdk::export_plugin!(MyPlugin)` rather than writing it by hand.
 type CreateFn = unsafe extern "C" fn() -> *mut Box<dyn Plugin>;
 
 struct LoadedPlugin {

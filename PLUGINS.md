@@ -26,36 +26,50 @@ Ship a `plugin.json` next to your compiled library:
 - `permissions` may include `asr`, `output`, `audio`, `dictionary`.
 - `entry` is the shared library file name.
 
-## Export contract
+## The `echo-sdk` crate
 
-A plugin library must export `echo_plugin_create`, returning a heap-allocated
-boxed trait object the host takes ownership of:
+Plugins compile against [`echo-sdk`](echo-app/src-tauri/echo-sdk) — the crate
+that defines the `Plugin` trait, manifest types, and the `export_plugin!` macro.
+Depend on it and implement `Plugin`:
 
-```rust
-// Build a cdylib that depends on Echo's plugin traits.
-#[no_mangle]
-pub extern "C" fn echo_plugin_create() -> *mut Box<dyn Plugin> {
-    Box::into_raw(Box::new(Box::new(MyPlugin::default())))
-}
+```toml
+# Cargo.toml
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+echo-sdk = "0.1"
 ```
 
-The `Plugin` trait (and capability traits `AsrPlugin`, `OutputPlugin`,
-`AudioPlugin`, `DictionaryPlugin`) are defined in
-`echo-app/src-tauri/src/core/plugins/mod.rs`:
-
 ```rust
-pub trait Plugin: Send + Sync {
-    fn name(&self) -> &str;
-    fn version(&self) -> &str;
-    fn on_load(&self, ctx: &PluginContext) -> Result<()>;
-    fn on_unload(&self) -> Result<()>;
+use echo_sdk::{export_plugin, Plugin, PluginContext, PluginResult};
+
+#[derive(Default)]
+struct MyPlugin;
+
+impl Plugin for MyPlugin {
+    fn name(&self) -> &str { "my-plugin" }
+    fn version(&self) -> &str { "1.0.0" }
+    fn on_load(&self, _ctx: &PluginContext) -> PluginResult<()> { Ok(()) }
+    fn on_unload(&self) -> PluginResult<()> { Ok(()) }
 }
+
+// Generates the `echo_plugin_create` FFI entry point the host looks up.
+export_plugin!(MyPlugin);
 ```
+
+`export_plugin!` emits the `echo_plugin_create` symbol that returns a
+heap-allocated boxed trait object the host takes ownership of, so you never
+write the `unsafe extern "C"` boilerplate by hand. Your plugin type must also
+implement `Default`.
+
+The capability traits `OutputPlugin` and `AudioPlugin` also live in `echo-sdk`;
+`AsrPlugin` and `DictionaryPlugin` are defined by the host (they reference
+Echo-internal types) in `echo-app/src-tauri/src/core/plugins/mod.rs`.
 
 > **ABI note:** because the trait object crosses the dynamic-library boundary,
-> plugins must be built against the same Echo version/toolchain as the host.
-> A dedicated `echo-sdk` crate (with an `#[echo_plugin]` macro and stable
-> re-exports) is planned to make this ergonomic.
+> plugins must be built against a matching `echo-sdk` version and the same Rust
+> toolchain as the host.
 
 ## Installing
 
