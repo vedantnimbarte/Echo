@@ -71,8 +71,10 @@ tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 # Pure-Rust deflate, no native build deps.
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
-# Silero VAD inference. `ort` downloads a prebuilt ONNX Runtime at build time,
-# so it needs no cmake/libclang. `ndarray` builds the input tensors.
+# Silero VAD inference. `ort` downloads a prebuilt ONNX Runtime at build time
+# and STATICALLY links it (`rustc-link-lib=static=onnxruntime`), so the runtime
+# is baked into the executable — nothing to ship alongside it. `ndarray` builds
+# the input tensors.
 ort = { version = "2.0.0-rc.10", features = ["download-binaries", "ndarray"] }
 ndarray = "0.16"
 
