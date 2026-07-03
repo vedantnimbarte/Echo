@@ -58,6 +58,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": {
+      "resources/bin/": "bin/"
+    },
     "windows": {
       "wix": {
         "language": "en-US"

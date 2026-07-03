@@ -80,10 +80,14 @@ pub fn run() {
             std::fs::create_dir_all(&models_dir)?;
             let model_manager = Arc::new(ModelManager::new(models_dir));
 
-            // whisper.cpp CLI binary (downloaded on first run, or found on PATH).
+            // whisper.cpp CLI binary: a copy bundled in the installer's
+            // resources is preferred; otherwise it is downloaded on first run
+            // or found on PATH.
             let bin_dir = data_dir.join("bin");
             std::fs::create_dir_all(&bin_dir)?;
-            let binary_manager = Arc::new(BinaryManager::new(bin_dir));
+            let bundled_bin = core::runtime_deps::bundled_whisper_dir(app.handle());
+            let binary_manager =
+                Arc::new(BinaryManager::new(bin_dir).with_bundled_dir(bundled_bin));
 
             // Selected local model (defaults to base.en).
             let whisper_model = storage::repositories::get_setting(&conn, "whisper_model")
@@ -109,6 +113,8 @@ pub fn run() {
             }
 
             // Load the Silero VAD model; energy VAD is the fallback on failure.
+            // (ONNX Runtime is statically linked into the binary, so there is
+            // nothing to bundle or locate for this.)
             let silero = match core::vad::SileroModel::load() {
                 Ok(m) => Some(Arc::new(m)),
                 Err(e) => {

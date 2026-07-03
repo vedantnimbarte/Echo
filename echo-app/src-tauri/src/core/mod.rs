@@ -4,5 +4,6 @@ pub mod dictionary;
 pub mod events;
 pub mod injection;
 pub mod plugins;
+pub mod runtime_deps;
 pub mod telemetry;
 pub mod vad;

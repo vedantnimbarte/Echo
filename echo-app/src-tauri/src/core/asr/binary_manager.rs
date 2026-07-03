@@ -8,7 +8,10 @@ use tokio::sync::mpsc;
 use crate::error::{EchoError, Result};
 
 /// Pinned whisper.cpp release whose prebuilt CLI we download on first run.
-const WHISPER_RELEASE_TAG: &str = "v1.7.4";
+/// NOTE: v1.7.4/v1.7.5 published no binary assets (the download 404s); v1.7.6 is
+/// the nearest tag that ships `whisper-bin-x64.zip`. Keep in sync with
+/// `scripts/stage-runtime-deps.mjs`.
+const WHISPER_RELEASE_TAG: &str = "v1.7.6";
 
 /// The executable name whisper.cpp ships (renamed from `main` in v1.7.x).
 #[cfg(target_os = "windows")]
@@ -28,21 +31,41 @@ const WINDOWS_ASSET: &str = "whisper-bin-x64.zip";
 /// the `.bin` weights, this fetches the executable that runs them.
 pub struct BinaryManager {
     bin_dir: PathBuf,
+    /// A read-only directory of a copy bundled with the app (see
+    /// `core::runtime_deps::bundled_whisper_dir`). Preferred over downloading.
+    bundled_dir: Option<PathBuf>,
 }
 
 impl BinaryManager {
     pub fn new(bin_dir: PathBuf) -> Self {
-        Self { bin_dir }
+        Self {
+            bin_dir,
+            bundled_dir: None,
+        }
     }
 
-    /// Path where we install/keep the binary.
+    /// Builder: prefer a `whisper-cli` bundled in `dir` (from
+    /// `core::runtime_deps::bundled_whisper_dir`) over downloading one.
+    pub fn with_bundled_dir(mut self, dir: Option<PathBuf>) -> Self {
+        self.bundled_dir = dir;
+        self
+    }
+
+    /// Path where we install/keep the downloaded binary.
     pub fn binary_path(&self) -> PathBuf {
         self.bin_dir.join(BINARY_NAME)
     }
 
-    /// Resolve a runnable whisper-cli: our installed copy first, then anything
-    /// named `whisper-cli` on the system PATH. `None` if neither exists.
+    /// Resolve a runnable whisper-cli: a bundled copy first, then our installed
+    /// (downloaded) copy, then anything named `whisper-cli` on the system PATH.
+    /// `None` if none exist.
     pub fn resolve(&self) -> Option<PathBuf> {
+        if let Some(dir) = &self.bundled_dir {
+            let bundled = dir.join(BINARY_NAME);
+            if bundled.exists() {
+                return Some(bundled);
+            }
+        }
         let local = self.binary_path();
         if local.exists() {
             return Some(local);
@@ -184,4 +207,30 @@ fn find_on_path(name: &str) -> Option<PathBuf> {
     std::env::split_paths(&path)
         .map(|dir| dir.join(name))
         .find(|candidate| candidate.is_file())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A staged/bundled copy must win over the download dir and PATH.
+    #[test]
+    fn resolve_prefers_bundled_copy() {
+        let base = std::env::temp_dir().join(format!("echo-bm-{}", std::process::id()));
+        let bin_dir = base.join("data-bin");
+        let bundled = base.join("res-bin");
+        std::fs::create_dir_all(&bin_dir).unwrap();
+        std::fs::create_dir_all(&bundled).unwrap();
+        std::fs::write(bundled.join(BINARY_NAME), b"stub").unwrap();
+
+        let mgr = BinaryManager::new(bin_dir.clone()).with_bundled_dir(Some(bundled.clone()));
+        assert_eq!(mgr.resolve(), Some(bundled.join(BINARY_NAME)));
+
+        // Without a bundled dir and an empty download dir, it must NOT resolve to
+        // the bundled path (it falls through to PATH, which won't have our stub).
+        let plain = BinaryManager::new(bin_dir.clone());
+        assert_ne!(plain.resolve(), Some(bundled.join(BINARY_NAME)));
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
 }
