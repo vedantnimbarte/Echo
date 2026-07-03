@@ -148,3 +148,26 @@ impl Vad for SileroVad {
         self.silent_count = 0;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    /// The ONNX Runtime is statically linked into the binary, so building a
+    /// session and running inference must work with no external DLL/dylib
+    /// present. This test would fail to link/load if that were not the case —
+    /// which is exactly the property we rely on to *not* bundle ONNX Runtime.
+    #[test]
+    fn silero_loads_and_runs_inference_without_external_runtime() {
+        let model = Arc::new(SileroModel::load().expect("Silero session should build"));
+
+        // Silence is reliably below the speech threshold across several frames.
+        let mut vad = SileroVad::new(model);
+        let silence = vec![0.0f32; FRAME * 4];
+        assert!(
+            !vad.is_speech(&silence),
+            "pure silence must not trigger speech"
+        );
+    }
+}
