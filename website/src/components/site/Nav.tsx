@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import Logo from "./Logo";
 import Magnetic from "@/components/ui/Magnetic";
+import { LINKS as EXT } from "@/lib/links";
 
 const LINKS = [
   { href: "/features", label: "Features", idx: "01" },
@@ -51,7 +52,7 @@ export default function Nav() {
 
         <div className="flex items-center gap-2">
           <a
-            href="https://github.com"
+            href={EXT.github}
             target="_blank"
             rel="noreferrer"
             className="hidden items-center gap-2 rounded-full px-3 py-2 text-sm text-fog transition-colors hover:text-text sm:inline-flex"
