@@ -17,7 +17,7 @@
 | 4 | Dictionaries | ✅ Complete |
 | 5 | Cloud ASR Providers | ✅ Complete (Deepgram via HTTP, not WS yet) |
 | 6 | Telemetry | ✅ Complete |
-| 7 | Plugin System | ✅ Core complete (SDK crate deferred) |
+| 7 | Plugin System | ✅ Complete (echo-sdk crate + export_plugin! macro) |
 | 8 | Packaging | ✅ Config + CI (signing certs TBD) |
 | 9 | v1 Launch | ✅ Hotkey + CSP + docs (perf/signing TBD) |
 
@@ -649,7 +649,7 @@ Add to `SettingsPanel.tsx`:
 
 ## Phase 7 — Plugin System ✅
 
-**Done:** plugin traits + `PluginContext` (7.1), `PluginManifest`/`plugin.json` schema (7.2), `PluginLoader` via libloading (7.3), commands `list_plugins`/`install_plugin`/`enable_plugin`/`disable_plugin`/`uninstall_plugin` with DB+disk registry and startup loading (7.4), and the `PluginsPanel` UI + tab (7.6). **Deferred:** the standalone `echo-sdk` proc-macro crate (7.5) — it requires extracting the plugin API into a shared crate; the loader's `echo_plugin_create` contract is documented in `loader.rs` so plugins can be written against the traits today.
+**Done:** plugin traits + `PluginContext` (7.1), `PluginManifest`/`plugin.json` schema (7.2), `PluginLoader` via libloading (7.3), commands `list_plugins`/`install_plugin`/`enable_plugin`/`disable_plugin`/`uninstall_plugin` with DB+disk registry and startup loading (7.4), and the `PluginsPanel` UI + tab (7.6). **Done (7.5):** the standalone `echo-sdk` crate now holds the shared plugin API (`Plugin`, `PluginContext`, manifest types, self-contained `OutputPlugin`/`AudioPlugin`, a dependency-free `PluginError`, and an `export_plugin!` macro that emits `echo_plugin_create`). `src-tauri` is the workspace root with `echo-sdk` as a member; `core/plugins` re-exports the SDK types so nothing else changed. `AsrPlugin`/`DictionaryPlugin` stay host-side (they reference host types). Uses a declarative macro rather than the originally-sketched proc-macro — no extra crate needed.
 
 **Safety:** plugins run in-process with full trust; the manifest permission list is advisory. True sandboxing (WASM) is a future goal.
 
