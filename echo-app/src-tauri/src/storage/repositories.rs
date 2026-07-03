@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection, OptionalExtension};
 
-use super::models::{DictionaryEntry, Setting, TranscriptionRecord};
-use crate::error::{EchoError, Result};
+use super::models::{DictionaryEntry, TranscriptionRecord};
+use crate::error::Result;
 
 // ── Settings ─────────────────────────────────────────────────────────────────
 

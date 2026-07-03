@@ -2,6 +2,7 @@ import Link from "next/link";
 import Reveal from "@/components/ui/Reveal";
 import WaveSignal from "@/components/ui/WaveSignal";
 import Magnetic from "@/components/ui/Magnetic";
+import { LINKS } from "@/lib/links";
 
 export default function FinalCTA() {
   return (
@@ -28,7 +29,7 @@ export default function FinalCTA() {
               </svg>
             </Link>
           </Magnetic>
-          <a href="https://github.com" target="_blank" rel="noreferrer" className="btn-ghost text-base">
+          <a href={LINKS.github} target="_blank" rel="noreferrer" className="btn-ghost text-base">
             Star on GitHub
           </a>
         </div>

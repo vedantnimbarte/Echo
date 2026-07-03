@@ -1,0 +1,72 @@
+name: CI
+
+# Fast verification on every push/PR: dependency audit, Rust lint, and
+# frontend/website typecheck + build. The heavier cross-platform installer
+# build lives in release.yml and runs only on tags.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # `cargo audit` only scans Cargo.lock, so this job needs no system deps and is
+  # very fast. The accepted/ignored transitive advisories live in
+  # echo-app/src-tauri/.cargo/audit.toml.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: cargo audit
+        run: cargo audit
+        working-directory: echo-app/src-tauri
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libasound2-dev
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: echo-app/src-tauri
+      - name: cargo clippy
+        run: cargo clippy --manifest-path echo-app/src-tauri/Cargo.toml --all-targets
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            echo-app/package-lock.json
+            website/package-lock.json
+      - name: App - install & typecheck
+        working-directory: echo-app
+        run: |
+          npm ci
+          npx tsc --noEmit
+      - name: Website - install, lint & build
+        working-directory: website
+        run: |
+          npm ci
+          npm run lint
+          npm run build

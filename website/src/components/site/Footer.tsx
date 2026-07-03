@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { EchoMark } from "./Logo";
+import { LINKS } from "@/lib/links";
 
 const COLS: { title: string; links: { label: string; href: string }[] }[] = [
   {
@@ -14,10 +15,10 @@ const COLS: { title: string; links: { label: string; href: string }[] }[] = [
   {
     title: "Open source",
     links: [
-      { label: "GitHub", href: "https://github.com" },
-      { label: "Contributing", href: "https://github.com" },
-      { label: "Plugins", href: "https://github.com" },
-      { label: "License", href: "https://github.com" },
+      { label: "GitHub", href: LINKS.github },
+      { label: "Contributing", href: LINKS.contributing },
+      { label: "Plugins", href: LINKS.plugins },
+      { label: "License", href: LINKS.license },
     ],
   },
   {

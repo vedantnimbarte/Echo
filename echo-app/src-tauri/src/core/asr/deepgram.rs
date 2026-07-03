@@ -167,7 +167,7 @@ impl AsrProvider for DeepgramProvider {
                     let v = (s.clamp(-1.0, 1.0) * 32767.0) as i16;
                     pcm.extend_from_slice(&v.to_le_bytes());
                 }
-                if write.send(Message::Binary(pcm.into())).await.is_err() {
+                if write.send(Message::Binary(pcm)).await.is_err() {
                     break;
                 }
             }

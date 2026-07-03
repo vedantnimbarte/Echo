@@ -830,17 +830,17 @@ strategy:
 
 ## Phase 9 — v1 Launch ✅ (core)
 
-**Done:** 9.4 global hotkey (configurable, default `CommandOrControl+Shift+Space`, toggles recording); CSP configured (9.1); `npm audit` clean; `CONTRIBUTING.md` + `PLUGINS.md` (9.3); API keys never returned to the UI / kept in keychain; Linux injector args are shell-safe. **TBD:** run `cargo audit` (tool not installed in dev env), measure perf targets (9.2), and code-signing certs (8.x/9.1). README is the final deliverable.
+**Done:** 9.4 global hotkey (configurable, default `CommandOrControl+Shift+Space`, toggles recording); CSP configured (9.1); `npm audit` clean; `cargo audit` clean (only upstream-pinned transitive advisories remain — accepted in `src-tauri/.cargo/audit.toml`; `anyhow` bumped to 1.0.103 to clear RUSTSEC-2026-0190); a `.github/workflows/ci.yml` now runs audit + clippy + frontend build on every push/PR; `CONTRIBUTING.md` + `PLUGINS.md` (9.3); API keys never returned to the UI / kept in keychain; Linux injector args are shell-safe. **TBD:** measure perf targets (9.2) and code-signing certs (8.x/9.1) — both need a release/hardware environment. README is the final deliverable.
 
 ### 9.1 Security review checklist
 
-- [ ] API keys never logged or emitted in events
-- [ ] Plugin permissions enforced at load time
-- [ ] SQLite data at rest: consider SQLCipher if user requests encryption
-- [ ] No shell injection in Linux injector (xdotool/ydotool args escaped)
-- [ ] CSP headers configured in `tauri.conf.json`
-- [ ] Signed releases (code signing certs for Windows + macOS)
-- [ ] Dependency audit: `cargo audit`, `npm audit`
+- [x] API keys never logged or emitted in events (verified: no key values in any log/event; kept in OS keychain)
+- [ ] Plugin permissions enforced at load time (intentionally advisory in v1 — plugins run in-process; enforcement awaits a WASM/sandbox runtime)
+- [ ] SQLite data at rest: consider SQLCipher if user requests encryption (not requested)
+- [x] No shell injection in Linux injector (verified: `Command::new(prog).args(&args)` with `--`, never a shell)
+- [x] CSP headers configured in `tauri.conf.json`
+- [ ] Signed releases (code signing certs for Windows + macOS) — blocked on certificates
+- [x] Dependency audit: `cargo audit` (clean, policy documented), `npm audit` (clean); both wired into CI
 
 ### 9.2 Performance targets (from PRD)
 

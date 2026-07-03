@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import PageHero from "@/components/site/PageHero";
 import Reveal from "@/components/ui/Reveal";
 import Magnetic from "@/components/ui/Magnetic";
+import { LINKS } from "@/lib/links";
 
 export const metadata: Metadata = {
   title: "Download — Echo",
@@ -89,7 +90,7 @@ export default function DownloadPage() {
 
                 <div className="mt-7">
                   <Magnetic strength={0.25}>
-                    <a href="https://github.com" className={p.featured ? "btn-glow w-full justify-center" : "btn-ghost w-full justify-center"}>
+                    <a href={LINKS.releases} className={p.featured ? "btn-glow w-full justify-center" : "btn-ghost w-full justify-center"}>
                       {p.cta}
                     </a>
                   </Magnetic>
@@ -124,7 +125,7 @@ export default function DownloadPage() {
                 a single command — that&apos;s the whole point of local-first.
               </p>
             </div>
-            <a href="https://github.com" target="_blank" rel="noreferrer" className="btn-ghost shrink-0">
+            <a href={LINKS.github} target="_blank" rel="noreferrer" className="btn-ghost shrink-0">
               View source
             </a>
           </div>

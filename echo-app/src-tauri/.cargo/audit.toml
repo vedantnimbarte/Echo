@@ -1,0 +1,23 @@
+# cargo-audit configuration.
+#   Run from echo-app/src-tauri:  cargo audit
+#
+# Every entry below is a TRANSITIVE advisory reached only through the Tauri
+# toolchain. None can be resolved at the application level: the parent crates
+# pin the affected versions via semver, so `cargo update` cannot move them.
+# Re-review this list on every Tauri upgrade and drop entries as upstream fixes
+# land.
+
+[advisories]
+ignore = [
+  # quick-xml DoS advisories: quadratic run time on duplicate-attribute checks
+  # (0194) and unbounded namespace-declaration allocation (0195). Reached via:
+  #   * plist -> tauri-utils -> tauri            (requires quick-xml ^0.39.2)
+  #   * tauri-winrt-notification -> notify-rust  (requires quick-xml ^0.37)
+  # Both requirements cap quick-xml below the patched 0.41.0. Echo only parses
+  # build-time .plist bundle metadata and self-generated Windows toast XML with
+  # quick-xml -- never untrusted, attacker-controlled input -- so the DoS
+  # surface is not reachable at runtime. Remove once Tauri depends on
+  # quick-xml >= 0.41.0.
+  "RUSTSEC-2026-0194",
+  "RUSTSEC-2026-0195",
+]
