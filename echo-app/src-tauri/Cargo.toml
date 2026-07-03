@@ -5,6 +5,14 @@ description = "Echo - Universal Voice Keyboard"
 authors = []
 edition = "2021"
 
+# The Tauri app crate doubles as the workspace root so the shared plugin API
+# (echo-sdk) builds alongside it. Keeping the root here (rather than at
+# echo-app/) leaves the Cargo.lock, target dir, and all build tooling paths
+# unchanged.
+[workspace]
+members = ["echo-sdk"]
+resolver = "2"
+
 [lib]
 name = "echo_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
@@ -76,6 +84,10 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "sync-s
 
 # Dynamic loading of native plugins (experimental, advisory permission model).
 libloading = "0.8"
+
+# Shared plugin API — the trait/manifest definitions plugin authors compile
+# against. The host must use the same definitions for the FFI to be sound.
+echo-sdk = { path = "echo-sdk" }
 
 # Local Whisper (optional — see [features].whisper above).
 whisper-rs = { version = "0.13", optional = true }

@@ -33,6 +33,14 @@ pub enum EchoError {
     PermissionDenied(String),
 }
 
+// Plugin lifecycle hooks return the SDK's dependency-free error; lift it into
+// the host error at the loader boundary.
+impl From<echo_sdk::PluginError> for EchoError {
+    fn from(e: echo_sdk::PluginError) -> Self {
+        EchoError::Plugin(e.to_string())
+    }
+}
+
 // Tauri commands must return serde-serializable errors.
 impl serde::Serialize for EchoError {
     fn serialize<S: serde::Serializer>(
