@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# This repo uses npm (package-lock.json); keep stray pnpm/yarn locks out.
+pnpm-lock.yaml
+pnpm-workspace.yaml
+yarn.lock
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

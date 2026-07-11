@@ -9,12 +9,13 @@
 // statically linked into the executable by `ort`, so there is nothing to ship
 // for it.
 //
-// whisper.cpp publishes a ready-to-run CLI for Windows only; on macOS/Linux the
-// app falls back to a `whisper-cli` on PATH, so this script no-ops there. Keep
-// WHISPER_TAG / WHISPER_WIN_ASSET in sync with core/asr/binary_manager.rs.
+// Windows uses whisper.cpp's prebuilt CLI (downloaded). macOS/Linux have no
+// prebuilt asset, so we build whisper-cli from source here (needs git + cmake +
+// a C/C++ compiler on the machine — CI has these). Keep WHISPER_TAG /
+// WHISPER_WIN_ASSET in sync with core/asr/binary_manager.rs.
 
 import { createWriteStream } from "node:fs";
-import { mkdir, readdir, rename, cp, rm } from "node:fs/promises";
+import { mkdir, readdir, rename, cp, rm, chmod } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { execFileSync } from "node:child_process";
@@ -55,10 +56,69 @@ async function copyFlat(src, dst) {
   }
 }
 
+// Build a portable whisper-cli from source (macOS/Linux). Key flags:
+//   BUILD_SHARED_LIBS=OFF  → static libwhisper/libggml, so the one binary is
+//                            self-contained (no sidecar .so/.dylib to ship).
+//   GGML_NATIVE=OFF        → do NOT bake in the CI runner's -march=native CPU
+//                            features; otherwise the binary SIGILLs on older
+//                            user CPUs. Ship a safe baseline.
+//   GGML_OPENMP=OFF        → drop the libgomp runtime dependency (whisper.cpp
+//                            still threads via its own pool).
+// On macOS we compile a universal (arm64 + x86_64) slice so Intel Macs work.
+async function buildWhisperUnix() {
+  const src = path.join(os.tmpdir(), "whisper-src");
+  const build = path.join(src, "build");
+  await rm(src, { recursive: true, force: true });
+  console.log(`↓ git clone whisper.cpp ${WHISPER_TAG}`);
+  execFileSync(
+    "git",
+    ["clone", "--depth", "1", "--branch", WHISPER_TAG, "https://github.com/ggml-org/whisper.cpp", src],
+    { stdio: "inherit" },
+  );
+
+  const cfg = [
+    "-B", build,
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DBUILD_SHARED_LIBS=OFF",
+    "-DGGML_NATIVE=OFF",
+    "-DGGML_OPENMP=OFF",
+    "-DWHISPER_BUILD_TESTS=OFF",
+    "-DWHISPER_BUILD_EXAMPLES=ON",
+    "-DWHISPER_BUILD_SERVER=OFF",
+  ];
+  if (process.platform === "darwin") cfg.push("-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64");
+  execFileSync("cmake", cfg, { cwd: src, stdio: "inherit" });
+  execFileSync("cmake", ["--build", build, "--config", "Release", "-j", "--target", "whisper-cli"], {
+    cwd: src,
+    stdio: "inherit",
+  });
+
+  // Find the produced binary (usually build/bin/whisper-cli) and stage it.
+  const found = await findFile(build, "whisper-cli");
+  if (!found) throw new Error(`build succeeded but 'whisper-cli' not found under ${build}`);
+  const dest = path.join(BIN_DIR, "whisper-cli");
+  await cp(found, dest);
+  await chmod(dest, 0o755);
+  console.log(`✓ whisper-cli built & staged into ${BIN_DIR}`);
+}
+
+async function findFile(dir, name) {
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const hit = await findFile(full, name);
+      if (hit) return hit;
+    } else if (entry.name === name) {
+      return full;
+    }
+  }
+  return null;
+}
+
 async function stageWhisper() {
   await mkdir(BIN_DIR, { recursive: true });
   if (process.platform !== "win32") {
-    console.log("• whisper: no prebuilt CLI for this platform; skipping (PATH fallback).");
+    await buildWhisperUnix();
     return;
   }
   const url = `https://github.com/ggml-org/whisper.cpp/releases/download/${WHISPER_TAG}/${WHISPER_WIN_ASSET}`;

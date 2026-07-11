@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# This repo uses npm; keep stray pnpm locks out.
+pnpm-lock.yaml
+pnpm-workspace.yaml

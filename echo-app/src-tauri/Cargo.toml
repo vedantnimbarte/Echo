@@ -35,6 +35,11 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-store = "2"
 tauri-plugin-dialog = "2"
+# In-app auto-update (checks a signed latest.json on GitHub Releases) + process
+# restart after applying an update. Dormant until a signing key is configured —
+# see docs/RELEASING.md.
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -86,6 +91,11 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "sync-s
 
 # Dynamic loading of native plugins (experimental, advisory permission model).
 libloading = "0.8"
+
+# Cross-platform clipboard for paste-based text injection (save → set → paste →
+# restore). More reliable than per-keystroke synthesis for long transcripts and
+# works where synthetic typing is blocked (e.g. some Wayland compositors).
+arboard = "3"
 
 # Shared plugin API — the trait/manifest definitions plugin authors compile
 # against. The host must use the same definitions for the FFI to be sound.
