@@ -6,6 +6,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { useEchoEvents } from "./hooks/useEchoEvents";
 import { commands } from "./ipc/commands";
+import { checkForUpdate } from "./update";
 import { DictionaryPanel } from "./components/dictionary/DictionaryPanel";
 import { HistoryPanel } from "./components/history/HistoryPanel";
 import { SettingsPanel } from "./components/settings/SettingsPanel";
@@ -31,6 +32,11 @@ export default function App() {
     queryKey: ["setting", "onboarding_complete"],
     queryFn: () => commands.getSetting("onboarding_complete"),
   });
+
+  // Check for a new release once on startup (silent if the updater isn't set up).
+  useEffect(() => {
+    void checkForUpdate();
+  }, []);
 
   // Keep this window alive when closed so the pill's gear can reopen it.
   useEffect(() => {
