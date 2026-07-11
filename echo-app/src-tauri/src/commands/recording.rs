@@ -123,7 +123,7 @@ pub async fn start_recording(
     // Capture shared handles before the spawn — `state` is not 'static.
     let dictionary = state.dictionary.clone();
     let injector = state.injector.clone();
-    let (auto_inject, inject_delay_ms) = {
+    let (auto_inject, inject_delay_ms, use_paste) = {
         let conn = state.db.lock().unwrap();
         let auto = crate::storage::repositories::get_setting(&conn, "auto_inject")
             .unwrap_or(None)
@@ -133,7 +133,11 @@ pub async fn start_recording(
             .unwrap_or(None)
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(0);
-        (auto, delay)
+        let paste = crate::storage::repositories::get_setting(&conn, "injection_method")
+            .unwrap_or(None)
+            .map(|v| v == "paste")
+            .unwrap_or(false);
+        (auto, delay, paste)
     };
 
     let app_clone = app.clone();
@@ -157,8 +161,10 @@ pub async fn start_recording(
                         tokio::time::sleep(std::time::Duration::from_millis(inject_delay_ms)).await;
                     }
                     let inj = injector.clone();
-                    let result =
-                        tokio::task::spawn_blocking(move || inj.inject_text(&processed)).await;
+                    let result = tokio::task::spawn_blocking(move || {
+                        crate::core::injection::deliver(inj.as_ref(), &processed, use_paste)
+                    })
+                    .await;
                     match result {
                         Ok(Err(e)) => error!("Text injection failed: {e}"),
                         Err(e) => error!("Injection task panicked: {e}"),

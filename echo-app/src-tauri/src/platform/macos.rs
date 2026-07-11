@@ -1,4 +1,4 @@
-use core_graphics::event::{CGEvent, CGEventTapLocation};
+use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
 use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
 
 use crate::core::injection::TextInjector;
@@ -59,6 +59,29 @@ impl TextInjector for MacosInjector {
             up.post(CGEventTapLocation::HID);
         }
 
+        Ok(())
+    }
+
+    fn send_paste(&self) -> Result<()> {
+        if !is_accessibility_trusted() {
+            return Err(EchoError::PermissionDenied(
+                "Accessibility permission required. Grant Echo access in System Settings → \
+                 Privacy & Security → Accessibility."
+                    .into(),
+            ));
+        }
+
+        let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
+            .map_err(|_| EchoError::Injection("Failed to create CGEventSource".into()))?;
+
+        // Virtual keycode 9 is ANSI 'V'; hold Command to send Cmd+V (paste).
+        const KEYCODE_V: u16 = 9;
+        for down in [true, false] {
+            let ev = CGEvent::new_keyboard_event(source.clone(), KEYCODE_V, down)
+                .map_err(|_| EchoError::Injection("Failed to create paste event".into()))?;
+            ev.set_flags(CGEventFlags::CGEventFlagCommand);
+            ev.post(CGEventTapLocation::HID);
+        }
         Ok(())
     }
 }
