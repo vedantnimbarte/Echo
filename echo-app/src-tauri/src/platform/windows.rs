@@ -67,4 +67,51 @@ impl TextInjector for WindowsInjector {
             "Windows injector called on non-Windows platform".into(),
         ))
     }
+
+    fn send_paste(&self) -> Result<()> {
+        #[cfg(target_os = "windows")]
+        {
+            use windows::Win32::UI::Input::KeyboardAndMouse::{
+                SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VIRTUAL_KEY,
+            };
+
+            const VK_CONTROL: u16 = 0x11;
+            const VK_V: u16 = 0x56;
+
+            fn key(vk: u16, up: bool) -> INPUT {
+                INPUT {
+                    r#type: INPUT_KEYBOARD,
+                    Anonymous: INPUT_0 {
+                        ki: KEYBDINPUT {
+                            wVk: VIRTUAL_KEY(vk),
+                            wScan: 0,
+                            dwFlags: if up { KEYEVENTF_KEYUP } else { Default::default() },
+                            time: 0,
+                            dwExtraInfo: 0,
+                        },
+                    },
+                }
+            }
+
+            // Ctrl↓ V↓ V↑ Ctrl↑
+            let inputs = [
+                key(VK_CONTROL, false),
+                key(VK_V, false),
+                key(VK_V, true),
+                key(VK_CONTROL, true),
+            ];
+            let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
+            if sent != inputs.len() as u32 {
+                return Err(EchoError::Injection(
+                    "SendInput did not process the paste shortcut".into(),
+                ));
+            }
+            Ok(())
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        Err(EchoError::Injection(
+            "Windows injector called on non-Windows platform".into(),
+        ))
+    }
 }

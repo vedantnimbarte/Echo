@@ -25,8 +25,17 @@ pub async fn inject_text(state: State<'_, AppState>, text: String) -> Result<()>
     if text.is_empty() {
         return Ok(());
     }
+    let use_paste = {
+        let conn = state.db.lock().unwrap();
+        crate::storage::repositories::get_setting(&conn, "injection_method")
+            .unwrap_or(None)
+            .map(|v| v == "paste")
+            .unwrap_or(false)
+    };
     let injector = state.injector.clone();
-    tokio::task::spawn_blocking(move || injector.inject_text(&text))
-        .await
-        .map_err(|e| crate::error::EchoError::Plugin(e.to_string()))?
+    tokio::task::spawn_blocking(move || {
+        crate::core::injection::deliver(injector.as_ref(), &text, use_paste)
+    })
+    .await
+    .map_err(|e| crate::error::EchoError::Plugin(e.to_string()))?
 }

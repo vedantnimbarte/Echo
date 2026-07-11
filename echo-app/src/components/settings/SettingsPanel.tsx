@@ -97,12 +97,20 @@ export function SettingsPanel() {
     queryKey: ["setting", "inject_delay_ms"],
     queryFn: () => commands.getSetting("inject_delay_ms"),
   });
+  const { data: injectionMethod } = useQuery({
+    queryKey: ["setting", "injection_method"],
+    queryFn: () => commands.getSetting("injection_method"),
+  });
 
   const setAutoInjectMutation = useMutation({
     mutationFn: (v: string) => commands.setSetting("auto_inject", v),
   });
   const setInjectDelayMutation = useMutation({
     mutationFn: (v: string) => commands.setSetting("inject_delay_ms", v),
+  });
+  const setInjectionMethodMutation = useMutation({
+    mutationFn: (v: string) => commands.setSetting("injection_method", v),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["setting", "injection_method"] }),
   });
   // Selecting a provider must register/activate it (not just persist a string),
   // so this goes through set_asr_provider rather than set_setting.
@@ -274,6 +282,23 @@ export function SettingsPanel() {
               Insert text into the focused app after transcription
             </span>
           </label>
+
+          <Field label="Insert method">
+            <select
+              className={fieldCls + " w-48"}
+              value={injectionMethod ?? "type"}
+              onChange={(e) => setInjectionMethodMutation.mutate(e.target.value)}
+            >
+              <option value="type">Type keystrokes (universal)</option>
+              <option value="paste">Paste (fast, best for long text)</option>
+            </select>
+          </Field>
+          {injectionMethod === "paste" && (
+            <p className="text-[10.5px] leading-snug text-[var(--ink-faint)]">
+              Paste briefly replaces your clipboard, then restores it. Some apps (e.g. terminals)
+              use a different paste shortcut — switch back to typing if it doesn't land.
+            </p>
+          )}
 
           <Field label="Insert delay (ms)">
             <input
