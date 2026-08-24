@@ -106,7 +106,7 @@ if (winInstaller) {
 if (macDmg) {
   // The cask builds its URL from #{version}, so the file name has to match the
   // pattern it expects — warn rather than silently producing a 404 link.
-  const expected = `Echo_${version}_universal.dmg`;
+  const expected = `Echo_${version}_aarch64.dmg`;
   if (macDmg !== expected) {
     console.warn(
       `! dmg is named ${macDmg} but the cask URL builds ${expected}; update packaging/homebrew/echo.rb`
