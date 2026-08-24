@@ -1,7 +1,7 @@
 # Homebrew Cask (template — fill in version, url, and sha256 per release).
 cask "echo" do
   version "0.1.0"
-  sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256 "58463bcc94cdcefc656749cb35dd09f012108b0200b35b5035cb5975b2c401a7"
 
   url "https://github.com/vedantnimbarte/Echo/releases/download/v#{version}/Echo_#{version}_aarch64.dmg"
   name "Echo"
