@@ -9,6 +9,8 @@
 //   - packaging/homebrew/echo.rb version + SHA256
 //   - packaging/snap/snapcraft.yaml  version
 //
+//   - website/src/lib/links.ts   VERSION, which the download links build from
+//
 // Flatpak needs nothing per release: it builds from the local binary and pins
 // no version.
 
@@ -124,6 +126,20 @@ if (macDmg) {
 
 await patch("packaging/snap/snapcraft.yaml", [
   [/^version: ".*"$/m, `version: "${version}"`, "version"],
+]);
+
+// ── website ─────────────────────────────────────────────────────────────────
+//
+// The download page builds direct asset URLs from this constant. Left to a
+// human it drifts, and the failure mode is every download button 404ing on the
+// old version's filenames.
+
+await patch("website/src/lib/links.ts", [
+  [
+    /^export const VERSION = ".*";$/m,
+    `export const VERSION = "${version}";`,
+    "VERSION",
+  ],
 ]);
 
 console.log(`\nmanifests updated for ${tag}`);
