@@ -40,6 +40,14 @@ git push -u origin Echo.Echo-0.1.0
 gh pr create --repo microsoft/winget-pkgs
 ```
 
+Manifests can be checked against the published schemas before submitting,
+without Windows:
+
+```sh
+pip install jsonschema pyyaml
+# validate each file against https://aka.ms/winget-manifest.<type>.1.12.0.schema.json
+```
+
 Automated validation runs on the PR. Things it checks that are easy to get
 wrong: the SHA256 must match the asset byte-for-byte, the installer URL must be
 publicly reachable, and the installer must support a silent install (Tauri's
@@ -55,6 +63,9 @@ been run against these files**, so run both before opening the PR.
   is what the installer writes into the registry. If a reviewer objects to
   claiming the generic `Echo` publisher namespace, `vedantnimbarte.Echo` is the
   conventional fallback for an individual developer.
+- `InstallerType: nullsoft` — the schema enum spells NSIS as `nullsoft`;
+  `nsis` fails validation. Confirmed the installer really is NSIS by finding the
+  `Nullsoft` marker in the binary.
 - `Scope: user` — Tauri's NSIS installer defaults to a per-user install.
 - **`ProductCode` is deliberately absent.** For NSIS this is the uninstall
   registry key, which can't be known without installing on Windows. A wrong

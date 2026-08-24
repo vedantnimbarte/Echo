@@ -2,7 +2,7 @@
 
 PackageIdentifier: Echo.Echo
 PackageVersion: 0.1.0
-InstallerType: nsis
+InstallerType: nullsoft
 Scope: user
 InstallModes:
 - interactive
