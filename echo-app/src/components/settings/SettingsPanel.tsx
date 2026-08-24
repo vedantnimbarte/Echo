@@ -7,6 +7,7 @@ import { useRecordingStore, type RecordingMode } from "../../store/recordingStor
 import { ModelSelector } from "./ModelSelector";
 import { CloudProviders } from "./CloudProviders";
 import { TelemetrySettings } from "./TelemetrySettings";
+import { WakeWordSettings } from "./WakeWordSettings";
 import { HotkeyCapture } from "../common/HotkeyCapture";
 
 /* ---- compact field primitives -------------------------------------------- */
@@ -236,6 +237,16 @@ export function SettingsPanel() {
               </span>
             )}
           </Field>
+        </Section>
+      )}
+
+      {/* ---- Wake word ------------------------------------------------ */}
+      {show(["wake", "wake word", "hands free", "hey", "phrase", "always on", "listening", "voice trigger"]) && (
+        <Section
+          title="Wake word"
+          desc="Start dictating without touching the keyboard. Off by default."
+        >
+          <WakeWordSettings />
         </Section>
       )}
 

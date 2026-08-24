@@ -19,6 +19,19 @@ pub async fn start_recording(
     device_name: Option<String>,
     language: Option<String>,
 ) -> Result<()> {
+    begin_recording(app, state.inner(), device_name, language).await
+}
+
+/// Start a capture session.
+///
+/// Split out of the command so the wake-word listener can start recording
+/// directly, without bouncing a request through the frontend.
+pub async fn begin_recording(
+    app: AppHandle,
+    state: &AppState,
+    device_name: Option<String>,
+    language: Option<String>,
+) -> Result<()> {
     {
         let mut recording = state.recording.lock().unwrap();
         if *recording {
@@ -190,6 +203,12 @@ pub async fn stop_recording(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<()> {
+    end_recording(app, state.inner()).await
+}
+
+/// Stop the capture session and, if wake-word listening is enabled, hand the
+/// microphone back to the listener so the next phrase is heard.
+pub async fn end_recording(app: AppHandle, state: &AppState) -> Result<()> {
     {
         let mut recording = state.recording.lock().unwrap();
         if !*recording {
@@ -202,6 +221,8 @@ pub async fn stop_recording(
     app.emit(AppEvent::RecordingStopped.event_name(), AppEvent::RecordingStopped)
         .map_err(|e| EchoError::Plugin(e.to_string()))?;
     info!("Recording stopped");
+
+    crate::commands::wake::rearm(&app);
 
     Ok(())
 }

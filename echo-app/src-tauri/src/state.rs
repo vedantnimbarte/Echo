@@ -1,5 +1,6 @@
 use rusqlite::Connection;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 
@@ -13,6 +14,7 @@ use crate::core::{
     plugins::loader::PluginLoader,
     telemetry::TelemetryService,
     vad::SileroModel,
+    wake::WakeModelManager,
 };
 
 /// Shared application state — stored in Tauri's managed state.
@@ -29,6 +31,11 @@ pub struct AppState {
     /// Loaded Silero VAD model, shared read-only across recording sessions.
     /// `None` if the ONNX model failed to load (falls back to energy VAD).
     pub silero: Option<Arc<SileroModel>>,
+    /// Downloadable wake-word models and the loader for them.
+    pub wake_models: Arc<WakeModelManager>,
+    /// True while the idle wake-word listener holds the microphone. Also gates
+    /// `rearm` so only one listener runs at a time.
+    pub wake_active: Arc<AtomicBool>,
     pub dictionary: Arc<RwLock<DictionaryEngine>>,
     pub injector: Arc<dyn TextInjector>,
     pub telemetry: TelemetryService,

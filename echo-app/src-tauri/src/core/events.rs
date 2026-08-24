@@ -12,6 +12,7 @@ pub enum AppEvent {
     ErrorOccurred { message: String },
     ModelDownloadProgress { name: String, progress: f32 },
     ModelDownloadComplete { name: String },
+    WakeDetected { phrase: String, score: f32 },
 }
 
 impl AppEvent {
@@ -25,6 +26,7 @@ impl AppEvent {
             AppEvent::ErrorOccurred { .. } => "echo://error",
             AppEvent::ModelDownloadProgress { .. } => "echo://model-download-progress",
             AppEvent::ModelDownloadComplete { .. } => "echo://model-download-complete",
+            AppEvent::WakeDetected { .. } => "echo://wake-detected",
         }
     }
 }
