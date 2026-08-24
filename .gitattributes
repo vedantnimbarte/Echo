@@ -1,0 +1,9 @@
+# Shell scripts must stay LF in the repository. scripts/install.sh is served
+# raw over HTTPS and piped straight into sh, and a CRLF shebang fails there
+# with "bad interpreter: /bin/sh^M" on every Unix machine. Without this, whether
+# the installer works depends on the core.autocrlf setting of whoever last
+# committed it.
+*.sh text eol=lf
+
+# Same reasoning for anything else Unix executes directly.
+*.mjs text eol=lf
