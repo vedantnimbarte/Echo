@@ -9,6 +9,10 @@ InstallModes:
 - silent
 - silentWithProgress
 UpgradeBehavior: install
+# NSIS writes its uninstall key as HKCU\...\Uninstall\Echo, and winget needs
+# this to correlate an install back to the package. Verified by installing from
+# this manifest and reading the registry.
+ProductCode: Echo
 Installers:
 - Architecture: x64
   InstallerUrl: https://github.com/vedantnimbarte/Echo/releases/download/v0.1.0/Echo_0.1.0_x64-setup.exe
