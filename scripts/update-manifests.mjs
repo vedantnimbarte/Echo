@@ -5,7 +5,7 @@
 //
 // Run after the release build has attached its assets. Writes:
 //   - SHA256SUMS.txt in the asset directory (upload it to the release)
-//   - packaging/winget/*.yaml   version + installer URL + SHA256
+//   - packaging/winget/manifests/...  a whole versioned manifest directory
 //   - packaging/homebrew/echo.rb version + SHA256
 //   - packaging/snap/snapcraft.yaml  version
 //
@@ -15,7 +15,7 @@
 // no version.
 
 import { createHash } from "node:crypto";
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const REPO = "vedantnimbarte/Echo";
@@ -87,20 +87,68 @@ const winInstaller = find(/-setup\.exe$/);
 const macDmg = find(/\.dmg$/);
 
 // ── winget ──────────────────────────────────────────────────────────────────
+//
+// winget wants one directory per version, so a release copies the previous
+// version's manifests forward and rewrites the version-specific fields. The
+// old directory stays: winget-pkgs keeps every published version.
 
 if (winInstaller) {
   const url = `https://github.com/${REPO}/releases/download/${tag}/${winInstaller}`;
-  await patch("packaging/winget/Echo.Echo.installer.yaml", [
-    [/^PackageVersion: .*$/m, `PackageVersion: ${version}`, "PackageVersion"],
-    [/^    InstallerUrl: .*$/m, `    InstallerUrl: ${url}`, "InstallerUrl"],
+  const wingetRoot = path.join(ROOT, "packaging/winget/manifests/e/Echo/Echo");
+
+  const versions = (await readdir(wingetRoot, { withFileTypes: true }))
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .sort();
+  const previous = versions[versions.length - 1];
+  if (!previous) {
+    throw new Error(`No existing winget manifests to copy forward in ${wingetRoot}`);
+  }
+
+  const destDir = path.join(wingetRoot, version);
+  if (previous !== version) {
+    await mkdir(destDir, { recursive: true });
+    for (const name of await readdir(path.join(wingetRoot, previous))) {
+      await copyFile(
+        path.join(wingetRoot, previous, name),
+        path.join(destDir, name)
+      );
+    }
+    console.log(`winget: copied ${previous} -> ${version}`);
+  }
+
+  const rel = (name) =>
+    `packaging/winget/manifests/e/Echo/Echo/${version}/${name}`;
+
+  // PackageVersion appears in all three files and must agree across them.
+  for (const name of [
+    "Echo.Echo.yaml",
+    "Echo.Echo.locale.en-US.yaml",
+    "Echo.Echo.installer.yaml",
+  ]) {
+    await patch(rel(name), [
+      [/^PackageVersion: .*$/m, `PackageVersion: ${version}`, "PackageVersion"],
+    ]);
+  }
+
+  await patch(rel("Echo.Echo.installer.yaml"), [
+    [/^  InstallerUrl: .*$/m, `  InstallerUrl: ${url}`, "InstallerUrl"],
     [
-      /^    InstallerSha256: .*$/m,
-      `    InstallerSha256: ${sums.get(winInstaller).toUpperCase()}`,
+      /^  InstallerSha256: .*$/m,
+      `  InstallerSha256: ${sums.get(winInstaller).toUpperCase()}`,
       "InstallerSha256",
     ],
   ]);
+
+  await patch(rel("Echo.Echo.locale.en-US.yaml"), [
+    [
+      /^ReleaseNotesUrl: .*$/m,
+      `ReleaseNotesUrl: https://github.com/${REPO}/releases/tag/${tag}`,
+      "ReleaseNotesUrl",
+    ],
+  ]);
 } else {
-  console.warn("! no *-setup.exe asset; leaving the winget manifest alone");
+  console.warn("! no *-setup.exe asset; leaving the winget manifests alone");
 }
 
 // ── homebrew ────────────────────────────────────────────────────────────────
