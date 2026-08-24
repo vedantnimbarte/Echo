@@ -14,6 +14,15 @@
 */
 
 :root {
+  /* Opt the whole document into dark UA rendering. Native controls we don't
+     paint ourselves — the <select> popup, number-input spinners, form control
+     defaults — are drawn by the OS, and without this it draws them for a light
+     page: a white dropdown behind our near-white option text.
+
+     Safe for the frameless pill: html/body set `background: transparent`
+     explicitly, so this does not paint the canvas. */
+  color-scheme: dark;
+
   --font-ui: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system,
     "SF Pro Display", sans-serif;
 
@@ -33,6 +42,10 @@
      they carry their own darkness instead of relying on what's behind them. */
   --glass: rgba(16, 16, 19, 0.62);
   --glass-strong: rgba(20, 20, 24, 0.8);
+
+  /* The dropdown popup can't be translucent — it's an OS window with nothing
+     of ours behind it — so it needs a solid stand-in for the glass surfaces. */
+  --popup: #17171b;
 
   --hairline: rgba(255, 255, 255, 0.09);
   --hairline-strong: rgba(255, 255, 255, 0.24);
@@ -174,6 +187,21 @@ body {
   .btn-ghost:disabled {
     opacity: 0.45;
   }
+}
+
+/* ---- Native control popups ------------------------------------------------ */
+/*
+  Belt and braces, because the two engines disagree:
+  - WKWebView (macOS) draws the popup natively and ignores author option
+    colours, so `color-scheme: dark` above is what fixes it there.
+  - Chromium (WebView2 on Windows) honours these, and they're the only part of
+    the fix that is actually observable from the DOM.
+  Set both or one platform stays broken.
+*/
+option,
+optgroup {
+  background-color: var(--popup);
+  color: var(--ink);
 }
 
 /* ---- Pill chrome ---------------------------------------------------------- */
