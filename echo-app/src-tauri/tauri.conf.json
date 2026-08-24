@@ -54,7 +54,7 @@
   },
   "bundle": {
     "active": true,
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "targets": "all",
     "category": "Productivity",
     "shortDescription": "Universal voice keyboard",

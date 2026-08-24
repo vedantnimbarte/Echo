@@ -79,6 +79,55 @@ jobs:
           projectPath: echo-app
           tagName: ${{ github.ref_name }}
           releaseName: "Echo ${{ github.ref_name }}"
+          # Draft on purpose: the assets get checksummed and the packaging
+          # manifests updated by the job below before a human publishes.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+  # Checksum every artifact, attach SHA256SUMS.txt (the install scripts verify
+  # against it), and fill the packaging manifests in with the real URLs/hashes.
+  manifests:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Check out the branch, not the detached tag, so the manifest commit
+          # has somewhere to land.
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist-assets
+          gh release download "${{ github.ref_name }}"             --repo "$GITHUB_REPOSITORY" --dir dist-assets --clobber
+
+      - name: Update manifests and write checksums
+        run: node scripts/update-manifests.mjs "${{ github.ref_name }}" dist-assets
+
+      - name: Attach SHA256SUMS.txt to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}"             dist-assets/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Commit updated manifests
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- packaging; then
+            echo "manifests unchanged"
+            exit 0
+          fi
+          git add packaging
+          git commit -m "chore(packaging): manifests for ${{ github.ref_name }}"
+          git push

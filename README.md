@@ -30,6 +30,59 @@ Built with **Rust · Tauri v2 · React 19 · TypeScript · TailwindCSS v4 · SQL
 
 ---
 
+## Installing
+
+Download from [**Releases**](https://github.com/vedantnimbarte/Echo/releases), or:
+
+**macOS / Linux**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/vedantnimbarte/Echo/main/scripts/install.sh | sh
+```
+
+**Windows** (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/vedantnimbarte/Echo/main/scripts/install.ps1 | iex
+```
+
+Both scripts fetch the latest release, verify it against the published
+`SHA256SUMS.txt`, and install it. Pin a version with `ECHO_VERSION=v0.1.0` (sh)
+or `-Version v0.1.0` (PowerShell). Read them first if you'd rather not pipe a
+script into a shell — that's a reasonable instinct, and they're short.
+
+### Echo is not code-signed yet
+
+Signing certificates cost money Echo hasn't spent yet, so your OS will warn you.
+This is expected, and here is exactly what you'll see:
+
+| OS | What happens | What to do |
+|---|---|---|
+| **Windows** | SmartScreen: *"Windows protected your PC"* | **More info** → **Run anyway** |
+| **macOS** | Gatekeeper refuses to open it, offering only *Move to Trash* | The install script clears the quarantine flag for you. Installing by hand: right-click Echo in Applications → **Open** → **Open** |
+| **Linux** | Nothing — no signing gate | — |
+
+If that trade isn't one you want to make, [build from source](#running-locally)
+instead: the result is identical and you compiled it yourself.
+
+### Per-OS notes
+
+- **Windows** — needs the WebView2 runtime (preinstalled on Win11; on Win10 grab
+  the *Evergreen* runtime from Microsoft).
+- **macOS** — grant **Microphone** and **Accessibility** permissions on first
+  run, or Echo can hear you but can't type.
+- **Linux** — the AppImage needs FUSE (`sudo apt install libfuse2` on
+  Debian/Ubuntu), and text injection needs `xdotool` (X11) or `ydotool`
+  (Wayland). A `.deb` is also attached to each release.
+
+### Updating
+
+Auto-update is built in but **switched off** until release signing is set up
+(see [docs/RELEASING.md](docs/RELEASING.md)). Until then, re-run the install
+command above to upgrade.
+
+---
+
 ## Project structure
 
 ```

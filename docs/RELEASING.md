@@ -3,14 +3,25 @@
 Tagging a commit with `v*` (e.g. `v0.1.0`) triggers
 `.github/workflows/release.yml`, which builds Windows / macOS (universal) / Linux
 installers, stages the offline `whisper-cli` into each bundle, and creates a
-**draft** GitHub Release with the artifacts and an auto-update `latest.json`.
+**draft** GitHub Release with the artifacts.
 
-## One-time setup: auto-update signing keys
+A second job then checksums every artifact, attaches `SHA256SUMS.txt` (the
+install scripts verify against it), and commits the filled-in packaging
+manifests back to `main`.
 
-The in-app updater only ships builds it can cryptographically verify, so the
-first release needs a signing keypair. **Do this before your first `v*` tag** —
-without it, `tauri build` fails because `plugins.updater.pubkey` is empty and
-`createUpdaterArtifacts` is on.
+## Auto-update is currently OFF
+
+`bundle.createUpdaterArtifacts` is **false** and `plugins.updater.pubkey` is
+empty, so releases ship no `latest.json` and installed copies never check for
+updates. Users upgrade by re-running the install script.
+
+This is deliberate: with `createUpdaterArtifacts` on and no key, `tauri build`
+fails outright. Turning updates on is the one-time setup below.
+
+## Turning auto-update on
+
+The updater only installs builds it can cryptographically verify, so it needs a
+signing keypair.
 
 1. Generate a keypair (keep the password somewhere safe):
 
@@ -34,8 +45,12 @@ without it, `tauri build` fails because `plugins.updater.pubkey` is empty and
    | `TAURI_SIGNING_PRIVATE_KEY` | contents of `~/.tauri/echo-updater.key` |
    | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | the password from step 1 |
 
-That's it — commit the pubkey change; releases now sign updates and the app
-auto-checks on launch.
+4. Flip `bundle.createUpdaterArtifacts` back to `true` in `tauri.conf.json`.
+
+Commit the pubkey and the flag together; releases from then on sign updates and
+the app checks on launch. Installs made *before* this change won't auto-update
+to it — they have no public key to verify against — so those users reinstall
+once.
 
 > Never commit the private key. If it leaks, generate a new pair and ship a
 > release with the new pubkey (older installs won't auto-update to it and must be
@@ -43,15 +58,52 @@ auto-checks on launch.
 
 ## Cutting a release
 
+Bump the version in **three** places — they must agree or the packaging
+manifests will point at files that don't exist:
+
+- `echo-app/src-tauri/tauri.conf.json` → `version`
+- `echo-app/src-tauri/Cargo.toml` → `version`
+- `echo-app/package.json` → `version`
+
+Then:
+
 ```bash
-# bump version in echo-app/src-tauri/tauri.conf.json AND package.json, then:
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-Wait for the matrix to finish, review the **draft** release, then publish it.
-Publishing makes `latest.json` reachable at the endpoint in `tauri.conf.json`, so
-existing installs see the update.
+What happens next:
+
+1. **`build`** — three runners produce installers and attach them to a *draft*
+   release.
+2. **`manifests`** — downloads those assets, writes `SHA256SUMS.txt` and uploads
+   it, fills in the winget/Homebrew/snap manifests, and commits them to `main`.
+3. **You** — review the draft, then publish:
+
+   ```bash
+   gh release view v0.1.0            # check every expected asset is attached
+   gh release edit v0.1.0 --draft=false
+   ```
+
+Publishing is manual on purpose: the install scripts point at *latest*, so
+publishing is the moment a build becomes what users get. Check the assets first.
+
+### Verifying a release actually installs
+
+The scripts are the user's first experience, so exercise them, not just the
+build log:
+
+```bash
+# macOS/Linux
+ECHO_VERSION=v0.1.0 sh scripts/install.sh
+
+# Windows
+./scripts/install.ps1 -Version v0.1.0
+```
+
+A failure here usually means an asset name changed — the scripts match on
+`.dmg` / `.AppImage` / `-setup.exe`, and `packaging/homebrew/echo.rb` builds its
+URL from `Echo_#{version}_universal.dmg`.
 
 ## Code signing (OS-level, separate from updater signing)
 
