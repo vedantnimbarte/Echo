@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Keyboard, AudioWaveform, Search } from "lucide-react";
+import { Keyboard, AudioWaveform, Search, Check, X, AlertTriangle } from "lucide-react";
 import { commands } from "../../ipc/commands";
 import { echoEvents } from "../../ipc/events";
 import { useRecordingStore, type RecordingMode } from "../../store/recordingStore";
@@ -13,9 +13,6 @@ import { HotkeyCapture } from "../common/HotkeyCapture";
 
 /* ---- compact field primitives -------------------------------------------- */
 
-const fieldCls =
-  "w-full rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[13px] text-[var(--ink)] outline-none transition focus:border-[var(--aurora-2)]/60 focus:bg-white/8";
-
 function Section({
   title,
   desc,
@@ -26,7 +23,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-white/8 bg-white/[0.025] p-4">
+    <section className="rounded-xl glass p-4">
       <h3 className="text-[13px] font-semibold tracking-tight text-[var(--ink)]">{title}</h3>
       {desc && <p className="mt-0.5 text-[11px] leading-snug text-[var(--ink-muted)]">{desc}</p>}
       <div className="mt-3 space-y-3">{children}</div>
@@ -143,7 +140,7 @@ export function SettingsPanel() {
         <h2 className="text-[15px] font-semibold tracking-tight">Settings</h2>
         <button
           onClick={() => void commands.quit()}
-          className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-[var(--ink-muted)] transition hover:border-rose-500/50 hover:bg-rose-500/10 hover:text-rose-300"
+          className="rounded-lg border border-[var(--hairline)] px-2.5 py-1 text-[11px] text-[var(--ink-muted)] transition hover:border-[var(--hairline-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)]"
         >
           Quit Echo
         </button>
@@ -155,7 +152,7 @@ export function SettingsPanel() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search settings…"
-          className="w-full rounded-lg border border-white/10 bg-white/5 py-1.5 pl-8 pr-2.5 text-[13px] text-[var(--ink)] outline-none transition focus:border-[var(--aurora-2)]/60 focus:bg-white/8"
+          className="field py-1.5 pl-8 pr-2.5"
         />
       </div>
 
@@ -191,14 +188,14 @@ export function SettingsPanel() {
                     className={
                       "flex flex-col gap-1 rounded-lg border p-2.5 text-left transition " +
                       (active
-                        ? "border-[var(--aurora-2)]/60 bg-[var(--aurora-2)]/12"
-                        : "border-white/10 bg-white/[0.02] hover:bg-white/5")
+                        ? "border-[var(--hairline-strong)] bg-[var(--surface-2)]"
+                        : "border-[var(--hairline)] bg-[var(--surface-1)] hover:bg-[var(--surface-2)]")
                     }
                   >
                     <span className="flex items-center gap-1.5 text-[12px] font-medium">
                       <Icon
                         className="h-3.5 w-3.5"
-                        style={{ color: active ? "var(--aurora-1)" : "var(--ink-muted)" }}
+                        style={{ color: active ? "var(--ink)" : "var(--ink-muted)" }}
                       />
                       {title}
                     </span>
@@ -213,7 +210,7 @@ export function SettingsPanel() {
 
           <Field label="Microphone">
             <select
-              className={fieldCls}
+              className="field"
               value={savedDevice ?? ""}
               onChange={(e) => setDeviceMutation.mutate(e.target.value)}
             >
@@ -233,7 +230,8 @@ export function SettingsPanel() {
               onChange={(accel) => registerHotkeyMutation.mutate(accel)}
             />
             {registerHotkeyMutation.isError && (
-              <span className="text-[11px] text-rose-400">
+              <span className="flex items-start gap-1 text-[11px] font-medium text-[var(--ink)]">
+                <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
                 {String(registerHotkeyMutation.error)}
               </span>
             )}
@@ -266,7 +264,7 @@ export function SettingsPanel() {
         <Section title="Transcription" desc="The engine that turns speech into text.">
           <Field label="Provider">
             <select
-              className={fieldCls}
+              className="field"
               value={activeProvider}
               onChange={(e) => setProviderMutation.mutate(e.target.value)}
             >
@@ -278,7 +276,8 @@ export function SettingsPanel() {
             </select>
           </Field>
           {setProviderMutation.isError && (
-            <span className="text-[11px] text-rose-400">
+            <span className="flex items-start gap-1 text-[11px] font-medium text-[var(--ink)]">
+              <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
               {String(setProviderMutation.error)}
             </span>
           )}
@@ -296,7 +295,7 @@ export function SettingsPanel() {
           <label className="flex items-center gap-2.5">
             <input
               type="checkbox"
-              className="h-4 w-4 accent-[var(--aurora-2)]"
+              className="h-4 w-4 accent-white"
               checked={autoInject !== "false"}
               onChange={(e) => setAutoInjectMutation.mutate(e.target.checked ? "true" : "false")}
             />
@@ -307,7 +306,7 @@ export function SettingsPanel() {
 
           <Field label="Insert method">
             <select
-              className={fieldCls + " w-48"}
+              className="field w-48"
               value={injectionMethod ?? "type"}
               onChange={(e) => setInjectionMethodMutation.mutate(e.target.value)}
             >
@@ -326,7 +325,7 @@ export function SettingsPanel() {
             <input
               type="number"
               min={0}
-              className={fieldCls + " w-28"}
+              className="field w-28"
               defaultValue={injectDelay ?? "0"}
               onBlur={(e) => setInjectDelayMutation.mutate(e.target.value || "0")}
             />
@@ -335,16 +334,18 @@ export function SettingsPanel() {
           <div className="flex items-center gap-2.5">
             <button
               onClick={checkPermission}
-              className="rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-[var(--ink-muted)] transition hover:bg-white/5 hover:text-[var(--ink)]"
+              className="rounded-lg border border-[var(--hairline)] px-2.5 py-1 text-[11px] text-[var(--ink-muted)] transition hover:bg-[var(--surface-1)] hover:text-[var(--ink)]"
             >
               Check accessibility permission
             </button>
             {permissionStatus !== null && (
-              <span
-                className={
-                  permissionStatus ? "text-[11px] text-emerald-400" : "text-[11px] text-rose-400"
-                }
-              >
+              // Without colour the icon is what distinguishes these two states.
+              <span className="flex items-center gap-1 text-[11px] font-medium text-[var(--ink)]">
+                {permissionStatus ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  <X className="h-3.5 w-3.5" />
+                )}
                 {permissionStatus ? "Granted" : "Not granted"}
               </span>
             )}
@@ -360,10 +361,10 @@ export function SettingsPanel() {
       {show(["privacy", "telemetry", "history", "data", "save"]) && (
         <Section title="Privacy">
           <TelemetrySettings />
-          <label className="flex items-center gap-2.5 border-t border-white/6 pt-3">
+          <label className="flex items-center gap-2.5 border-t border-[var(--hairline)] pt-3">
             <input
               type="checkbox"
-              className="h-4 w-4 accent-[var(--aurora-2)]"
+              className="h-4 w-4 accent-white"
               checked={historyEnabled !== "false"}
               onChange={(e) => setHistoryMutation.mutate(e.target.checked ? "true" : "false")}
             />

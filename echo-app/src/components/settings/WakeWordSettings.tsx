@@ -1,12 +1,9 @@
 import { useEffect, useState } from "react";
-import { Download, Loader2, Mic, Upload } from "lucide-react";
+import { AlertTriangle, Download, Loader2, Mic, Upload } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
 import { commands } from "../../ipc/commands";
 import { echoEvents } from "../../ipc/events";
-
-const fieldCls =
-  "w-full rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[13px] text-[var(--ink)] outline-none transition focus:border-[var(--aurora-2)]/60 focus:bg-white/8";
 
 /**
  * Wake-word settings: turn hands-free listening on, pick or import the phrase
@@ -98,7 +95,7 @@ export function WakeWordSettings() {
           type="checkbox"
           checked={isOn}
           onChange={(e) => guard(() => commands.setWakeWordEnabled(e.target.checked))}
-          className="mt-0.5 h-3.5 w-3.5 accent-[var(--aurora-2)]"
+          className="mt-0.5 h-3.5 w-3.5 accent-white"
         />
         <span className="text-[12px] leading-snug">
           Listen for a wake phrase
@@ -116,7 +113,7 @@ export function WakeWordSettings() {
         </span>
         <div className="flex gap-1.5">
           <select
-            className={fieldCls}
+            className="field"
             value={active}
             onChange={(e) => guard(() => commands.setWakeWordModel(e.target.value))}
           >
@@ -135,7 +132,7 @@ export function WakeWordSettings() {
             <button
               onClick={() => guard(() => commands.downloadWakeModel(active))}
               disabled={progress !== null}
-              className="flex shrink-0 items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 text-[12px] transition hover:bg-white/10 disabled:opacity-50"
+              className="btn-ghost shrink-0 gap-1 px-2.5 text-[12px]"
             >
               {progress !== null ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -161,7 +158,7 @@ export function WakeWordSettings() {
           onChange={(e) =>
             guard(() => commands.setWakeWordSensitivity(Number(e.target.value)))
           }
-          className="w-full accent-[var(--aurora-2)]"
+          className="w-full accent-white"
         />
         <span className="text-[10.5px] leading-snug text-[var(--ink-muted)]">
           Lower catches the phrase more often but misfires more. Raise it if Echo
@@ -174,7 +171,7 @@ export function WakeWordSettings() {
           <Mic
             className="h-3.5 w-3.5"
             style={{
-              color: status === "listening" ? "var(--aurora-1)" : "var(--ink-faint)",
+              color: status === "listening" ? "var(--ink)" : "var(--ink-faint)",
             }}
           />
           {status === "listening"
@@ -188,7 +185,7 @@ export function WakeWordSettings() {
 
         <button
           onClick={importCustom}
-          className="flex shrink-0 items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] transition hover:bg-white/10"
+          className="btn-ghost shrink-0 gap-1 px-2.5 py-1 text-[11px]"
           title="Import an openWakeWord .onnx model you trained yourself"
         >
           <Upload className="h-3.5 w-3.5" />
@@ -196,7 +193,12 @@ export function WakeWordSettings() {
         </button>
       </div>
 
-      {error && <p className="text-[11px] text-rose-400">{error}</p>}
+      {error && (
+        <p className="flex items-start gap-1 text-[11px] font-medium text-[var(--ink)]">
+          <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
+          {error}
+        </p>
+      )}
     </div>
   );
 }

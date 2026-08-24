@@ -138,12 +138,12 @@ export function Pill() {
             }}
             aria-label="Retry"
             title="Retry"
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-rose-500/15 text-rose-400 transition hover:bg-rose-500/25"
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--hairline-strong)] bg-[var(--surface-3)] text-[var(--ink)] transition hover:bg-white/20"
           >
             <AlertTriangle className="h-3.5 w-3.5" />
           </button>
         ) : view === "done" ? (
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-400">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--hairline)] bg-[var(--surface-3)] text-[var(--ink)]">
             <Check className="h-3.5 w-3.5" />
           </span>
         ) : (
@@ -152,10 +152,13 @@ export function Pill() {
             aria-label={isRecording ? "Stop" : "Start"}
             className={clsx(
               "flex h-7 w-7 items-center justify-center rounded-full transition-all active:scale-90",
-              !isRecording && "bg-white/8 text-[var(--ink)] hover:bg-white/14",
+              !isRecording &&
+                "bg-[var(--surface-2)] text-[var(--ink)] hover:bg-[var(--surface-3)]",
+              // Live: the one place colour is spent.
               isRecording && liveDot && "animate-rec bg-[var(--rec)] text-white",
+              // Armed but not capturing — neutral, so red always means "live".
               isRecording && !liveDot &&
-                "bg-[var(--aurora-2)]/25 text-[var(--aurora-1)] ring-1 ring-[var(--aurora-1)]/40"
+                "bg-[var(--surface-3)] text-[var(--ink)] ring-1 ring-[var(--hairline-strong)]"
             )}
           >
             {isRecording ? (
@@ -191,13 +194,13 @@ export function Pill() {
           )}
 
           {view === "done" && (
-            <span className="whitespace-nowrap text-[12px] font-medium tracking-tight text-emerald-300/90">
+            <span className="whitespace-nowrap text-[12px] font-medium tracking-tight text-[var(--ink)]">
               Inserted
             </span>
           )}
 
           {view === "error" && (
-            <span className="max-w-[220px] truncate text-[11px] tracking-tight text-rose-300/90">
+            <span className="max-w-[220px] truncate text-[11px] font-medium tracking-tight text-[var(--ink)]">
               {error}
             </span>
           )}
@@ -207,7 +210,7 @@ export function Pill() {
               <span className="flex items-center gap-1.5 text-[12px] font-medium tracking-tight">
                 <span
                   className="h-1.5 w-1.5 rounded-full"
-                  style={{ background: "var(--aurora-1)", boxShadow: "0 0 6px var(--aurora-1)" }}
+                  style={{ background: "var(--ink-muted)" }}
                 />
                 {mode === "auto" ? "Voice" : "Push to talk"}
               </span>
@@ -216,7 +219,7 @@ export function Pill() {
                   {hotkey.map((k) => (
                     <kbd
                       key={k}
-                      className="rounded border border-white/10 bg-white/5 px-1 py-px text-[9px] font-medium tracking-tight text-[var(--ink-muted)]"
+                      className="rounded border border-[var(--hairline)] bg-[var(--surface-1)] px-1 py-px text-[9px] font-medium tracking-tight text-[var(--ink-muted)]"
                     >
                       {k}
                     </kbd>
@@ -243,7 +246,7 @@ export function Pill() {
           <button
             onClick={() => void openSettings()}
             aria-label="Settings"
-            className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--ink-muted)] transition-colors hover:bg-white/10 hover:text-[var(--ink)]"
+            className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--ink-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--ink)]"
           >
             <Settings className="h-[13px] w-[13px]" />
           </button>

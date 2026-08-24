@@ -56,7 +56,7 @@ function HistoryRow({ record }: { record: TranscriptionRecord }) {
   const when = parseTs(record.created_at);
 
   return (
-    <li className="group rounded-xl border border-white/8 bg-white/[0.025] px-3.5 py-2.5 transition hover:border-white/14 hover:bg-white/[0.04]">
+    <li className="group rounded-xl glass px-3.5 py-2.5 transition hover:border-[var(--hairline-strong)] hover:bg-[var(--surface-2)]">
       <p className="text-[13px] leading-snug text-[var(--ink)]">{record.text}</p>
       <div className="mt-1.5 flex items-center justify-between">
         <p className="text-[10.5px] tracking-tight text-[var(--ink-faint)]">
@@ -69,10 +69,10 @@ function HistoryRow({ record }: { record: TranscriptionRecord }) {
             onClick={copy}
             aria-label="Copy"
             title="Copy"
-            className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--ink-muted)] transition hover:bg-white/8 hover:text-[var(--ink)]"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--ink-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--ink)]"
           >
             {copied ? (
-              <Check className="h-3.5 w-3.5 text-emerald-400" />
+              <Check className="h-3.5 w-3.5 text-[var(--ink)]" />
             ) : (
               <Copy className="h-3.5 w-3.5" />
             )}
@@ -81,7 +81,7 @@ function HistoryRow({ record }: { record: TranscriptionRecord }) {
             onClick={() => void commands.injectText(record.text)}
             aria-label="Insert into focused app"
             title="Insert into focused app"
-            className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--ink-muted)] transition hover:bg-white/8 hover:text-[var(--aurora-1)]"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--ink-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--ink)]"
           >
             <CornerDownLeft className="h-3.5 w-3.5" />
           </button>
@@ -127,7 +127,7 @@ export function HistoryPanel() {
         <button
           onClick={() => clearMutation.mutate()}
           disabled={records.length === 0 || clearMutation.isPending}
-          className="flex items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-1 text-[11px] text-[var(--ink-muted)] transition hover:border-rose-500/50 hover:bg-rose-500/10 hover:text-rose-300 disabled:opacity-40"
+          className="flex items-center gap-1.5 rounded-lg border border-[var(--hairline)] px-2.5 py-1 text-[11px] text-[var(--ink-muted)] transition hover:border-[var(--hairline-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)] disabled:opacity-40"
         >
           <Trash2 className="h-3.5 w-3.5" />
           Clear all
@@ -140,7 +140,7 @@ export function HistoryPanel() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search transcripts…"
-          className="w-full rounded-lg border border-white/10 bg-white/5 py-1.5 pl-8 pr-2.5 text-[13px] text-[var(--ink)] outline-none transition focus:border-[var(--aurora-2)]/60 focus:bg-white/8"
+          className="field py-1.5 pl-8 pr-2.5"
         />
       </div>
 

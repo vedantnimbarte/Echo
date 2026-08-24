@@ -82,12 +82,12 @@ export function ModelSelector() {
           return (
             <div
               key={m.name}
-              className="flex items-center justify-between rounded-lg border border-white/8 bg-white/[0.025] px-3 py-2"
+              className="flex items-center justify-between rounded-lg glass px-3 py-2"
             >
               <div className="flex min-w-0 flex-col">
                 <span className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--ink)]">
                   {m.name}
-                  <span className="rounded bg-white/8 px-1 py-px text-[9px] uppercase tracking-wide text-[var(--ink-muted)]">
+                  <span className="rounded bg-[var(--surface-2)] px-1 py-px text-[9px] uppercase tracking-wide text-[var(--ink-muted)]">
                     {m.english_only ? "EN" : "multi"}
                   </span>
                 </span>
@@ -106,8 +106,8 @@ export function ModelSelector() {
                   className={
                     "flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition disabled:opacity-100 " +
                     (isActive
-                      ? "bg-[var(--aurora-2)]/20 text-[var(--aurora-1)]"
-                      : "bg-[var(--aurora-2)] text-white hover:brightness-110")
+                      ? "bg-[var(--surface-3)] text-[var(--ink)]"
+                      : "btn-primary")
                   }
                 >
                   {isActive ? (
@@ -121,7 +121,7 @@ export function ModelSelector() {
               ) : (
                 <button
                   onClick={() => download(m.name)}
-                  className="flex items-center gap-1 rounded-md border border-white/12 px-2.5 py-1 text-[11px] text-[var(--ink)] transition hover:bg-white/8"
+                  className="btn-ghost gap-1 rounded-md px-2.5 py-1 text-[11px]"
                 >
                   <Download className="h-3.5 w-3.5" /> Download
                 </button>

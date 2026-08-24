@@ -82,7 +82,7 @@ export function Waveform({ mode }: { mode: WaveMode }) {
           style={{
             transformOrigin: "center",
             background:
-              "linear-gradient(to top, var(--aurora-1), var(--aurora-2) 55%, var(--aurora-3))",
+              "linear-gradient(to top, var(--ink-faint), var(--ink-muted) 45%, var(--ink))",
           }}
         />
       ))}

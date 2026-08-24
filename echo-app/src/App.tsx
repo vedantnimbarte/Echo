@@ -60,23 +60,26 @@ export default function App() {
   }
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-[#0a0b11] text-[var(--ink)] select-none">
-      {/* Ambient aurora wash */}
+    <div className="relative flex h-screen flex-col overflow-hidden bg-[var(--surface-0)] text-[var(--ink)] select-none">
+      {/* Ambient top light — the source the glass edges are lit by. */}
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-48 opacity-50"
+        className="pointer-events-none absolute inset-x-0 top-0 h-64"
         style={{
           background:
-            "radial-gradient(60% 100% at 30% 0%, rgba(52,231,228,0.12), transparent 70%), radial-gradient(60% 100% at 80% 0%, rgba(160,107,255,0.12), transparent 70%)",
+            "radial-gradient(75% 100% at 50% 0%, rgba(255,255,255,0.055), transparent 70%)",
         }}
       />
 
       {/* Sidebar + content */}
       <div className="relative flex min-h-0 flex-1">
-        <nav className="flex w-[168px] flex-shrink-0 flex-col gap-0.5 border-r border-white/6 p-3">
+        <nav className="flex w-[168px] flex-shrink-0 flex-col gap-0.5 border-r border-[var(--hairline)] p-3">
           <div className="mb-3 flex items-center gap-2 px-2">
             <span
               className="h-2 w-2 rounded-full"
-              style={{ background: "var(--aurora-1)", boxShadow: "0 0 8px var(--aurora-1)" }}
+              style={{
+                background: "var(--ink)",
+                boxShadow: "0 0 10px rgba(255,255,255,0.45)",
+              }}
             />
             <span className="text-[13px] font-semibold tracking-tight">Echo</span>
           </div>
@@ -87,8 +90,8 @@ export default function App() {
               className={clsx(
                 "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] tracking-tight transition-colors",
                 tab === id
-                  ? "bg-white/8 text-[var(--ink)]"
-                  : "text-[var(--ink-muted)] hover:bg-white/4 hover:text-[var(--ink)]"
+                  ? "bg-[var(--surface-2)] text-[var(--ink)] shadow-[var(--edge-light)]"
+                  : "text-[var(--ink-muted)] hover:bg-[var(--surface-1)] hover:text-[var(--ink)]"
               )}
             >
               <Icon className="h-[15px] w-[15px]" />

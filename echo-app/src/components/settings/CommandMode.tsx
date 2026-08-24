@@ -1,9 +1,6 @@
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { commands } from "../../ipc/commands";
 
-const fieldCls =
-  "w-full rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[13px] text-[var(--ink)] outline-none transition focus:border-[var(--aurora-2)]/60 focus:bg-white/8";
-
 /** Settings keys this panel owns, with the defaults the backend also uses. */
 const DEFAULTS = {
   command_mode_enabled: "false",
@@ -49,7 +46,7 @@ export function CommandMode() {
           onChange={(e) =>
             save("command_mode_enabled", e.target.checked ? "true" : "false")
           }
-          className="mt-0.5 h-3.5 w-3.5 accent-[var(--aurora-2)]"
+          className="mt-0.5 h-3.5 w-3.5 accent-white"
         />
         <span className="text-[12px] leading-snug">
           Treat “{prefix} …” as an instruction
@@ -65,7 +62,7 @@ export function CommandMode() {
           Trigger word
         </span>
         <input
-          className={fieldCls}
+          className="field"
           defaultValue={prefix}
           onBlur={(e) => {
             const next = e.target.value.trim();
@@ -83,7 +80,7 @@ export function CommandMode() {
           Model runs on
         </span>
         <select
-          className={fieldCls}
+          className="field"
           value={provider}
           onChange={(e) => save("command_llm_provider", e.target.value)}
         >
@@ -91,7 +88,7 @@ export function CommandMode() {
           <option value="openai">OpenAI — uses your stored API key</option>
         </select>
         {provider === "openai" && (
-          <span className="block text-[10.5px] leading-snug text-amber-400/90">
+          <span className="block text-[10.5px] leading-snug text-[var(--ink-muted)]">
             Selected text is sent to OpenAI. Ollama keeps it on your machine.
           </span>
         )}
@@ -102,7 +99,7 @@ export function CommandMode() {
           Model
         </span>
         <input
-          className={fieldCls}
+          className="field"
           defaultValue={model}
           placeholder={provider === "openai" ? "gpt-4o-mini" : "llama3.2"}
           onBlur={(e) => {
@@ -118,7 +115,7 @@ export function CommandMode() {
             Ollama address
           </span>
           <input
-            className={fieldCls}
+            className="field"
             defaultValue={endpoint}
             onBlur={(e) => {
               const next = e.target.value.trim();

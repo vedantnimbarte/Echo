@@ -63,9 +63,9 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             <span
               className={clsx(
                 "flex h-7 w-7 items-center justify-center rounded-full border text-[11px] transition",
-                i < stepIdx && "border-[var(--aurora-1)]/50 bg-[var(--aurora-1)]/15 text-[var(--aurora-1)]",
-                i === stepIdx && "border-[var(--aurora-2)] bg-[var(--aurora-2)]/20 text-[var(--ink)]",
-                i > stepIdx && "border-white/10 text-[var(--ink-faint)]"
+                i < stepIdx && "border-[var(--hairline-strong)] bg-[var(--surface-3)] text-[var(--ink)]",
+                i === stepIdx && "border-[var(--ink)] bg-[var(--surface-3)] text-[var(--ink)]",
+                i > stepIdx && "border-[var(--hairline)] text-[var(--ink-faint)]"
               )}
             >
               {i < stepIdx ? <Check className="h-3.5 w-3.5" /> : <s.Icon className="h-3.5 w-3.5" />}
@@ -74,7 +74,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
               <span
                 className={clsx(
                   "h-px w-7 transition",
-                  i < stepIdx ? "bg-[var(--aurora-1)]/40" : "bg-white/10"
+                  i < stepIdx ? "bg-[var(--ink)]/45" : "bg-[var(--surface-3)]"
                 )}
               />
             )}
@@ -95,7 +95,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
       </div>
 
       {/* Nav */}
-      <div className="relative flex items-center justify-between border-t border-white/6 px-6 py-4">
+      <div className="relative flex items-center justify-between border-t border-[var(--hairline)] px-6 py-4">
         <button
           onClick={back}
           disabled={stepIdx === 0}
@@ -111,7 +111,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         </button>
         <button
           onClick={isLast ? finish : next}
-          className="flex items-center gap-1.5 rounded-lg bg-[var(--aurora-2)] px-4 py-1.5 text-[12px] font-medium text-white transition hover:brightness-110"
+          className="btn-primary px-4 py-1.5 text-[12px]"
         >
           {isLast ? "Finish" : "Continue"}
           {!isLast && <ArrowRight className="h-3.5 w-3.5" />}
@@ -140,7 +140,7 @@ function WelcomeStep() {
       <div
         className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl"
         style={{
-          background: "linear-gradient(135deg, var(--aurora-1), var(--aurora-3))",
+          background: "linear-gradient(140deg, rgba(255,255,255,0.16), rgba(255,255,255,0.04))",
           boxShadow: "0 12px 40px -8px rgba(91,141,239,0.5)",
         }}
       >
@@ -157,7 +157,7 @@ function WelcomeStep() {
           "Optional cloud engines for speed & accuracy",
         ].map((t) => (
           <div key={t} className="flex items-center gap-2.5 text-[12.5px] text-[var(--ink-muted)]">
-            <Check className="h-4 w-4 shrink-0 text-[var(--aurora-1)]" />
+            <Check className="h-4 w-4 shrink-0 text-[var(--ink)]" />
             {t}
           </div>
         ))}
@@ -193,7 +193,7 @@ function MicStep() {
       <StepHeading title="Pick your microphone" sub="Choose an input and test that Echo hears you." />
       <div className="space-y-3">
         <select
-          className="w-full rounded-lg border border-white/10 bg-white/5 px-2.5 py-2 text-[13px] text-[var(--ink)] outline-none focus:border-[var(--aurora-2)]/60"
+          className="field py-2"
           value={savedDevice ?? ""}
           onChange={(e) =>
             void commands.setSetting("audio_device", e.target.value).then(() =>
@@ -210,7 +210,7 @@ function MicStep() {
           ))}
         </select>
 
-        <div className="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.025] px-4 py-3">
+        <div className="flex items-center justify-between rounded-xl glass px-4 py-3">
           <div className="flex h-6 items-center">
             {testing ? (
               <Waveform mode="listening" />
@@ -224,7 +224,7 @@ function MicStep() {
               "rounded-lg px-3 py-1.5 text-[12px] font-medium transition",
               testing
                 ? "bg-[var(--rec)] text-white"
-                : "border border-white/12 text-[var(--ink)] hover:bg-white/8"
+                : "border border-[var(--hairline)] text-[var(--ink)] hover:bg-[var(--surface-2)]"
             )}
           >
             {testing ? "Stop test" : "Test microphone"}
@@ -302,7 +302,7 @@ function EngineStep() {
       />
 
       {ready ? (
-        <div className="flex items-center gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-[13px] text-emerald-300">
+        <div className="flex items-center gap-2.5 rounded-xl border border-[var(--hairline-strong)] bg-[var(--surface-2)] px-4 py-3 text-[13px] text-[var(--ink)]">
           <Check className="h-4 w-4" /> Local transcription is ready.
         </div>
       ) : (
@@ -310,7 +310,7 @@ function EngineStep() {
           <button
             onClick={provision}
             disabled={busy}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--aurora-2)] px-4 py-2.5 text-[13px] font-medium text-white transition hover:brightness-110 disabled:opacity-60"
+            className="btn-primary w-full rounded-xl px-4 py-2.5 text-[13px]"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             {busy ? "Setting up…" : "Set up local Whisper"}
@@ -322,11 +322,11 @@ function EngineStep() {
           {modelProgress !== null && (
             <ProgressRow label="base.en model" value={modelProgress} />
           )}
-          {note && <p className="text-[11px] leading-snug text-amber-300/90">{note}</p>}
+          {note && <p className="text-[11px] leading-snug text-[var(--ink-muted)]">{note}</p>}
         </div>
       )}
 
-      <div className="mt-5 border-t border-white/8 pt-4">
+      <div className="mt-5 border-t border-[var(--hairline)] pt-4">
         <p className="mb-2 text-[11px] uppercase tracking-wide text-[var(--ink-faint)]">
           Or use a cloud engine
         </p>
@@ -343,12 +343,12 @@ function ProgressRow({ label, value }: { label: string; value: number }) {
         <span>{label}</span>
         <span>{Math.round(value * 100)}%</span>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
+      <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-2)]">
         <div
           className="h-full rounded-full transition-[width]"
           style={{
             width: `${Math.round(value * 100)}%`,
-            background: "linear-gradient(90deg, var(--aurora-1), var(--aurora-3))",
+            background: "linear-gradient(90deg, var(--ink-muted), var(--ink))",
           }}
         />
       </div>
@@ -367,37 +367,37 @@ function PermissionsStep() {
         sub="Echo types transcripts into the focused app. Confirm it has permission and give it a try."
       />
       <div className="space-y-3">
-        <div className="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.025] px-4 py-3">
+        <div className="flex items-center justify-between rounded-xl glass px-4 py-3">
           <span className="text-[12.5px] text-[var(--ink)]">Keyboard / accessibility access</span>
           <button
             onClick={async () => setStatus(await commands.checkAccessibilityPermission())}
-            className="rounded-lg border border-white/12 px-2.5 py-1 text-[11px] text-[var(--ink)] transition hover:bg-white/8"
+            className="btn-ghost px-2.5 py-1 text-[11px]"
           >
             {status === null ? "Check" : status ? "Granted ✓" : "Not granted"}
           </button>
         </div>
 
-        <div className="rounded-xl border border-white/8 bg-white/[0.025] px-4 py-3">
+        <div className="rounded-xl glass px-4 py-3">
           <p className="mb-2 text-[12px] text-[var(--ink-muted)]">
             Click into the box, then press Test — Echo will type into it.
           </p>
           <div className="flex gap-2">
             <input
               placeholder="Focus me…"
-              className="flex-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[13px] text-[var(--ink)] outline-none focus:border-[var(--aurora-2)]/60"
+              className="field flex-1"
             />
             <button
               onClick={() => {
                 void commands.injectText("Hello from Echo ");
                 setInjected(true);
               }}
-              className="rounded-lg bg-[var(--aurora-2)] px-3 py-1.5 text-[12px] font-medium text-white transition hover:brightness-110"
+              className="btn-primary px-3 py-1.5 text-[12px]"
             >
               Test
             </button>
           </div>
           {injected && (
-            <p className="mt-2 text-[11px] text-emerald-300">
+            <p className="mt-2 text-[11px] text-[var(--ink)]">
               Sent! If nothing appeared, grant the permission above.
             </p>
           )}
