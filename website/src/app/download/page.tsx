@@ -2,12 +2,12 @@ import type { Metadata } from "next";
 import PageHero from "@/components/site/PageHero";
 import Reveal from "@/components/ui/Reveal";
 import Magnetic from "@/components/ui/Magnetic";
-import { LINKS } from "@/lib/links";
+import { DOWNLOADS, INSTALL, LINKS, VERSION } from "@/lib/links";
 
 export const metadata: Metadata = {
   title: "Download — Echo",
   description:
-    "Download Echo for macOS, Windows, and Linux. Free, open-source, and a few megabytes. Install via Homebrew, winget, Flatpak, or Snap.",
+    "Download Echo for macOS (Apple Silicon), Windows, and Linux. Free, open-source, and a few megabytes.",
 };
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -28,33 +28,53 @@ const ICONS: Record<string, React.ReactNode> = {
   ),
 };
 
-const PLATFORMS = [
+type Platform = {
+  key: string;
+  name: string;
+  format: string;
+  cta: string;
+  href: string;
+  /** Terminal one-liner that installs the latest release. */
+  cmd: string;
+  req: string;
+  /** Other formats for the same OS. */
+  alt?: { label: string; href: string }[];
+  featured?: boolean;
+};
+
+const PLATFORMS: Platform[] = [
   {
     key: "mac",
     name: "macOS",
-    format: "Universal .dmg · Apple Silicon + Intel",
+    format: "Apple Silicon · .dmg",
     cta: "Download for macOS",
-    cmd: "brew install --cask echo",
-    req: "macOS 12 Monterey or later",
+    href: DOWNLOADS.macos,
+    cmd: INSTALL.unix,
+    req: "macOS 12 Monterey or later · Apple Silicon (M1 and newer)",
     featured: true,
   },
   {
     key: "win",
     name: "Windows",
-    format: ".msi installer · 64-bit",
+    format: "64-bit · .exe installer",
     cta: "Download for Windows",
-    cmd: "winget install Echo.Echo",
-    req: "Windows 10 / 11",
-    featured: false,
+    href: DOWNLOADS.windows,
+    cmd: INSTALL.windows,
+    req: "Windows 10 / 11 · WebView2 runtime",
+    alt: [{ label: ".msi", href: DOWNLOADS.windowsMsi }],
   },
   {
     key: "linux",
     name: "Linux",
-    format: "AppImage · .deb · Flatpak · Snap",
+    format: "x86_64 · AppImage",
     cta: "Download for Linux",
-    cmd: "flatpak install flathub app.echo.Echo",
-    req: "glibc 2.31+ · X11 or Wayland",
-    featured: false,
+    href: DOWNLOADS.linuxAppImage,
+    cmd: INSTALL.unix,
+    req: "glibc 2.31+ · X11 or Wayland · FUSE for AppImage",
+    alt: [
+      { label: ".deb", href: DOWNLOADS.linuxDeb },
+      { label: ".rpm", href: DOWNLOADS.linuxRpm },
+    ],
   },
 ];
 
@@ -62,10 +82,10 @@ export default function DownloadPage() {
   return (
     <>
       <PageHero
-        eyebrow="Download"
+        eyebrow={`Download · v${VERSION}`}
         title="Pick your"
         highlight="platform"
-        subtitle="A few megabytes, signed and ready. Free and open-source on every OS — grab a build below or install from your package manager."
+        subtitle="A few megabytes, free and open-source on every OS. Grab a build below, or install from your terminal in one line."
       />
 
       <section className="mx-auto mt-14 max-w-7xl px-6 sm:px-10">
@@ -90,17 +110,38 @@ export default function DownloadPage() {
 
                 <div className="mt-7">
                   <Magnetic strength={0.25}>
-                    <a href={LINKS.releases} className={p.featured ? "btn-glow w-full justify-center" : "btn-ghost w-full justify-center"}>
+                    <a
+                      href={p.href}
+                      className={
+                        p.featured
+                          ? "btn-glow w-full justify-center"
+                          : "btn-ghost w-full justify-center"
+                      }
+                    >
                       {p.cta}
                     </a>
                   </Magnetic>
                 </div>
 
+                {p.alt && (
+                  <p className="mt-3 text-center font-mono text-[0.7rem] text-faint">
+                    also{" "}
+                    {p.alt.map((a, n) => (
+                      <span key={a.label}>
+                        {n > 0 && " · "}
+                        <a href={a.href} className="text-fog hover:text-glow">
+                          {a.label}
+                        </a>
+                      </span>
+                    ))}
+                  </p>
+                )}
+
                 <div className="mt-6 rounded-xl border border-line bg-ink/50 px-4 py-3">
                   <p className="font-mono text-[0.6rem] uppercase tracking-[0.2em] text-faint">
                     or via terminal
                   </p>
-                  <code className="mt-1.5 block font-mono text-sm text-glow">
+                  <code className="mt-1.5 block break-all font-mono text-xs text-glow">
                     {p.cmd}
                   </code>
                 </div>
@@ -114,7 +155,66 @@ export default function DownloadPage() {
         </div>
       </section>
 
-      {/* build from source + checksum strip */}
+      {/* Unsigned-build notice. Users hit this dialog on first launch; saying so
+          here is the difference between "expected" and "this looks like malware". */}
+      <section className="mx-auto mt-10 max-w-7xl px-6 sm:px-10">
+        <Reveal>
+          <div className="panel rounded-card p-6">
+            <h3 className="text-xl font-medium">
+              Echo isn&apos;t code-signed yet
+            </h3>
+            <p className="mt-2 max-w-3xl text-fog">
+              Signing certificates cost money this project hasn&apos;t spent, so
+              your OS will warn you the first time you open it. That&apos;s
+              expected, and here&apos;s exactly what you&apos;ll see:
+            </p>
+            <ul className="mt-4 space-y-2 text-sm text-fog">
+              <li>
+                <span className="font-mono text-xs uppercase tracking-[0.18em] text-glow">
+                  windows
+                </span>{" "}
+                — SmartScreen says &ldquo;Windows protected your PC&rdquo;. Choose{" "}
+                <em>More info</em> → <em>Run anyway</em>.
+              </li>
+              <li>
+                <span className="font-mono text-xs uppercase tracking-[0.18em] text-glow">
+                  macos
+                </span>{" "}
+                — Gatekeeper offers only <em>Move to Trash</em>. The terminal
+                installer clears the quarantine flag for you; installing by hand,
+                right-click Echo in Applications → <em>Open</em>.
+              </li>
+              <li>
+                <span className="font-mono text-xs uppercase tracking-[0.18em] text-glow">
+                  linux
+                </span>{" "}
+                — nothing to do.
+              </li>
+            </ul>
+            <p className="mt-4 text-sm text-fog">
+              Every build is checksummed. Verify your download against{" "}
+              <a
+                href={DOWNLOADS.checksums}
+                className="text-glow underline underline-offset-4"
+              >
+                SHA256SUMS.txt
+              </a>{" "}
+              — the terminal installers do it automatically. Or{" "}
+              <a
+                href={LINKS.installing}
+                target="_blank"
+                rel="noreferrer"
+                className="text-glow underline underline-offset-4"
+              >
+                read the install docs
+              </a>
+              .
+            </p>
+          </div>
+        </Reveal>
+      </section>
+
+      {/* build from source */}
       <section className="mx-auto mt-10 max-w-7xl px-6 sm:px-10">
         <Reveal>
           <div className="panel flex flex-col items-start justify-between gap-6 rounded-card p-6 sm:flex-row sm:items-center">
@@ -125,9 +225,24 @@ export default function DownloadPage() {
                 a single command — that&apos;s the whole point of local-first.
               </p>
             </div>
-            <a href={LINKS.github} target="_blank" rel="noreferrer" className="btn-ghost shrink-0">
-              View source
-            </a>
+            <div className="flex shrink-0 gap-3">
+              <a
+                href={LINKS.releaseNotes}
+                target="_blank"
+                rel="noreferrer"
+                className="btn-ghost"
+              >
+                Release notes
+              </a>
+              <a
+                href={LINKS.github}
+                target="_blank"
+                rel="noreferrer"
+                className="btn-ghost"
+              >
+                View source
+              </a>
+            </div>
           </div>
         </Reveal>
       </section>
