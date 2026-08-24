@@ -8,6 +8,10 @@ pub trait TextInjector: Send + Sync {
     /// Send the OS "paste" shortcut (Cmd+V on macOS, Ctrl+V elsewhere) to the
     /// focused app. Used by [`deliver`] for clipboard-paste injection.
     fn send_paste(&self) -> Result<()>;
+
+    /// Send the OS "copy" shortcut. Used by [`copy_selection`] to read whatever
+    /// the focused app currently has selected.
+    fn send_copy(&self) -> Result<()>;
 }
 
 /// Returns the correct injector for the current platform.
@@ -64,6 +68,39 @@ fn paste_text(inj: &dyn TextInjector, text: &str) -> Result<()> {
     Ok(())
 }
 
+/// Read the focused app's current selection via the clipboard, restoring the
+/// user's clipboard contents afterwards.
+///
+/// Returns `None` when nothing is selected. A sentinel is written first so an
+/// app that ignores the copy shortcut is distinguishable from one that copied
+/// text identical to what was already on the clipboard.
+pub fn copy_selection(inj: &dyn TextInjector) -> Result<Option<String>> {
+    const SENTINEL: &str = "\u{0}echo-no-selection\u{0}";
+
+    let mut clipboard = arboard::Clipboard::new()
+        .map_err(|e| EchoError::Injection(format!("clipboard unavailable: {e}")))?;
+
+    let prior = clipboard.get_text().ok();
+    let _ = clipboard.set_text(SENTINEL);
+
+    inj.send_copy()?;
+
+    // ponytail: same fixed 120ms as paste_text — long enough for the focused
+    // app to service the shortcut. Make it a setting if slow apps show up.
+    std::thread::sleep(std::time::Duration::from_millis(120));
+
+    let copied = clipboard.get_text().ok();
+
+    if let Some(prev) = prior {
+        let _ = clipboard.set_text(prev);
+    }
+
+    Ok(match copied {
+        Some(text) if text != SENTINEL && !text.is_empty() => Some(text),
+        _ => None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -73,6 +110,7 @@ mod tests {
     struct SpyInjector {
         typed: AtomicBool,
         pasted: AtomicBool,
+        copied: AtomicBool,
     }
     impl TextInjector for SpyInjector {
         fn inject_text(&self, _: &str) -> Result<()> {
@@ -81,6 +119,10 @@ mod tests {
         }
         fn send_paste(&self) -> Result<()> {
             self.pasted.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+        fn send_copy(&self) -> Result<()> {
+            self.copied.store(true, Ordering::SeqCst);
             Ok(())
         }
     }

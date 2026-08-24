@@ -8,6 +8,7 @@ import { ModelSelector } from "./ModelSelector";
 import { CloudProviders } from "./CloudProviders";
 import { TelemetrySettings } from "./TelemetrySettings";
 import { WakeWordSettings } from "./WakeWordSettings";
+import { CommandMode } from "./CommandMode";
 import { HotkeyCapture } from "../common/HotkeyCapture";
 
 /* ---- compact field primitives -------------------------------------------- */
@@ -247,6 +248,16 @@ export function SettingsPanel() {
           desc="Start dictating without touching the keyboard. Off by default."
         >
           <WakeWordSettings />
+        </Section>
+      )}
+
+      {/* ---- Command mode --------------------------------------------- */}
+      {show(["command", "command mode", "llm", "ollama", "rewrite", "instruction", "ai", "assistant"]) && (
+        <Section
+          title="Command mode"
+          desc="Speak an instruction instead of dictating text."
+        >
+          <CommandMode />
         </Section>
       )}
 

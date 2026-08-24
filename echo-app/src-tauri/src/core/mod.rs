@@ -1,5 +1,6 @@
 pub mod asr;
 pub mod audio;
+pub mod command;
 pub mod dictionary;
 pub mod download;
 pub mod events;
