@@ -35,6 +35,11 @@ impl PluginLoader {
     /// Load a shared library, instantiate its plugin, and call `on_load`.
     /// Returns the plugin's reported name.
     pub fn load(&mut self, lib_path: &Path, ctx: &PluginContext) -> Result<String> {
+        tracing::warn!(
+            "Loading native plugin {} — plugins run IN-PROCESS with the same              privileges as Echo itself. Manifest permissions are advisory and              are NOT enforced.",
+            lib_path.display()
+        );
+
         // SAFETY: dlopen-ing arbitrary code is unsafe by nature; this is gated
         // behind explicit user install/enable.
         let lib = unsafe { Library::new(lib_path) }.map_err(|e| {

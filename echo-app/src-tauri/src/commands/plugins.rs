@@ -40,23 +40,52 @@ pub fn list_plugins(state: State<'_, AppState>) -> Result<Vec<PluginInfo>> {
             let (description, author) = serde_json::from_str::<PluginManifest>(&manifest)
                 .map(|m| (m.description, m.author))
                 .unwrap_or_default();
+            let permissions = serde_json::from_str::<PluginManifest>(&manifest)
+                .map(|m| m.permissions)
+                .unwrap_or_default();
             PluginInfo {
                 name,
                 version,
                 description,
                 author,
                 enabled,
+                permissions,
             }
         })
         .collect();
     Ok(infos)
 }
 
+/// Read the manifest next to a candidate library **without installing it**, so
+/// the UI can show what the plugin claims it needs before anything is loaded.
+#[tauri::command]
+pub fn inspect_plugin(path: String) -> Result<PluginManifest> {
+    let lib_path = PathBuf::from(&path);
+    let src_dir = lib_path
+        .parent()
+        .ok_or_else(|| EchoError::Plugin("Invalid plugin path".into()))?;
+    let manifest_str = std::fs::read_to_string(src_dir.join("plugin.json"))
+        .map_err(|e| EchoError::Plugin(format!("plugin.json not found next to library: {e}")))?;
+    Ok(serde_json::from_str(&manifest_str)?)
+}
+
 /// Install a plugin from a shared library path. Expects a `plugin.json` manifest
 /// in the same directory. Copies both into the plugins directory, registers it,
 /// and loads it.
+///
+/// `acknowledged` must be true: the caller has to have shown the user the
+/// declared permissions *and* the fact that a plugin runs in-process with full
+/// host privileges. This is a consent gate, not a sandbox — it cannot stop a
+/// malicious plugin, it only stops one being loaded without the user being told.
 #[tauri::command]
-pub fn install_plugin(state: State<'_, AppState>, path: String) -> Result<()> {
+pub fn install_plugin(state: State<'_, AppState>, path: String, acknowledged: bool) -> Result<()> {
+    if !acknowledged {
+        return Err(EchoError::PermissionDenied(
+            "Plugin install was not confirmed. Plugins run in-process with full              access to Echo and your files; the permission list in the manifest              is advisory and is not enforced."
+                .into(),
+        ));
+    }
+
     let lib_path = PathBuf::from(&path);
     let src_dir = lib_path
         .parent()

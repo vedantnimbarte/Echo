@@ -67,6 +67,7 @@ pub fn run() {
                     phrase: e.phrase,
                     replacement: e.replacement,
                     enabled: e.enabled,
+                    profile_id: e.profile_id,
                 })
                 .collect();
 
@@ -219,6 +220,35 @@ pub fn run() {
                 tracing::warn!("Failed to register global hotkey '{hotkey}': {e}");
             }
 
+            // Drain the egress channel into the database. Requests are logged
+            // fire-and-forget so a network call never waits on SQLite.
+            {
+                let (tx, mut rx) =
+                    tokio::sync::mpsc::unbounded_channel::<core::egress::Egress>();
+                core::egress::init(tx);
+
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    // Trim occasionally rather than on every insert; this is a
+                    // rolling log, not an audit trail.
+                    let mut since_trim = 0u32;
+                    while let Some(e) = rx.recv().await {
+                        let state = handle.state::<AppState>();
+                        let conn = state.db.lock().unwrap();
+                        if let Err(err) =
+                            storage::repositories::insert_egress(&conn, &e.host, &e.purpose)
+                        {
+                            tracing::warn!("Failed to log egress: {err}");
+                        }
+                        since_trim += 1;
+                        if since_trim >= 50 {
+                            since_trim = 0;
+                            let _ = storage::repositories::trim_egress(&conn, 1000);
+                        }
+                    }
+                });
+            }
+
             // Arm the wake-word listener if the user enabled it last session.
             commands::wake::rearm(app.handle());
 
@@ -264,6 +294,7 @@ pub fn run() {
             commands::telemetry::set_telemetry_enabled,
             commands::telemetry::record_telemetry_event,
             commands::plugins::list_plugins,
+            commands::plugins::inspect_plugin,
             commands::plugins::install_plugin,
             commands::plugins::enable_plugin,
             commands::plugins::disable_plugin,
@@ -277,6 +308,18 @@ pub fn run() {
             commands::wake::wake_word_ready,
             commands::wake::wake_word_active,
             commands::wake::wake_word_status,
+            commands::history::export_history,
+            commands::profiles::get_foreground_app,
+            commands::profiles::list_app_profiles,
+            commands::profiles::save_app_profile,
+            commands::profiles::delete_app_profile,
+            commands::profiles::list_profiles,
+            commands::profiles::add_profile,
+            commands::profiles::delete_profile,
+            commands::profiles::set_dictionary_entry_profile,
+            commands::egress::get_egress_log,
+            commands::egress::clear_egress_log,
+            commands::egress::get_egress_status,
             commands::settings::get_setting,
             commands::settings::set_setting,
         ])

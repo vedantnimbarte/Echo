@@ -34,6 +34,38 @@ export function DictionaryPanel() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["dictionary"] }),
   });
 
+  /* ---- profiles: named groups an app profile can switch on ---------------- */
+
+  const { data: profiles = [] } = useQuery({
+    queryKey: ["dict-profiles"],
+    queryFn: commands.listProfiles,
+  });
+  const [newProfile, setNewProfile] = useState("");
+
+  const invalidateProfiles = () => {
+    qc.invalidateQueries({ queryKey: ["dict-profiles"] });
+    qc.invalidateQueries({ queryKey: ["dictionary"] });
+  };
+
+  const addProfileMutation = useMutation({
+    mutationFn: () => commands.addProfile(newProfile),
+    onSuccess: () => {
+      invalidateProfiles();
+      setNewProfile("");
+    },
+  });
+
+  const deleteProfileMutation = useMutation({
+    mutationFn: (id: number) => commands.deleteProfile(id),
+    onSuccess: invalidateProfiles,
+  });
+
+  const setEntryProfileMutation = useMutation({
+    mutationFn: ({ id, profileId }: { id: number; profileId: number | null }) =>
+      commands.setDictionaryEntryProfile(id, profileId),
+    onSuccess: invalidateProfiles,
+  });
+
   async function handleExport() {
     const path = await save({
       defaultPath: "echo-dictionary.json",
@@ -103,6 +135,55 @@ export function DictionaryPanel() {
         </button>
       </form>
 
+      {/* Profiles: groups that a per-app profile can switch on */}
+      <div className="glass space-y-2 rounded-lg p-3">
+        <p className="text-[12px] font-medium text-[var(--ink)]">Profiles</p>
+        <p className="text-[10.5px] leading-snug text-[var(--ink-faint)]">
+          Entries with no profile always apply. Put an entry in a profile and it
+          only applies while an app using that profile is focused — set that up
+          in Settings → Per-app profiles.
+        </p>
+        <div className="flex gap-1.5">
+          <input
+            className="field flex-1 text-[12px]"
+            placeholder="New profile name"
+            value={newProfile}
+            onChange={(e) => setNewProfile(e.target.value)}
+            onKeyDown={(e) =>
+              e.key === "Enter" && newProfile.trim() && addProfileMutation.mutate()
+            }
+          />
+          <button
+            onClick={() => addProfileMutation.mutate()}
+            disabled={!newProfile.trim()}
+            className="btn-primary shrink-0 px-2.5 py-1 text-[11px]"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add
+          </button>
+        </div>
+        {profiles.length > 0 && (
+          <ul className="flex flex-wrap gap-1.5">
+            {profiles.map((p) => (
+              <li
+                key={p.id}
+                className="flex items-center gap-1.5 rounded-md border border-[var(--hairline)] bg-[var(--surface-1)] px-2 py-0.5 text-[11px]"
+              >
+                {p.name}
+                <button
+                  onClick={() => p.id != null && deleteProfileMutation.mutate(p.id)}
+                  className="text-[var(--ink-faint)] transition-colors hover:text-[var(--ink)]"
+                  aria-label={`Delete profile ${p.name}`}
+                  title="Delete profile (its entries become global)"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
       {/* Entries list */}
       {isLoading ? (
         <p className="text-[var(--ink-muted)] text-sm">Loading…</p>
@@ -145,6 +226,29 @@ export function DictionaryPanel() {
               >
                 {entry.replacement}
               </span>
+              {profiles.length > 0 && (
+                <select
+                  className="field w-32 shrink-0 text-[11px]"
+                  value={entry.profile_id == null ? "global" : String(entry.profile_id)}
+                  disabled={entry.id == null}
+                  onChange={(e) =>
+                    entry.id != null &&
+                    setEntryProfileMutation.mutate({
+                      id: entry.id,
+                      profileId:
+                        e.target.value === "global" ? null : Number(e.target.value),
+                    })
+                  }
+                  aria-label="Profile"
+                >
+                  <option value="global">Always</option>
+                  {profiles.map((p) => (
+                    <option key={p.id} value={String(p.id)}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              )}
               <button
                 onClick={() => entry.id != null && deleteMutation.mutate(entry.id)}
                 className="text-[var(--ink-faint)] transition-colors hover:text-[var(--ink)]"

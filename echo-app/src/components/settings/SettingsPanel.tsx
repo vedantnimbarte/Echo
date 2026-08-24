@@ -9,9 +9,36 @@ import { CloudProviders } from "./CloudProviders";
 import { TelemetrySettings } from "./TelemetrySettings";
 import { WakeWordSettings } from "./WakeWordSettings";
 import { CommandMode } from "./CommandMode";
+import { AppProfiles } from "./AppProfiles";
+import { EgressLog } from "./EgressLog";
 import { HotkeyCapture } from "../common/HotkeyCapture";
 
 /* ---- compact field primitives -------------------------------------------- */
+
+/**
+ * Languages Whisper handles well, plus auto-detect. Not the full ~99-language
+ * list: a picker nobody can scan is worse than a short one, and the long tail
+ * is better served by pinning a code by hand if it ever comes up.
+ */
+const LANGUAGES: { code: string; label: string }[] = [
+  { code: "auto", label: "Auto-detect" },
+  { code: "en", label: "English" },
+  { code: "es", label: "Spanish" },
+  { code: "fr", label: "French" },
+  { code: "de", label: "German" },
+  { code: "it", label: "Italian" },
+  { code: "pt", label: "Portuguese" },
+  { code: "nl", label: "Dutch" },
+  { code: "pl", label: "Polish" },
+  { code: "ru", label: "Russian" },
+  { code: "uk", label: "Ukrainian" },
+  { code: "tr", label: "Turkish" },
+  { code: "ar", label: "Arabic" },
+  { code: "hi", label: "Hindi" },
+  { code: "zh", label: "Chinese" },
+  { code: "ja", label: "Japanese" },
+  { code: "ko", label: "Korean" },
+];
 
 function Section({
   title,
@@ -96,6 +123,25 @@ export function SettingsPanel() {
     queryKey: ["setting", "inject_delay_ms"],
     queryFn: () => commands.getSetting("inject_delay_ms"),
   });
+  const { data: language } = useQuery({
+    queryKey: ["setting", "language"],
+    queryFn: () => commands.getSetting("language"),
+  });
+  const setLanguageMutation = useMutation({
+    mutationFn: (v: string) => commands.setSetting("language", v),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["setting", "language"] }),
+  });
+
+  const { data: clipboardSettle } = useQuery({
+    queryKey: ["setting", "clipboard_settle_ms"],
+    queryFn: () => commands.getSetting("clipboard_settle_ms"),
+  });
+  const setClipboardSettleMutation = useMutation({
+    mutationFn: (v: string) => commands.setSetting("clipboard_settle_ms", v),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["setting", "clipboard_settle_ms"] }),
+  });
+
   const { data: injectionMethod } = useQuery({
     queryKey: ["setting", "injection_method"],
     queryFn: () => commands.getSetting("injection_method"),
@@ -281,6 +327,25 @@ export function SettingsPanel() {
               {String(setProviderMutation.error)}
             </span>
           )}
+          <Field label="Language">
+            <select
+              className="field"
+              value={language ?? "auto"}
+              onChange={(e) => setLanguageMutation.mutate(e.target.value)}
+            >
+              {LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <p className="text-[10.5px] leading-snug text-[var(--ink-faint)]">
+            Auto-detect works well for a whole utterance but can guess wrong on
+            short ones. Pinning your language is more accurate if you always
+            dictate in it. The English-only models ignore this setting.
+          </p>
+
           {activeProvider === "local" && <ModelSelector />}
           <CloudProviders />
         </Section>
@@ -315,10 +380,29 @@ export function SettingsPanel() {
             </select>
           </Field>
           {injectionMethod === "paste" && (
-            <p className="text-[10.5px] leading-snug text-[var(--ink-faint)]">
-              Paste briefly replaces your clipboard, then restores it. Some apps (e.g. terminals)
-              use a different paste shortcut — switch back to typing if it doesn't land.
-            </p>
+            <>
+              <p className="text-[10.5px] leading-snug text-[var(--ink-faint)]">
+                Paste briefly replaces your clipboard, then restores it. Some apps (e.g. terminals)
+                use a different paste shortcut — switch back to typing if it doesn't land.
+              </p>
+              <Field label="Clipboard hold (ms)">
+                <input
+                  type="number"
+                  min={20}
+                  step={20}
+                  className="field w-28"
+                  defaultValue={clipboardSettle ?? "180"}
+                  onBlur={(e) =>
+                    setClipboardSettleMutation.mutate(e.target.value || "180")
+                  }
+                />
+              </Field>
+              <p className="text-[10.5px] leading-snug text-[var(--ink-faint)]">
+                How long Echo waits before putting your old clipboard back. Raise
+                it if text goes missing in slower apps — Electron apps, terminals,
+                and remote desktops often need more than the default.
+              </p>
+            </>
           )}
 
           <Field label="Insert delay (ms)">
@@ -357,10 +441,23 @@ export function SettingsPanel() {
         </Section>
       )}
 
+      {/* ---- Per-app profiles ----------------------------------------- */}
+      {show(["app", "per app", "profile", "profiles", "exclude", "password manager", "terminal", "override"]) && (
+        <Section
+          title="Per-app profiles"
+          desc="Override how Echo behaves in specific applications."
+        >
+          <AppProfiles />
+        </Section>
+      )}
+
       {/* ---- Privacy ------------------------------------------------- */}
-      {show(["privacy", "telemetry", "history", "data", "save"]) && (
+      {show(["privacy", "telemetry", "history", "data", "save", "network", "offline", "egress", "requests"]) && (
         <Section title="Privacy">
-          <TelemetrySettings />
+          <EgressLog />
+          <div className="border-t border-[var(--hairline)] pt-3">
+            <TelemetrySettings />
+          </div>
           <label className="flex items-center gap-2.5 border-t border-[var(--hairline)] pt-3">
             <input
               type="checkbox"

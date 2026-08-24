@@ -87,6 +87,8 @@ impl AsrProvider for WhisperApiProvider {
             form = form.text("language", lang.to_string());
         }
 
+        crate::core::egress::record(&self.endpoint, "cloud transcription");
+
         let resp = self
             .client
             .post(&self.endpoint)

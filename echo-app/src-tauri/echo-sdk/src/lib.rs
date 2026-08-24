@@ -109,6 +109,10 @@ pub struct PluginInfo {
     pub description: String,
     pub author: String,
     pub enabled: bool,
+    /// What the plugin *declares* it needs. Advisory — see [`PluginPermission`].
+    /// Surfaced so a user can at least see what was claimed before enabling it.
+    #[serde(default)]
+    pub permissions: Vec<PluginPermission>,
 }
 
 /// Runtime context handed to a plugin on load.

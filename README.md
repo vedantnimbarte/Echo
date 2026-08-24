@@ -16,13 +16,16 @@ Built with **Rust · Tauri v2 · React 19 · TypeScript · TailwindCSS v4 · SQL
 - ☁️ **Cloud transcription** via OpenAI Whisper, Groq, or Deepgram
 - ⌨️ **Text injection** into the focused app — type keystrokes *or* clipboard-paste
 - 📖 **Custom dictionary** with replacements, enable/disable, JSON import/export
+- 🗂️ **Per-app profiles** — override insert behaviour and dictionary scope per application
+- 🌍 **Language selection** — pin a dictation language or let Whisper auto-detect
 - ⚡ **Global hotkey** to toggle recording from anywhere
 - 🗣️ **Wake word** (opt-in) — say a phrase to start dictating hands-free, matched on-device
 - 🤖 **Command mode** (opt-in) — say a trigger word to rewrite the selection via a local LLM
 - 🔄 **Auto-update** from GitHub Releases (signed)
 - 🧩 **Plugin system** (experimental) for custom ASR / output / audio / dictionary
 - 📊 **Local-only telemetry**, opt-in, viewable and deletable — nothing leaves your device
-- 🕘 **History** of past transcriptions
+- 🕘 **History** of past transcriptions, searchable and exportable to JSON
+- 🔎 **Request log** — see every outbound request Echo made, and whether your setup is offline-capable
 - 🔐 **API keys stored in the OS keychain**, never in plain files
 
 ---
@@ -195,6 +198,31 @@ Per-OS requirements:
 | **Linux (Wayland)** | `ydotool` installed **and** `ydotoold` daemon running. Note: some compositors (e.g. GNOME) restrict synthetic input. |
 
 ---
+
+## Per-app profiles
+
+Settings → *Per-app profiles* overrides how Echo behaves in a given app. Every
+field can stay on **Global**, which inherits the setting above it — so a profile
+can pin one behaviour (never auto-insert into a password manager) without
+freezing the rest.
+
+The app is identified by executable name on Windows, bundle id on macOS, and
+X11 window class on Linux. *Detect* fills it in from whatever is focused.
+
+Where the platform won't say which window is focused — **Wayland** (no protocol
+exposes it), or **macOS without Automation permission** — profiles simply don't
+apply and the global settings are used.
+
+## What Echo sends, and where
+
+Settings → *Privacy* shows whether the current configuration can reach the
+network at all, plus a log of every outbound request Echo made: the host, why,
+and when.
+
+Read the claim precisely. This records **requests Echo itself made**. It is not
+proof that nothing else left your machine — a process can't observe its own OS's
+traffic, and a native plugin can make requests that never pass through the code
+this instruments (see [PLUGINS.md](PLUGINS.md)).
 
 ## Global hotkey
 

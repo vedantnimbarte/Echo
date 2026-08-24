@@ -47,6 +47,53 @@ export interface PluginInfo {
   description: string;
   author: string;
   enabled: boolean;
+  /** What the plugin declares it needs. Advisory — not enforced. */
+  permissions: string[];
+}
+
+export interface PluginManifest {
+  name: string;
+  version: string;
+  description: string;
+  author: string;
+  permissions: string[];
+  entry: string;
+}
+
+/** A dictionary profile: a named group of entries. */
+export interface Profile {
+  id: number | null;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Per-app overrides. A null override field means "inherit the global setting",
+ * so a profile can pin one behaviour without freezing the rest.
+ */
+export interface AppProfile {
+  id: number | null;
+  /** Lowercased executable name, bundle id, or window class. */
+  app_match: string;
+  label: string | null;
+  auto_inject: boolean | null;
+  injection_method: string | null;
+  profile_id: number | null;
+  enabled: boolean;
+}
+
+export interface EgressRecord {
+  id: number | null;
+  host: string;
+  purpose: string;
+  created_at: string;
+}
+
+export interface EgressStatus {
+  offline_capable: boolean;
+  reasons: string[];
+  recent_count: number;
 }
 
 export const commands = {
@@ -80,6 +127,33 @@ export const commands = {
     invoke<TranscriptionRecord[]>("get_history", { limit }),
 
   clearHistory: () => invoke<void>("clear_history"),
+
+  exportHistory: (path: string) => invoke<void>("export_history", { path }),
+
+  getForegroundApp: () => invoke<string | null>("get_foreground_app"),
+
+  listAppProfiles: () => invoke<AppProfile[]>("list_app_profiles"),
+
+  saveAppProfile: (profile: AppProfile) =>
+    invoke<number>("save_app_profile", { profile }),
+
+  deleteAppProfile: (id: number) => invoke<void>("delete_app_profile", { id }),
+
+  listProfiles: () => invoke<Profile[]>("list_profiles"),
+
+  addProfile: (name: string) => invoke<number>("add_profile", { name }),
+
+  deleteProfile: (id: number) => invoke<void>("delete_profile", { id }),
+
+  setDictionaryEntryProfile: (id: number, profileId: number | null) =>
+    invoke<void>("set_dictionary_entry_profile", { id, profileId }),
+
+  getEgressLog: (limit?: number) =>
+    invoke<EgressRecord[]>("get_egress_log", { limit }),
+
+  clearEgressLog: () => invoke<void>("clear_egress_log"),
+
+  getEgressStatus: () => invoke<EgressStatus>("get_egress_status"),
 
   getSetting: (key: string) => invoke<string | null>("get_setting", { key }),
 
@@ -126,7 +200,16 @@ export const commands = {
 
   listPlugins: () => invoke<PluginInfo[]>("list_plugins"),
 
-  installPlugin: (path: string) => invoke<void>("install_plugin", { path }),
+  /** Read a plugin's manifest without installing it. */
+  inspectPlugin: (path: string) =>
+    invoke<PluginManifest>("inspect_plugin", { path }),
+
+  /**
+   * `acknowledged` must be true and the caller must have shown the user what a
+   * plugin can do — the backend refuses otherwise.
+   */
+  installPlugin: (path: string, acknowledged: boolean) =>
+    invoke<void>("install_plugin", { path, acknowledged }),
 
   enablePlugin: (name: string) => invoke<void>("enable_plugin", { name }),
 

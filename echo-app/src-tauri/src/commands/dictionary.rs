@@ -24,7 +24,7 @@ fn default_true() -> bool {
 /// Rebuild the in-memory engine from the current DB rows. Called after any
 /// mutation so transcription always uses the latest entries (architectural
 /// rule 6).
-async fn refresh_engine(state: &AppState, raw: Vec<DictionaryEntry>) {
+pub(crate) async fn refresh_engine(state: &AppState, raw: Vec<DictionaryEntry>) {
     let entries = raw
         .into_iter()
         .map(|e| crate::core::dictionary::DictionaryEntry {
@@ -32,6 +32,7 @@ async fn refresh_engine(state: &AppState, raw: Vec<DictionaryEntry>) {
             phrase: e.phrase,
             replacement: e.replacement,
             enabled: e.enabled,
+            profile_id: e.profile_id,
         })
         .collect();
     state.dictionary.write().await.update_entries(entries);

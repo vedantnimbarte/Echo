@@ -79,6 +79,8 @@ impl AsrProvider for DeepgramProvider {
             None => url.push_str("&detect_language=true"),
         }
 
+        crate::core::egress::record(&url, "cloud transcription");
+
         let resp = self
             .client
             .post(&url)
@@ -149,6 +151,8 @@ impl AsrProvider for DeepgramProvider {
                 .parse()
                 .map_err(|_| EchoError::AsrProvider("invalid Deepgram key header".into()))?,
         );
+
+        crate::core::egress::record_host("api.deepgram.com", "streaming transcription");
 
         let (ws, _resp) = tokio_tungstenite::connect_async(request)
             .await

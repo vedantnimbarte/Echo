@@ -24,6 +24,8 @@ pub async fn download_file(url: &str, dest: &Path, progress_tx: mpsc::Sender<f32
 
     let tmp_path = dest.with_extension("part");
 
+    crate::core::egress::record(url, "download");
+
     let resp = reqwest::get(url)
         .await
         .map_err(|e| EchoError::AsrProvider(e.to_string()))?

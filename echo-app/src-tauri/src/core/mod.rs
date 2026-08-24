@@ -1,8 +1,10 @@
+pub mod appcontext;
 pub mod asr;
 pub mod audio;
 pub mod command;
 pub mod dictionary;
 pub mod download;
+pub mod egress;
 pub mod events;
 pub mod injection;
 pub mod plugins;

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::mpsc;
 use tracing::{error, info};
 
@@ -54,7 +54,7 @@ pub async fn begin_recording(
         state.telemetry.record(
             &conn,
             "recording_started",
-            Some(serde_json::json!({ "provider": provider })),
+            Some(serde_json::json!({ "provider": provider.clone() })),
         );
     }
 
@@ -65,6 +65,16 @@ pub async fn begin_recording(
         crate::storage::repositories::get_setting(&conn, "audio_device")
             .unwrap_or(None)
             .filter(|s| !s.is_empty())
+    });
+
+    // Same fallback shape as the device above: the pill triggers recording
+    // without knowing the configured language. "auto" means let the model
+    // detect it, which is what the providers already do for None.
+    let language = language.filter(|s| !s.is_empty()).or_else(|| {
+        let conn = state.db.lock().unwrap();
+        crate::storage::repositories::get_setting(&conn, "language")
+            .unwrap_or(None)
+            .filter(|s| !s.is_empty() && s != "auto")
     });
 
     let mut audio_rx = state.audio.start_capture(device_name.as_deref())?;
@@ -140,22 +150,6 @@ pub async fn begin_recording(
     // Capture shared handles before the spawn — `state` is not 'static.
     let dictionary = state.dictionary.clone();
     let injector = state.injector.clone();
-    let (auto_inject, inject_delay_ms, use_paste) = {
-        let conn = state.db.lock().unwrap();
-        let auto = crate::storage::repositories::get_setting(&conn, "auto_inject")
-            .unwrap_or(None)
-            .map(|v| v != "false")
-            .unwrap_or(true);
-        let delay = crate::storage::repositories::get_setting(&conn, "inject_delay_ms")
-            .unwrap_or(None)
-            .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or(0);
-        let paste = crate::storage::repositories::get_setting(&conn, "injection_method")
-            .unwrap_or(None)
-            .map(|v| v == "paste")
-            .unwrap_or(false);
-        (auto, delay, paste)
-    };
 
     // Command mode: a transcript opening with the prefix word is an instruction
     // for the LLM rather than text to type. Read once per session so a settings
@@ -171,8 +165,44 @@ pub async fn begin_recording(
     tokio::spawn(async move {
         while let Some(segment) = transcript_rx.recv().await {
             if segment.is_final {
+                // Which app is focused decides how the text is delivered and
+                // which dictionary entries apply, so resolve it now rather than
+                // at recording start — focus can move while you talk.
+                // The macOS/Linux lookups shell out, so keep them off the runtime.
+                let focused =
+                    tokio::task::spawn_blocking(crate::core::appcontext::foreground_app)
+                        .await
+                        .ok()
+                        .flatten();
+
+                let delivery = {
+                    let state = app_clone.state::<AppState>();
+                    let conn = state.db.lock().unwrap();
+                    resolve_delivery(&conn, focused.as_deref())
+                };
+
                 // Apply dictionary replacements to the final transcript.
-                let processed = dictionary.read().await.process(&segment.text);
+                let processed = dictionary
+                    .read()
+                    .await
+                    .process_for(&segment.text, delivery.dictionary_profile);
+
+                // Record it before command mode rewrites anything: history is a
+                // log of what you said, not of what the model replied.
+                if delivery.record_history && !processed.is_empty() {
+                    let state = app_clone.state::<AppState>();
+                    let conn = state.db.lock().unwrap();
+                    let record = crate::storage::models::TranscriptionRecord {
+                        id: None,
+                        text: processed.clone(),
+                        language: segment.language.clone(),
+                        provider: provider.clone(),
+                        created_at: String::new(),
+                    };
+                    if let Err(e) = crate::storage::repositories::insert_history(&conn, &record) {
+                        error!("Failed to record history: {e}");
+                    }
+                }
                 // Emit the transcript fields directly (not the tagged AppEvent
                 // wrapper) so the frontend reads `event.payload.text` naturally.
                 if let Err(e) = app_clone.emit(
@@ -217,13 +247,19 @@ pub async fn begin_recording(
                 };
 
                 // Inject into the focused application if enabled.
-                if auto_inject && !to_inject.is_empty() {
-                    if inject_delay_ms > 0 {
-                        tokio::time::sleep(std::time::Duration::from_millis(inject_delay_ms)).await;
+                if delivery.auto_inject && !to_inject.is_empty() {
+                    if delivery.delay_ms > 0 {
+                        tokio::time::sleep(std::time::Duration::from_millis(delivery.delay_ms))
+                            .await;
                     }
                     let inj = injector.clone();
                     let result = tokio::task::spawn_blocking(move || {
-                        crate::core::injection::deliver(inj.as_ref(), &to_inject, use_paste)
+                        crate::core::injection::deliver(
+                            inj.as_ref(),
+                            &to_inject,
+                            delivery.use_paste,
+                            delivery.settle_ms,
+                        )
                     })
                     .await;
                     match result {
@@ -278,6 +314,58 @@ pub async fn end_recording(app: AppHandle, state: &AppState) -> Result<()> {
 #[tauri::command]
 pub fn is_recording(state: State<'_, AppState>) -> bool {
     *state.recording.lock().unwrap()
+}
+
+/// How one finished transcript should be delivered. Resolved per utterance so
+/// a per-app profile — and any settings change — takes effect immediately.
+struct Delivery {
+    auto_inject: bool,
+    use_paste: bool,
+    delay_ms: u64,
+    /// Dictionary profile to scope replacements to, if the focused app selects one.
+    dictionary_profile: Option<i64>,
+    record_history: bool,
+    /// How long to let the target read the clipboard before restoring it.
+    settle_ms: u64,
+}
+
+/// Resolve delivery settings for the focused app.
+///
+/// Global settings are the baseline; a matching per-app profile overrides only
+/// the fields it actually sets (a `NULL` column means "inherit"). With no
+/// focused app or no profile, this is exactly the old global behaviour.
+fn resolve_delivery(conn: &rusqlite::Connection, focused: Option<&str>) -> Delivery {
+    use crate::storage::repositories as repo;
+
+    let get = |key: &str| repo::get_setting(conn, key).unwrap_or(None);
+
+    let mut delivery = Delivery {
+        auto_inject: get("auto_inject").map(|v| v != "false").unwrap_or(true),
+        use_paste: get("injection_method").map(|v| v == "paste").unwrap_or(false),
+        delay_ms: get("inject_delay_ms")
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(0),
+        dictionary_profile: None,
+        // Defaults on, matching the Privacy toggle's own default.
+        record_history: get("history_enabled").map(|v| v != "false").unwrap_or(true),
+        settle_ms: get("clipboard_settle_ms")
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(crate::core::injection::DEFAULT_SETTLE_MS),
+    };
+
+    if let Some(app) = focused {
+        if let Ok(Some(profile)) = repo::find_app_profile(conn, app) {
+            if let Some(auto) = profile.auto_inject {
+                delivery.auto_inject = auto;
+            }
+            if let Some(method) = profile.injection_method {
+                delivery.use_paste = method == "paste";
+            }
+            delivery.dictionary_profile = profile.profile_id;
+        }
+    }
+
+    delivery
 }
 
 /// Read command-mode settings, falling back to the local-first defaults.
