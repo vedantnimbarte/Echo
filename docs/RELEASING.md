@@ -105,6 +105,16 @@ A failure here usually means an asset name changed — the scripts match on
 `.dmg` / `.AppImage` / `-setup.exe`, and `packaging/homebrew/echo.rb` builds its
 URL from `Echo_#{version}_universal.dmg`.
 
+## Platform coverage
+
+| Platform | Built | Notes |
+|---|---|---|
+| Windows x64 | ✅ | NSIS `.exe` + `.msi` |
+| Linux x86_64 | ✅ | `.AppImage`, `.deb`, `.rpm` |
+| macOS arm64 | ✅ | `.dmg` |
+| macOS x86_64 | ❌ | `ort` ships no prebuilt ONNX Runtime for `x86_64-apple-darwin` (see `ort-sys`'s `build/download/dist.txt`, which lists `aarch64-apple-darwin` alone). A universal build fails at link time. Restoring Intel support means compiling ONNX Runtime from source and linking `ort` against it. |
+| Linux aarch64 | ❌ | Not built yet; `ort` does support the target. |
+
 ## Code signing (OS-level, separate from updater signing)
 
 The updater keypair proves *"this update came from us."* It does **not** make the

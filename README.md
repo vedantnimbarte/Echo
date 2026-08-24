@@ -69,8 +69,11 @@ instead: the result is identical and you compiled it yourself.
 
 - **Windows** — needs the WebView2 runtime (preinstalled on Win11; on Win10 grab
   the *Evergreen* runtime from Microsoft).
-- **macOS** — grant **Microphone** and **Accessibility** permissions on first
-  run, or Echo can hear you but can't type.
+- **macOS** — **Apple Silicon only.** The ONNX Runtime behind Silero VAD and
+  wake word publishes no Intel-macOS binaries, so there is no x86_64 build; an
+  Intel Mac would have to compile ONNX Runtime from source. Grant **Microphone**
+  and **Accessibility** permissions on first run, or Echo can hear you but can't
+  type.
 - **Linux** — the AppImage needs FUSE (`sudo apt install libfuse2` on
   Debian/Ubuntu), and text injection needs `xdotool` (X11) or `ydotool`
   (Wayland). A `.deb` is also attached to each release.

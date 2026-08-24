@@ -17,8 +17,14 @@ jobs:
         include:
           - platform: windows-latest
             args: ""
+          # Apple Silicon only. A universal build also compiles for
+          # x86_64-apple-darwin, and `ort` (the ONNX Runtime behind Silero VAD
+          # and wake word) publishes no prebuilt binaries for that target —
+          # `ort-sys`'s dist.txt lists aarch64-apple-darwin alone. Building
+          # universal fails at link time; Intel support would mean compiling
+          # ONNX Runtime from source.
           - platform: macos-latest
-            args: "--target universal-apple-darwin"
+            args: "--target aarch64-apple-darwin"
           - platform: ubuntu-latest
             args: ""
 
@@ -41,7 +47,7 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
 
       - name: Cache cargo
         uses: swatinem/rust-cache@v2
