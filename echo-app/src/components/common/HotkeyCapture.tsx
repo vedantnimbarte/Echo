@@ -40,8 +40,8 @@ export function HotkeyCapture({
       className={clsx(
         "flex min-h-[34px] w-full items-center justify-center gap-1 rounded-lg border px-2.5 py-1.5 text-[13px] outline-none transition",
         recording
-          ? "border-[var(--aurora-2)]/70 bg-[var(--aurora-2)]/10 text-[var(--ink)]"
-          : "border-white/10 bg-white/5 text-[var(--ink)] hover:bg-white/8"
+          ? "border-[var(--hairline-strong)] bg-[var(--surface-2)] text-[var(--ink)]"
+          : "border-[var(--hairline)] bg-[var(--surface-1)] text-[var(--ink)] hover:bg-[var(--surface-2)]"
       )}
     >
       {recording ? (
@@ -52,7 +52,7 @@ export function HotkeyCapture({
         prettyHotkey(value).map((k) => (
           <kbd
             key={k}
-            className="rounded border border-white/12 bg-white/8 px-1.5 py-px text-[11px] font-medium text-[var(--ink)]"
+            className="rounded border border-[var(--hairline)] bg-[var(--surface-2)] px-1.5 py-px text-[11px] font-medium text-[var(--ink)]"
           >
             {k}
           </kbd>

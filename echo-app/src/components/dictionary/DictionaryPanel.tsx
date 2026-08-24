@@ -56,17 +56,17 @@ export function DictionaryPanel() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-zinc-100">Custom Dictionary</h2>
+        <h2 className="text-lg font-semibold text-[var(--ink)]">Custom Dictionary</h2>
         <div className="flex gap-2">
           <button
             onClick={handleImport}
-            className="flex items-center gap-1 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 transition-colors"
+            className="btn-ghost px-3 py-1.5 text-xs"
           >
             <Upload className="w-3.5 h-3.5" /> Import
           </button>
           <button
             onClick={handleExport}
-            className="flex items-center gap-1 rounded-lg border border-zinc-700 px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-800 transition-colors"
+            className="btn-ghost px-3 py-1.5 text-xs"
           >
             <Download className="w-3.5 h-3.5" /> Export
           </button>
@@ -82,13 +82,13 @@ export function DictionaryPanel() {
         }}
       >
         <input
-          className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-500"
+          className="field flex-1 px-3 py-2 text-sm"
           placeholder="Phrase (e.g. router file)"
           value={phrase}
           onChange={(e) => setPhrase(e.target.value)}
         />
         <input
-          className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-violet-500"
+          className="field flex-1 px-3 py-2 text-sm"
           placeholder="Replacement (e.g. src/agents/router.rs)"
           value={replacement}
           onChange={(e) => setReplacement(e.target.value)}
@@ -96,7 +96,7 @@ export function DictionaryPanel() {
         <button
           type="submit"
           disabled={!phrase || !replacement || addMutation.isPending}
-          className="bg-violet-600 hover:bg-violet-700 disabled:opacity-50 px-4 py-2 rounded-lg text-sm text-white flex items-center gap-1 transition-colors"
+          className="btn-primary px-4 py-2 text-sm"
         >
           <Plus className="w-4 h-4" />
           Add
@@ -105,19 +105,19 @@ export function DictionaryPanel() {
 
       {/* Entries list */}
       {isLoading ? (
-        <p className="text-zinc-500 text-sm">Loading…</p>
+        <p className="text-[var(--ink-muted)] text-sm">Loading…</p>
       ) : entries.length === 0 ? (
-        <p className="text-zinc-500 text-sm">No entries yet.</p>
+        <p className="text-[var(--ink-muted)] text-sm">No entries yet.</p>
       ) : (
         <ul className="space-y-2">
           {entries.map((entry) => (
             <li
               key={entry.id}
-              className="flex items-center gap-3 bg-zinc-800/50 border border-zinc-700 rounded-lg px-4 py-2 text-sm"
+              className="flex items-center gap-3 glass rounded-lg px-4 py-2 text-sm"
             >
               <input
                 type="checkbox"
-                className="w-4 h-4 accent-violet-500"
+                className="h-4 w-4 accent-white"
                 checked={entry.enabled}
                 disabled={entry.id == null}
                 onChange={(e) =>
@@ -129,25 +129,25 @@ export function DictionaryPanel() {
               <span
                 className={
                   entry.enabled
-                    ? "text-zinc-300 font-mono"
-                    : "text-zinc-500 font-mono line-through"
+                    ? "text-[var(--ink)] font-mono"
+                    : "text-[var(--ink-muted)] font-mono line-through"
                 }
               >
                 {entry.phrase}
               </span>
-              <span className="text-zinc-600">→</span>
+              <span className="text-[var(--ink-faint)]">→</span>
               <span
                 className={
                   entry.enabled
-                    ? "text-zinc-400 font-mono flex-1"
-                    : "text-zinc-600 font-mono flex-1 line-through"
+                    ? "text-[var(--ink-muted)] font-mono flex-1"
+                    : "text-[var(--ink-faint)] font-mono flex-1 line-through"
                 }
               >
                 {entry.replacement}
               </span>
               <button
                 onClick={() => entry.id != null && deleteMutation.mutate(entry.id)}
-                className="text-zinc-600 hover:text-red-400 transition-colors"
+                className="text-[var(--ink-faint)] transition-colors hover:text-[var(--ink)]"
                 aria-label="Delete entry"
               >
                 <Trash2 className="w-4 h-4" />
