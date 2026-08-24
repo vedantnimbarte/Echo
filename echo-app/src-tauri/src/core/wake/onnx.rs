@@ -142,6 +142,15 @@ impl WakeModel {
 /// samples). The buffer bookkeeping below depends on this being exact.
 const MEL_FRAMES_PER_CHUNK: usize = CHUNK / 160;
 
+// The buffer bookkeeping in `step` assumes a chunk yields exactly 8 mel frames
+// and that a classifier window is reachable from the mel buffer we retain.
+// These are compile-time so retuning CHUNK or MEL_PAD without re-deriving them
+// fails the build rather than silently degrading detection.
+const _: () = assert!(CHUNK.is_multiple_of(160), "chunk must be a whole number of mel hops");
+const _: () = assert!(MEL_FRAMES_PER_CHUNK == 8);
+const _: () = assert!(MEL_PAD.is_multiple_of(160), "overlap must be a whole number of hops");
+const _: () = assert!(EMBED_WINDOW * 2 >= EMBED_WINDOW + MEL_FRAMES_PER_CHUNK);
+
 /// Chunks to ignore after a detection, so one spoken phrase fires once rather
 /// than on every overlapping window. ~19 chunks ≈ 1.5 s.
 const COOLDOWN_CHUNKS: u32 = 19;
@@ -268,19 +277,6 @@ fn trim_front(buf: &mut Vec<f32>, max: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The buffer bookkeeping in `step` assumes a chunk yields exactly 8 mel
-    /// frames and that a window is a whole number of frames. If someone retunes
-    /// CHUNK or MEL_PAD without re-deriving these, detection silently degrades
-    /// instead of failing loudly — so pin the invariants here.
-    #[test]
-    fn frame_math_is_consistent() {
-        assert_eq!(CHUNK % 160, 0, "chunk must be a whole number of mel hops");
-        assert_eq!(MEL_FRAMES_PER_CHUNK, 8);
-        assert_eq!(MEL_PAD % 160, 0, "overlap must be a whole number of hops");
-        // A classifier window must be reachable from the mel buffer we retain.
-        assert!(EMBED_WINDOW * 2 >= EMBED_WINDOW + MEL_FRAMES_PER_CHUNK);
-    }
 
     #[test]
     fn trim_front_keeps_the_tail() {
