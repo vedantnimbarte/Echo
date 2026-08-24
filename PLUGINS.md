@@ -3,10 +3,39 @@
 Echo supports native plugins loaded as shared libraries (`.dll` / `.dylib` /
 `.so`).
 
-> ⚠️ **Experimental & trust model.** Plugins run **in-process with full trust**.
-> The manifest permission list is **advisory** in this version — it is not yet
-> enforced by a sandbox. Only install plugins you trust. True sandboxing (a WASM
-> runtime) is a future goal.
+## ⚠️ Security: read this before installing anything
+
+**A plugin is not sandboxed. Installing one is equivalent to running an
+arbitrary program with your user account.**
+
+Echo loads plugins with `dlopen`/`LoadLibrary` into its own process. That means
+a plugin can:
+
+- read and write any file your user can, not just its own data directory
+- read your microphone, your transcripts, and your dictionary
+- make network requests — including ones the built-in
+  [egress log](README.md) cannot see, because it only instruments Echo's own
+  request code
+- read and use anything Echo has in memory, including a decrypted API key
+- crash Echo, since it shares the process
+
+**The `permissions` list in `plugin.json` is advisory and is not enforced.** It
+documents what the author says the plugin needs. Nothing stops a plugin
+declaring `["dictionary"]` and then doing something else entirely. Treat it as a
+README line, not a security boundary.
+
+Because there is no technical boundary, the only real control is consent:
+installing requires an explicit confirmation that names these risks, and every
+load writes a warning to the log. That stops a plugin being loaded *silently*.
+It cannot stop a malicious plugin from doing whatever it wants once loaded.
+
+**Practical advice:** install plugins you have built yourself or whose source
+you have read and compiled. Do not install a prebuilt binary from someone you
+do not trust.
+
+Real enforcement needs an out-of-process or WASM runtime with a capability API.
+That is a future goal, not a current property — the design is tracked in
+`plan.md` §9.1.
 
 ## Manifest
 

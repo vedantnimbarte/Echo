@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2, Copy, CornerDownLeft, Search, Check } from "lucide-react";
+import { Trash2, Copy, CornerDownLeft, Search, Check, BookPlus, Download } from "lucide-react";
+import { save } from "@tauri-apps/plugin-dialog";
 import { commands, type TranscriptionRecord } from "../../ipc/commands";
 
 /* ---- time helpers --------------------------------------------------------- */
@@ -53,7 +54,13 @@ function HistoryRow({ record }: { record: TranscriptionRecord }) {
     }
   }
 
+  const [fixing, setFixing] = useState(false);
   const when = parseTs(record.created_at);
+
+  // Prefill with the whole transcript when it's short enough to be the mistake
+  // itself; otherwise leave it blank rather than making the user delete a
+  // paragraph to get at one word.
+  const suggestion = record.text.trim().split(/\s+/).length <= 4 ? record.text.trim() : "";
 
   return (
     <li className="group rounded-xl glass px-3.5 py-2.5 transition hover:border-[var(--hairline-strong)] hover:bg-[var(--surface-2)]">
@@ -85,9 +92,90 @@ function HistoryRow({ record }: { record: TranscriptionRecord }) {
           >
             <CornerDownLeft className="h-3.5 w-3.5" />
           </button>
+          <button
+            onClick={() => setFixing((f) => !f)}
+            aria-label="Teach Echo a correction"
+            title="Teach Echo a correction"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--ink-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--ink)]"
+          >
+            <BookPlus className="h-3.5 w-3.5" />
+          </button>
         </div>
       </div>
+
+      {fixing && (
+        <CorrectionForm
+          suggestion={suggestion}
+          onDone={() => setFixing(false)}
+        />
+      )}
     </li>
+  );
+}
+
+/**
+ * Turn a misheard phrase into a dictionary entry.
+ *
+ * Deliberately manual. Detecting corrections automatically would mean watching
+ * what you type in other applications, which is exactly the thing Echo exists
+ * not to do — so the user points at the mistake instead.
+ */
+function CorrectionForm({
+  suggestion,
+  onDone,
+}: {
+  suggestion: string;
+  onDone: () => void;
+}) {
+  const qc = useQueryClient();
+  const [phrase, setPhrase] = useState(suggestion);
+  const [replacement, setReplacement] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    const from = phrase.trim();
+    const to = replacement.trim();
+    if (!from || !to) return;
+    try {
+      await commands.addDictionaryEntry(from, to);
+      qc.invalidateQueries({ queryKey: ["dictionary"] });
+      onDone();
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  return (
+    <div className="mt-2 space-y-1.5 border-t border-[var(--hairline)] pt-2">
+      <p className="text-[10.5px] text-[var(--ink-faint)]">
+        Replace what Echo heard with what you meant. Applies to every future
+        transcript.
+      </p>
+      <div className="flex items-center gap-1.5">
+        <input
+          className="field flex-1 text-[12px]"
+          value={phrase}
+          onChange={(e) => setPhrase(e.target.value)}
+          placeholder="Echo heard…"
+        />
+        <span className="shrink-0 text-[var(--ink-faint)]">→</span>
+        <input
+          className="field flex-1 text-[12px]"
+          value={replacement}
+          onChange={(e) => setReplacement(e.target.value)}
+          placeholder="You meant…"
+          onKeyDown={(e) => e.key === "Enter" && void submit()}
+        />
+        <button
+          onClick={submit}
+          disabled={!phrase.trim() || !replacement.trim()}
+          className="btn-primary shrink-0 px-2.5 py-1 text-[11px]"
+        >
+          Save
+        </button>
+      </div>
+      {error && <p className="text-[11px] font-medium text-[var(--ink)]">{error}</p>}
+    </div>
   );
 }
 
@@ -124,14 +212,30 @@ export function HistoryPanel() {
     <div className="mx-auto max-w-[560px] space-y-4 p-5">
       <div className="flex items-center justify-between">
         <h2 className="text-[15px] font-semibold tracking-tight">History</h2>
-        <button
-          onClick={() => clearMutation.mutate()}
-          disabled={records.length === 0 || clearMutation.isPending}
-          className="flex items-center gap-1.5 rounded-lg border border-[var(--hairline)] px-2.5 py-1 text-[11px] text-[var(--ink-muted)] transition hover:border-[var(--hairline-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--ink)] disabled:opacity-40"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-          Clear all
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={async () => {
+              const path = await save({
+                defaultPath: "echo-history.json",
+                filters: [{ name: "JSON", extensions: ["json"] }],
+              });
+              if (path) await commands.exportHistory(path);
+            }}
+            disabled={records.length === 0}
+            className="btn-ghost px-2.5 py-1 text-[11px] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export
+          </button>
+          <button
+            onClick={() => clearMutation.mutate()}
+            disabled={records.length === 0 || clearMutation.isPending}
+            className="btn-ghost px-2.5 py-1 text-[11px] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Clear all
+          </button>
+        </div>
       </div>
 
       <div className="relative">

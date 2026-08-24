@@ -26,14 +26,30 @@ pub fn platform_injector() -> Box<dyn TextInjector> {
     return Box::new(crate::platform::linux::LinuxInjector::new());
 }
 
+/// How long to wait for the focused app to read the clipboard before restoring
+/// it. 120ms was fine for native text fields and too short for Electron apps,
+/// terminals and anything over remote desktop — those dropped the paste or got
+/// the old clipboard back mid-read.
+///
+/// ponytail: still a timer, because a process cannot observe another app
+/// reading the clipboard. Exposed as `clipboard_settle_ms` so a user on a slow
+/// target can raise it rather than filing a bug we can't reproduce.
+pub const DEFAULT_SETTLE_MS: u64 = 180;
+
+/// Upper bound on waiting for the focused app to *produce* a selection after a
+/// copy shortcut. Unlike paste, this one is observable, so we poll and return
+/// as soon as the clipboard changes.
+const COPY_POLL_TIMEOUT_MS: u64 = 800;
+const COPY_POLL_STEP_MS: u64 = 20;
+
 /// Deliver `text` to the focused app, choosing the mechanism:
 /// - `use_paste = false` → synthesize keystrokes (universal, but slow/racy for
 ///   long text and blocked on some Wayland compositors).
 /// - `use_paste = true` → put `text` on the clipboard, send the paste shortcut,
 ///   then restore the prior clipboard. Reliable for long transcripts.
-pub fn deliver(inj: &dyn TextInjector, text: &str, use_paste: bool) -> Result<()> {
+pub fn deliver(inj: &dyn TextInjector, text: &str, use_paste: bool, settle_ms: u64) -> Result<()> {
     if use_paste {
-        paste_text(inj, text)
+        paste_text(inj, text, settle_ms)
     } else {
         inj.inject_text(text)
     }
@@ -41,7 +57,7 @@ pub fn deliver(inj: &dyn TextInjector, text: &str, use_paste: bool) -> Result<()
 
 /// Clipboard-paste injection: save the current clipboard, set it to `text`,
 /// send the paste shortcut, then restore the original clipboard.
-fn paste_text(inj: &dyn TextInjector, text: &str) -> Result<()> {
+fn paste_text(inj: &dyn TextInjector, text: &str, settle_ms: u64) -> Result<()> {
     if text.is_empty() {
         return Ok(());
     }
@@ -58,9 +74,7 @@ fn paste_text(inj: &dyn TextInjector, text: &str) -> Result<()> {
 
     inj.send_paste()?;
 
-    // ponytail: fixed 120ms lets the target read the clipboard before we restore
-    // it. Make it a setting if some apps paste slower.
-    std::thread::sleep(std::time::Duration::from_millis(120));
+    std::thread::sleep(std::time::Duration::from_millis(settle_ms.max(1)));
 
     if let Some(prev) = prior {
         let _ = clipboard.set_text(prev);
@@ -85,11 +99,10 @@ pub fn copy_selection(inj: &dyn TextInjector) -> Result<Option<String>> {
 
     inj.send_copy()?;
 
-    // ponytail: same fixed 120ms as paste_text — long enough for the focused
-    // app to service the shortcut. Make it a setting if slow apps show up.
-    std::thread::sleep(std::time::Duration::from_millis(120));
-
-    let copied = clipboard.get_text().ok();
+    // Poll rather than sleep: a fast app answers in ~20ms and a slow one gets
+    // the full budget, instead of everyone paying the same fixed wait and slow
+    // apps still losing the race.
+    let copied = poll_clipboard_change(&mut clipboard, SENTINEL);
 
     if let Some(prev) = prior {
         let _ = clipboard.set_text(prev);
@@ -99,6 +112,26 @@ pub fn copy_selection(inj: &dyn TextInjector) -> Result<Option<String>> {
         Some(text) if text != SENTINEL && !text.is_empty() => Some(text),
         _ => None,
     })
+}
+
+/// Read the clipboard until it stops being `sentinel`, or the budget runs out.
+/// `None` means nothing was copied — either no selection, or the app ignored
+/// the shortcut.
+fn poll_clipboard_change(
+    clipboard: &mut arboard::Clipboard,
+    sentinel: &str,
+) -> Option<String> {
+    let step = std::time::Duration::from_millis(COPY_POLL_STEP_MS);
+    let attempts = COPY_POLL_TIMEOUT_MS / COPY_POLL_STEP_MS;
+
+    for _ in 0..attempts {
+        std::thread::sleep(step);
+        match clipboard.get_text() {
+            Ok(text) if text != sentinel && !text.is_empty() => return Some(text),
+            _ => continue,
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -132,7 +165,7 @@ mod tests {
     #[test]
     fn deliver_type_routes_to_keystrokes() {
         let spy = SpyInjector::default();
-        deliver(&spy, "hello", false).unwrap();
+        deliver(&spy, "hello", false, 1).unwrap();
         assert!(spy.typed.load(Ordering::SeqCst));
         assert!(!spy.pasted.load(Ordering::SeqCst));
     }

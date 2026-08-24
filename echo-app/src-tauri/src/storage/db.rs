@@ -76,5 +76,38 @@ fn migrate(conn: &Connection) -> Result<()> {
         ")?;
     }
 
+    if version < 2 {
+        conn.execute_batch("
+            -- Per-app overrides. A NULL column means \"inherit the global
+            -- setting\", so a profile can pin one behaviour without freezing
+            -- the rest. `app_match` is a lowercased executable / bundle id /
+            -- window class, matched exactly.
+            CREATE TABLE IF NOT EXISTS app_profiles (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                app_match        TEXT NOT NULL UNIQUE,
+                label            TEXT,
+                auto_inject      INTEGER,
+                injection_method TEXT,
+                profile_id       INTEGER REFERENCES profiles(id) ON DELETE SET NULL,
+                enabled          INTEGER NOT NULL DEFAULT 1,
+                created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            -- Every outbound request Echo itself makes. This is an honest record
+            -- of what the app did, not proof about what the machine did.
+            CREATE TABLE IF NOT EXISTS egress_log (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                host       TEXT NOT NULL,
+                purpose    TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_egress_created
+                ON egress_log (created_at DESC);
+
+            INSERT INTO schema_migrations (version) VALUES (2);
+        ")?;
+    }
+
     Ok(())
 }

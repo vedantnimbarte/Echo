@@ -106,6 +106,8 @@ impl BinaryManager {
             );
             let tmp_zip = self.bin_dir.join("whisper-cli.zip.part");
 
+            crate::core::egress::record(&url, "whisper binary download");
+
             let resp = reqwest::get(&url)
                 .await
                 .map_err(|e| EchoError::AsrProvider(e.to_string()))?

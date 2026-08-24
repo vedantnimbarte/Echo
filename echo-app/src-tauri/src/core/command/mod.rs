@@ -108,37 +108,47 @@ pub async fn run(
     ]);
 
     let client = reqwest::Client::new();
-    let (request, pointer) = match cfg.provider.as_str() {
+    // The URL is carried out of the match so the egress log can name the host
+    // that was actually contacted.
+    let (request, pointer, endpoint) = match cfg.provider.as_str() {
         "openai" => {
             let key = api_key.ok_or_else(|| {
                 EchoError::Config(
                     "Command mode is set to OpenAI but no API key is stored".into(),
                 )
             })?;
+            let url = "https://api.openai.com/v1/chat/completions".to_string();
             (
                 client
-                    .post("https://api.openai.com/v1/chat/completions")
+                    .post(&url)
                     .bearer_auth(key)
                     .json(&json!({ "model": cfg.model, "messages": messages })),
                 "/choices/0/message/content",
+                url,
             )
         }
-        "ollama" => (
-            client
-                .post(format!("{}/api/chat", cfg.endpoint.trim_end_matches('/')))
-                .json(&json!({
-                    "model": cfg.model,
-                    "messages": messages,
-                    "stream": false,
-                })),
-            "/message/content",
-        ),
+        "ollama" => {
+            let url = format!("{}/api/chat", cfg.endpoint.trim_end_matches('/'));
+            (
+                client
+                    .post(&url)
+                    .json(&json!({
+                        "model": cfg.model,
+                        "messages": messages,
+                        "stream": false,
+                    })),
+                "/message/content",
+                url,
+            )
+        }
         other => {
             return Err(EchoError::NotFound(format!(
                 "Unknown command-mode provider '{other}'"
             )))
         }
     };
+
+    crate::core::egress::record(&endpoint, "command mode");
 
     let resp = request.send().await.map_err(|e| {
         if cfg.provider == "ollama" && e.is_connect() {

@@ -1,6 +1,6 @@
 use rusqlite::{params, Connection, OptionalExtension};
 
-use super::models::{DictionaryEntry, TranscriptionRecord};
+use super::models::{AppProfile, DictionaryEntry, EgressRecord, Profile, TranscriptionRecord};
 use crate::error::Result;
 
 // ── Settings ─────────────────────────────────────────────────────────────────
@@ -103,6 +103,159 @@ pub fn list_history(conn: &Connection, limit: i64) -> Result<Vec<TranscriptionRe
 
 pub fn clear_history(conn: &Connection) -> Result<()> {
     conn.execute("DELETE FROM transcription_history", [])?;
+    Ok(())
+}
+
+// ── Dictionary profiles ──────────────────────────────────────────────────────
+//
+// `profiles` has existed since migration 1 but had no queries; per-app profiles
+// are the first feature that needs them.
+
+pub fn list_profiles(conn: &Connection) -> Result<Vec<Profile>> {
+    let mut stmt =
+        conn.prepare("SELECT id, name, created_at, updated_at FROM profiles ORDER BY name")?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok(Profile {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                created_at: r.get(2)?,
+                updated_at: r.get(3)?,
+            })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+pub fn insert_profile(conn: &Connection, name: &str) -> Result<i64> {
+    conn.execute("INSERT INTO profiles (name) VALUES (?1)", params![name])?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub fn delete_profile(conn: &Connection, id: i64) -> Result<()> {
+    conn.execute("DELETE FROM profiles WHERE id = ?1", params![id])?;
+    Ok(())
+}
+
+/// Move a dictionary entry into a profile, or back to global with `None`.
+pub fn set_dictionary_entry_profile(
+    conn: &Connection,
+    id: i64,
+    profile_id: Option<i64>,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE dictionary_entries SET profile_id = ?2 WHERE id = ?1",
+        params![id, profile_id],
+    )?;
+    Ok(())
+}
+
+// ── Per-app profiles ─────────────────────────────────────────────────────────
+
+fn row_to_app_profile(r: &rusqlite::Row) -> rusqlite::Result<AppProfile> {
+    Ok(AppProfile {
+        id: r.get(0)?,
+        app_match: r.get(1)?,
+        label: r.get(2)?,
+        auto_inject: r.get::<_, Option<i64>>(3)?.map(|v| v != 0),
+        injection_method: r.get(4)?,
+        profile_id: r.get(5)?,
+        enabled: r.get::<_, i64>(6)? != 0,
+    })
+}
+
+pub fn list_app_profiles(conn: &Connection) -> Result<Vec<AppProfile>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, app_match, label, auto_inject, injection_method, profile_id, enabled
+         FROM app_profiles ORDER BY app_match",
+    )?;
+    let rows = stmt
+        .query_map([], |r| row_to_app_profile(r))?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// The enabled profile matching `app_match`, if any. Matching is exact on the
+/// lowercased identifier the platform layer reports.
+pub fn find_app_profile(conn: &Connection, app_match: &str) -> Result<Option<AppProfile>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, app_match, label, auto_inject, injection_method, profile_id, enabled
+         FROM app_profiles WHERE app_match = ?1 AND enabled = 1",
+    )?;
+    let row = stmt
+        .query_row(params![app_match.to_lowercase()], |r| row_to_app_profile(r))
+        .optional()?;
+    Ok(row)
+}
+
+pub fn upsert_app_profile(conn: &Connection, p: &AppProfile) -> Result<i64> {
+    conn.execute(
+        "INSERT INTO app_profiles
+            (app_match, label, auto_inject, injection_method, profile_id, enabled)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(app_match) DO UPDATE SET
+            label = excluded.label,
+            auto_inject = excluded.auto_inject,
+            injection_method = excluded.injection_method,
+            profile_id = excluded.profile_id,
+            enabled = excluded.enabled",
+        params![
+            p.app_match.to_lowercase(),
+            p.label,
+            p.auto_inject.map(|v| v as i64),
+            p.injection_method,
+            p.profile_id,
+            p.enabled as i64,
+        ],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub fn delete_app_profile(conn: &Connection, id: i64) -> Result<()> {
+    conn.execute("DELETE FROM app_profiles WHERE id = ?1", params![id])?;
+    Ok(())
+}
+
+// ── Egress log ───────────────────────────────────────────────────────────────
+
+pub fn insert_egress(conn: &Connection, host: &str, purpose: &str) -> Result<()> {
+    conn.execute(
+        "INSERT INTO egress_log (host, purpose) VALUES (?1, ?2)",
+        params![host, purpose],
+    )?;
+    Ok(())
+}
+
+pub fn list_egress(conn: &Connection, limit: i64) -> Result<Vec<EgressRecord>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, host, purpose, created_at
+         FROM egress_log ORDER BY created_at DESC, id DESC LIMIT ?1",
+    )?;
+    let rows = stmt
+        .query_map(params![limit], |r| {
+            Ok(EgressRecord {
+                id: r.get(0)?,
+                host: r.get(1)?,
+                purpose: r.get(2)?,
+                created_at: r.get(3)?,
+            })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+pub fn clear_egress(conn: &Connection) -> Result<()> {
+    conn.execute("DELETE FROM egress_log", [])?;
+    Ok(())
+}
+
+/// Keep the log bounded — it is a rolling record, not an audit trail.
+pub fn trim_egress(conn: &Connection, keep: i64) -> Result<()> {
+    conn.execute(
+        "DELETE FROM egress_log WHERE id NOT IN
+            (SELECT id FROM egress_log ORDER BY id DESC LIMIT ?1)",
+        params![keep],
+    )?;
     Ok(())
 }
 
