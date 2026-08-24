@@ -17,6 +17,8 @@ Built with **Rust · Tauri v2 · React 19 · TypeScript · TailwindCSS v4 · SQL
 - ⌨️ **Text injection** into the focused app — type keystrokes *or* clipboard-paste
 - 📖 **Custom dictionary** with replacements, enable/disable, JSON import/export
 - ⚡ **Global hotkey** to toggle recording from anywhere
+- 🗣️ **Wake word** (opt-in) — say a phrase to start dictating hands-free, matched on-device
+- 🤖 **Command mode** (opt-in) — say a trigger word to rewrite the selection via a local LLM
 - 🔄 **Auto-update** from GitHub Releases (signed)
 - 🧩 **Plugin system** (experimental) for custom ASR / output / audio / dictionary
 - 📊 **Local-only telemetry**, opt-in, viewable and deletable — nothing leaves your device
@@ -41,7 +43,7 @@ Echo/
 │     └─ resources/bin/     # bundled whisper-cli lands here at package time
 ├─ packaging/               # winget / homebrew / flatpak / snap manifests
 ├─ .github/workflows/       # CI + release matrix
-├─ docs/                    # RELEASING.md, BUNDLING.md
+├─ docs/                    # RELEASING.md, BUNDLING.md, WAKE_WORD.md
 ├─ plan.md                  # phase-by-phase implementation plan & status
 ├─ CONTRIBUTING.md          # dev setup + architecture
 └─ PLUGINS.md               # plugin manifest + SDK contract
@@ -219,6 +221,7 @@ Inside it:
 
 - `echo.db` — SQLite: settings, history, telemetry, dictionary.
 - `models/` — downloaded Whisper models (`ggml-*.bin`).
+- `wake/` — downloaded wake-word models (`*.onnx`), only if wake word is enabled.
 - `bin/` — the downloaded `whisper-cli` (Windows).
 - `plugins/` — installed plugins.
 
@@ -352,6 +355,7 @@ See [`plan.md`](plan.md) for the full phase breakdown. Summary:
 - [PLUGINS.md](PLUGINS.md) — plugin manifest & SDK contract
 - [RELEASING.md](docs/RELEASING.md) — cutting releases & auto-update signing
 - [BUNDLING.md](docs/BUNDLING.md) — staging the offline Whisper engine
+- [WAKE_WORD.md](docs/WAKE_WORD.md) — wake word + command mode, and training a custom phrase
 - [plan.md](plan.md) — implementation plan
 
 ## License
