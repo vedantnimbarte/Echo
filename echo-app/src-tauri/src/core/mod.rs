@@ -1,9 +1,12 @@
 pub mod asr;
 pub mod audio;
+pub mod command;
 pub mod dictionary;
+pub mod download;
 pub mod events;
 pub mod injection;
 pub mod plugins;
 pub mod runtime_deps;
 pub mod telemetry;
 pub mod vad;
+pub mod wake;

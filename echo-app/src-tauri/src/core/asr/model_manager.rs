@@ -1,8 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 
 use crate::error::{EchoError, Result};
@@ -113,60 +111,12 @@ impl ModelManager {
             .ok_or_else(|| EchoError::NotFound(format!("Unknown model '{name}'")))
     }
 
-    /// Download a model, streaming to a temp file and emitting fractional
-    /// progress (0.0..1.0) on `progress_tx`. The file is renamed into place
-    /// only after a complete download so partial files never look valid.
+    /// Download a model into the models directory, emitting fractional
+    /// progress (0.0..1.0) on `progress_tx`.
     pub async fn download(&self, name: &str, progress_tx: mpsc::Sender<f32>) -> Result<PathBuf> {
         let spec = Self::spec(name)?;
-        tokio::fs::create_dir_all(&self.models_dir)
-            .await
-            .map_err(|e| EchoError::Config(e.to_string()))?;
-
         let final_path = self.model_path(name);
-        let tmp_path = final_path.with_extension("part");
-
-        let resp = reqwest::get(spec.url)
-            .await
-            .map_err(|e| EchoError::AsrProvider(e.to_string()))?
-            .error_for_status()
-            .map_err(|e| EchoError::AsrProvider(e.to_string()))?;
-
-        let total = resp.content_length();
-        let mut downloaded: u64 = 0;
-        let mut last_emitted = -1.0_f32;
-
-        let mut file = tokio::fs::File::create(&tmp_path)
-            .await
-            .map_err(|e| EchoError::Config(e.to_string()))?;
-        let mut stream = resp.bytes_stream();
-
-        while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|e| EchoError::AsrProvider(e.to_string()))?;
-            file.write_all(&chunk)
-                .await
-                .map_err(|e| EchoError::Config(e.to_string()))?;
-            downloaded += chunk.len() as u64;
-
-            if let Some(total) = total {
-                let progress = (downloaded as f32 / total as f32).clamp(0.0, 1.0);
-                // Throttle: only emit on ~1% changes to avoid flooding the bus.
-                if progress - last_emitted >= 0.01 {
-                    last_emitted = progress;
-                    let _ = progress_tx.send(progress).await;
-                }
-            }
-        }
-
-        file.flush()
-            .await
-            .map_err(|e| EchoError::Config(e.to_string()))?;
-        drop(file);
-
-        tokio::fs::rename(&tmp_path, &final_path)
-            .await
-            .map_err(|e| EchoError::Config(e.to_string()))?;
-
-        let _ = progress_tx.send(1.0).await;
+        crate::core::download::download_file(spec.url, &final_path, progress_tx).await?;
         Ok(final_path)
     }
 }

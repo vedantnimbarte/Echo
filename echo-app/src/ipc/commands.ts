@@ -34,6 +34,13 @@ export interface TelemetrySummaryItem {
   count: number;
 }
 
+export interface WakePhraseInfo {
+  id: string;
+  label: string;
+  downloaded: boolean;
+  custom: boolean;
+}
+
 export interface PluginInfo {
   name: string;
   version: string;
@@ -129,6 +136,29 @@ export const commands = {
     invoke<void>("uninstall_plugin", { name }),
 
   quit: () => invoke<void>("quit"),
+
+  listWakeWords: () => invoke<WakePhraseInfo[]>("list_wake_words"),
+
+  downloadWakeModel: (name: string) =>
+    invoke<void>("download_wake_model", { name }),
+
+  importWakeModel: (path: string) => invoke<void>("import_wake_model", { path }),
+
+  setWakeWordEnabled: (enabled: boolean) =>
+    invoke<void>("set_wake_word_enabled", { enabled }),
+
+  setWakeWordModel: (name: string) =>
+    invoke<void>("set_wake_word_model", { name }),
+
+  setWakeWordSensitivity: (threshold: number) =>
+    invoke<void>("set_wake_word_sensitivity", { threshold }),
+
+  wakeWordReady: () => invoke<boolean>("wake_word_ready"),
+
+  wakeWordActive: () => invoke<boolean>("wake_word_active"),
+
+  /** "disabled" | "model-missing" | "listening" | "idle" */
+  wakeWordStatus: () => invoke<string>("wake_word_status"),
 
   getHotkey: () => invoke<string>("get_hotkey"),
 

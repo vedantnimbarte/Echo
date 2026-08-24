@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::mpsc;
 use tracing::{error, info};
@@ -5,7 +7,9 @@ use tracing::{error, info};
 use crate::{
     core::{
         asr::TranscriptSegment,
+        command::CommandConfig,
         events::AppEvent,
+        injection::TextInjector,
         vad::{EnergyVad, SileroVad, Vad},
     },
     error::{EchoError, Result},
@@ -16,6 +20,19 @@ use crate::{
 pub async fn start_recording(
     app: AppHandle,
     state: State<'_, AppState>,
+    device_name: Option<String>,
+    language: Option<String>,
+) -> Result<()> {
+    begin_recording(app, state.inner(), device_name, language).await
+}
+
+/// Start a capture session.
+///
+/// Split out of the command so the wake-word listener can start recording
+/// directly, without bouncing a request through the frontend.
+pub async fn begin_recording(
+    app: AppHandle,
+    state: &AppState,
     device_name: Option<String>,
     language: Option<String>,
 ) -> Result<()> {
@@ -140,6 +157,16 @@ pub async fn start_recording(
         (auto, delay, paste)
     };
 
+    // Command mode: a transcript opening with the prefix word is an instruction
+    // for the LLM rather than text to type. Read once per session so a settings
+    // change applies to the next recording without a restart.
+    let command_cfg = command_config(state);
+    let command_key = if command_cfg.enabled && command_cfg.provider == "openai" {
+        crate::storage::keychain::get_api_key("openai").unwrap_or(None)
+    } else {
+        None
+    };
+
     let app_clone = app.clone();
     tokio::spawn(async move {
         while let Some(segment) = transcript_rx.recv().await {
@@ -155,14 +182,48 @@ pub async fn start_recording(
                     error!("Failed to emit transcript event: {e}");
                 }
 
+                // Command mode intercepts before injection: the text to deliver
+                // becomes the model's reply, not the transcript itself.
+                let instruction = command_cfg
+                    .enabled
+                    .then(|| crate::core::command::parse_command(&processed, &command_cfg.prefix))
+                    .flatten();
+
+                let to_inject = match instruction {
+                    None => processed,
+                    Some(instruction) => {
+                        match run_command(
+                            &command_cfg,
+                            command_key.as_deref(),
+                            instruction,
+                            &injector,
+                        )
+                        .await
+                        {
+                            Ok(reply) => reply,
+                            Err(e) => {
+                                error!("Command mode failed: {e}");
+                                let _ = app_clone.emit(
+                                    AppEvent::ErrorOccurred {
+                                        message: String::new(),
+                                    }
+                                    .event_name(),
+                                    serde_json::json!({ "message": e.to_string() }),
+                                );
+                                continue;
+                            }
+                        }
+                    }
+                };
+
                 // Inject into the focused application if enabled.
-                if auto_inject && !processed.is_empty() {
+                if auto_inject && !to_inject.is_empty() {
                     if inject_delay_ms > 0 {
                         tokio::time::sleep(std::time::Duration::from_millis(inject_delay_ms)).await;
                     }
                     let inj = injector.clone();
                     let result = tokio::task::spawn_blocking(move || {
-                        crate::core::injection::deliver(inj.as_ref(), &processed, use_paste)
+                        crate::core::injection::deliver(inj.as_ref(), &to_inject, use_paste)
                     })
                     .await;
                     match result {
@@ -190,6 +251,12 @@ pub async fn stop_recording(
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> Result<()> {
+    end_recording(app, state.inner()).await
+}
+
+/// Stop the capture session and, if wake-word listening is enabled, hand the
+/// microphone back to the listener so the next phrase is heard.
+pub async fn end_recording(app: AppHandle, state: &AppState) -> Result<()> {
     {
         let mut recording = state.recording.lock().unwrap();
         if !*recording {
@@ -203,10 +270,51 @@ pub async fn stop_recording(
         .map_err(|e| EchoError::Plugin(e.to_string()))?;
     info!("Recording stopped");
 
+    crate::commands::wake::rearm(&app);
+
     Ok(())
 }
 
 #[tauri::command]
 pub fn is_recording(state: State<'_, AppState>) -> bool {
     *state.recording.lock().unwrap()
+}
+
+/// Read command-mode settings, falling back to the local-first defaults.
+fn command_config(state: &AppState) -> CommandConfig {
+    let defaults = CommandConfig::default();
+    let conn = state.db.lock().unwrap();
+    let get = |key: &str| {
+        crate::storage::repositories::get_setting(&conn, key)
+            .unwrap_or(None)
+            .filter(|s| !s.is_empty())
+    };
+
+    CommandConfig {
+        enabled: get("command_mode_enabled").map(|v| v == "true").unwrap_or(false),
+        prefix: get("command_prefix").unwrap_or(defaults.prefix),
+        provider: get("command_llm_provider").unwrap_or(defaults.provider),
+        model: get("command_llm_model").unwrap_or(defaults.model),
+        endpoint: get("ollama_endpoint").unwrap_or(defaults.endpoint),
+    }
+}
+
+/// Grab whatever the focused app has selected, then run the instruction against
+/// it. With no selection the model answers the instruction on its own.
+async fn run_command(
+    cfg: &CommandConfig,
+    api_key: Option<&str>,
+    instruction: &str,
+    injector: &Arc<dyn TextInjector>,
+) -> Result<String> {
+    // Reading the selection synthesizes a copy shortcut and touches the OS
+    // clipboard, so it must not run on the async runtime.
+    let inj = injector.clone();
+    let selection = tokio::task::spawn_blocking(move || {
+        crate::core::injection::copy_selection(inj.as_ref())
+    })
+    .await
+    .map_err(|e| EchoError::Injection(format!("selection task panicked: {e}")))??;
+
+    crate::core::command::run(cfg, api_key, instruction, selection.as_deref()).await
 }

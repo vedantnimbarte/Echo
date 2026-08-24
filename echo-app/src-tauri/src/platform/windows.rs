@@ -69,47 +69,60 @@ impl TextInjector for WindowsInjector {
     }
 
     fn send_paste(&self) -> Result<()> {
-        #[cfg(target_os = "windows")]
-        {
-            use windows::Win32::UI::Input::KeyboardAndMouse::{
-                SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VIRTUAL_KEY,
-            };
+        send_ctrl_chord(VK_V, "paste")
+    }
 
-            const VK_CONTROL: u16 = 0x11;
-            const VK_V: u16 = 0x56;
+    fn send_copy(&self) -> Result<()> {
+        send_ctrl_chord(VK_C, "copy")
+    }
+}
 
-            fn key(vk: u16, up: bool) -> INPUT {
-                INPUT {
-                    r#type: INPUT_KEYBOARD,
-                    Anonymous: INPUT_0 {
-                        ki: KEYBDINPUT {
-                            wVk: VIRTUAL_KEY(vk),
-                            wScan: 0,
-                            dwFlags: if up { KEYEVENTF_KEYUP } else { Default::default() },
-                            time: 0,
-                            dwExtraInfo: 0,
-                        },
+const VK_CONTROL: u16 = 0x11;
+const VK_C: u16 = 0x43;
+const VK_V: u16 = 0x56;
+
+/// Send Ctrl+`vk` as a four-event chord (Ctrl↓ key↓ key↑ Ctrl↑).
+/// `label` only names the shortcut in the error message.
+fn send_ctrl_chord(vk: u16, label: &str) -> Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{
+            SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VIRTUAL_KEY,
+        };
+
+        fn key(vk: u16, up: bool) -> INPUT {
+            INPUT {
+                r#type: INPUT_KEYBOARD,
+                Anonymous: INPUT_0 {
+                    ki: KEYBDINPUT {
+                        wVk: VIRTUAL_KEY(vk),
+                        wScan: 0,
+                        dwFlags: if up { KEYEVENTF_KEYUP } else { Default::default() },
+                        time: 0,
+                        dwExtraInfo: 0,
                     },
-                }
+                },
             }
-
-            // Ctrl↓ V↓ V↑ Ctrl↑
-            let inputs = [
-                key(VK_CONTROL, false),
-                key(VK_V, false),
-                key(VK_V, true),
-                key(VK_CONTROL, true),
-            ];
-            let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
-            if sent != inputs.len() as u32 {
-                return Err(EchoError::Injection(
-                    "SendInput did not process the paste shortcut".into(),
-                ));
-            }
-            Ok(())
         }
 
-        #[cfg(not(target_os = "windows"))]
+        let inputs = [
+            key(VK_CONTROL, false),
+            key(vk, false),
+            key(vk, true),
+            key(VK_CONTROL, true),
+        ];
+        let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
+        if sent != inputs.len() as u32 {
+            return Err(EchoError::Injection(format!(
+                "SendInput did not process the {label} shortcut"
+            )));
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (vk, label);
         Err(EchoError::Injection(
             "Windows injector called on non-Windows platform".into(),
         ))

@@ -114,6 +114,12 @@ pub fn run() {
                 }
             }
 
+            // Wake-word models live beside the Whisper models; nothing is
+            // fetched until the user enables the feature.
+            let wake_dir = data_dir.join("wake");
+            std::fs::create_dir_all(&wake_dir)?;
+            let wake_models = Arc::new(core::wake::WakeModelManager::new(wake_dir));
+
             // Load the Silero VAD model; energy VAD is the fallback on failure.
             // (ONNX Runtime is statically linked into the binary, so there is
             // nothing to bundle or locate for this.)
@@ -195,6 +201,8 @@ pub fn run() {
                 models: model_manager,
                 binaries: binary_manager,
                 silero,
+                wake_models,
+                wake_active: Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 dictionary: Arc::new(RwLock::new(DictionaryEngine::new(entries))),
                 injector: Arc::from(platform_injector()),
                 telemetry,
@@ -210,6 +218,9 @@ pub fn run() {
             if let Err(e) = app.global_shortcut().register(hotkey.as_str()) {
                 tracing::warn!("Failed to register global hotkey '{hotkey}': {e}");
             }
+
+            // Arm the wake-word listener if the user enabled it last session.
+            commands::wake::rearm(app.handle());
 
             // Surface the settings window on first launch so onboarding can run.
             if !onboarding_done {
@@ -257,6 +268,15 @@ pub fn run() {
             commands::plugins::enable_plugin,
             commands::plugins::disable_plugin,
             commands::plugins::uninstall_plugin,
+            commands::wake::set_wake_word_enabled,
+            commands::wake::set_wake_word_model,
+            commands::wake::set_wake_word_sensitivity,
+            commands::wake::list_wake_words,
+            commands::wake::download_wake_model,
+            commands::wake::import_wake_model,
+            commands::wake::wake_word_ready,
+            commands::wake::wake_word_active,
+            commands::wake::wake_word_status,
             commands::settings::get_setting,
             commands::settings::set_setting,
         ])

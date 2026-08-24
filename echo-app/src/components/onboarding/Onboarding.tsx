@@ -6,6 +6,7 @@ import {
   ShieldCheck,
   Download,
   Keyboard,
+  Radio,
   Sparkles,
   Check,
   Loader2,
@@ -17,15 +18,17 @@ import { commands } from "../../ipc/commands";
 import { echoEvents } from "../../ipc/events";
 import { Waveform } from "../pill/Waveform";
 import { CloudProviders } from "../settings/CloudProviders";
+import { WakeWordSettings } from "../settings/WakeWordSettings";
 import { HotkeyCapture } from "../common/HotkeyCapture";
 
-type StepId = "welcome" | "mic" | "engine" | "permissions" | "hotkey";
+type StepId = "welcome" | "mic" | "engine" | "permissions" | "hotkey" | "wake";
 const STEPS: { id: StepId; label: string; Icon: React.ElementType }[] = [
   { id: "welcome", label: "Welcome", Icon: Sparkles },
   { id: "mic", label: "Microphone", Icon: Mic },
   { id: "engine", label: "Transcription", Icon: Download },
   { id: "permissions", label: "Permissions", Icon: ShieldCheck },
   { id: "hotkey", label: "Shortcut", Icon: Keyboard },
+  { id: "wake", label: "Wake word", Icon: Radio },
 ];
 
 export function Onboarding({ onDone }: { onDone: () => void }) {
@@ -87,6 +90,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           {step === "engine" && <EngineStep />}
           {step === "permissions" && <PermissionsStep />}
           {step === "hotkey" && <HotkeyStep />}
+          {step === "wake" && <WakeStep />}
         </div>
       </div>
 
@@ -427,7 +431,23 @@ function HotkeyStep() {
         }
       />
       <p className="mt-3 text-center text-[12px] text-[var(--ink-muted)]">
-        You're all set — press <span className="text-[var(--ink)]">Finish</span> to start using Echo.
+        That's the essentials. One optional extra on the next step.
+      </p>
+    </div>
+  );
+}
+
+function WakeStep() {
+  return (
+    <div>
+      <StepHeading
+        title="Start by voice (optional)"
+        sub="Skip this and the shortcut is all you need. Turn it on and Echo listens for a wake phrase so you never have to reach for the keyboard — useful if typing hurts, or your hands are busy."
+      />
+      <WakeWordSettings />
+      <p className="mt-3 text-[11px] leading-snug text-[var(--ink-muted)]">
+        Leaving this off keeps the microphone closed until you press your
+        shortcut. You can turn it on any time in Settings.
       </p>
     </div>
   );

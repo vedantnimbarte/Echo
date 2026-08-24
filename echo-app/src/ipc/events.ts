@@ -53,6 +53,16 @@ export const echoEvents = {
 
   onHotkeyToggle: (cb: () => void) => listen("echo://hotkey-toggle", cb),
 
+  // The wake phrase was spoken; dictation is about to start.
+  onWakeDetected: (cb: (phrase: string, score: number) => void) =>
+    listen<{ phrase: string; score: number }>("echo://wake-detected", (e) =>
+      cb(e.payload.phrase, e.payload.score)
+    ),
+
+  // Wake-model download progress (bare 0..1 fraction).
+  onWakeModelProgress: (cb: (progress: number) => void) =>
+    listen<number>("echo://wake-model-progress", (e) => cb(e.payload)),
+
   // Per-chunk RMS level (0..~1) of the audio currently being captured. Emitted
   // as a bare number so the pill can drive a live waveform.
   onAudioLevel: (cb: (level: number) => void) =>
