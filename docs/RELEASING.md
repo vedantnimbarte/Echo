@@ -47,6 +47,11 @@ signing keypair.
 
 4. Flip `bundle.createUpdaterArtifacts` back to `true` in `tauri.conf.json`.
 
+5. Flip `UPDATER_CONFIGURED` to `true` in `echo-app/src/update.ts`. Until then
+   the app never calls the updater at all — with no `latest.json` published the
+   plugin logs an ERROR on every launch, before the frontend's `catch` can
+   swallow it.
+
 Commit the pubkey and the flag together; releases from then on sign updates and
 the app checks on launch. Installs made *before* this change won't auto-update
 to it — they have no public key to verify against — so those users reinstall
