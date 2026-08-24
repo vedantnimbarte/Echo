@@ -5,6 +5,9 @@ mod platform;
 mod state;
 mod storage;
 
+#[cfg(test)]
+mod pipeline_tests;
+
 use std::sync::{Arc, Mutex};
 
 use tauri::{Emitter, Manager};

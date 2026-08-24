@@ -77,7 +77,7 @@ pub async fn begin_recording(
             .filter(|s| !s.is_empty() && s != "auto")
     });
 
-    let mut audio_rx = state.audio.start_capture(device_name.as_deref())?;
+    let audio_rx = state.audio.start_capture(device_name.as_deref())?;
     let (transcript_tx, mut transcript_rx) = mpsc::channel::<TranscriptSegment>(32);
 
     // VAD gating stage: sits between raw audio capture and the ASR pipeline.
@@ -97,45 +97,25 @@ pub async fn begin_recording(
     let (vad_tx, vad_rx) = mpsc::channel::<Vec<f32>>(256);
     let level_app = app.clone();
     tokio::spawn(async move {
-        let mut vad: Box<dyn Vad> = match silero_model {
+        let vad: Box<dyn Vad> = match silero_model {
             Some(model) if vad_engine != "energy" => Box::new(SileroVad::new(model)),
             _ => Box::new(EnergyVad::new(0.01)),
         };
-        let mut was_speaking = false;
-        while let Some(chunk) = audio_rx.recv().await {
-            if chunk.is_empty() {
-                // Audio error/stop sentinel from the capture layer — flush and exit.
-                let _ = vad_tx.send(Vec::new()).await;
-                break;
+        vad_gate(audio_rx, vad, vad_tx, move |event| match event {
+            // Payload is the bare f32 (read as `event.payload` in JS).
+            VadEvent::Level(rms) => {
+                let _ = level_app.emit("echo://audio-level", rms);
             }
-            // Emit a per-chunk RMS level so the floating pill can render a live
-            // waveform that reflects the audio actually being captured. Computed
-            // before the VAD gate so the visualization stays responsive in near-
-            // silence. Payload is the bare f32 (read as `event.payload` in JS).
-            let rms = (chunk.iter().map(|s| s * s).sum::<f32>() / chunk.len() as f32).sqrt();
-            let _ = level_app.emit("echo://audio-level", rms);
-            if vad.is_speech(&chunk) {
-                if !was_speaking {
-                    // Rising edge: the user just started talking. Drives the
-                    // pill's listening state in voice-activated mode.
-                    was_speaking = true;
-                    let _ = level_app.emit("echo://speech-started", ());
-                }
-                if vad_tx.send(chunk).await.is_err() {
-                    break;
-                }
-            } else if was_speaking {
-                // Falling edge: speech ended — flush the utterance to ASR and
-                // tell the pill we're now transcribing.
-                was_speaking = false;
+            // Rising edge: drives the pill's listening state in voice-activated mode.
+            VadEvent::SpeechStarted => {
+                let _ = level_app.emit("echo://speech-started", ());
+            }
+            // Falling edge: the pill switches to "transcribing".
+            VadEvent::SpeechEnded => {
                 let _ = level_app.emit("echo://speech-ended", ());
-                if vad_tx.send(Vec::new()).await.is_err() {
-                    break;
-                }
             }
-        }
-        // Capture closed (recording stopped): flush any trailing utterance.
-        let _ = vad_tx.send(Vec::new()).await;
+        })
+        .await;
     });
 
     let asr = state.asr.clone();
@@ -316,17 +296,76 @@ pub fn is_recording(state: State<'_, AppState>) -> bool {
     *state.recording.lock().unwrap()
 }
 
+/// Signals the VAD stage produces for the UI.
+pub(crate) enum VadEvent {
+    /// Per-chunk RMS of the captured audio, for the live waveform.
+    Level(f32),
+    SpeechStarted,
+    SpeechEnded,
+}
+
+/// The VAD gating stage: sits between raw audio capture and the ASR pipeline,
+/// forwarding only speech chunks and emitting an empty-vec sentinel at each
+/// speech→silence transition so the ASR provider knows an utterance ended.
+///
+/// Split out of [`begin_recording`] so the pipeline can be driven in tests
+/// without a Tauri app — `events` receives exactly what the app forwards to the
+/// frontend. The VAD instance belongs entirely to this task (architectural
+/// rule 8).
+pub(crate) async fn vad_gate<F>(
+    mut audio_rx: mpsc::Receiver<Vec<f32>>,
+    mut vad: Box<dyn Vad>,
+    vad_tx: mpsc::Sender<Vec<f32>>,
+    events: F,
+) where
+    F: Fn(VadEvent),
+{
+    let mut was_speaking = false;
+
+    while let Some(chunk) = audio_rx.recv().await {
+        if chunk.is_empty() {
+            // Audio error/stop sentinel from the capture layer — flush and exit.
+            let _ = vad_tx.send(Vec::new()).await;
+            return;
+        }
+
+        // Computed before the VAD gate so the visualization stays responsive in
+        // near-silence.
+        let rms = (chunk.iter().map(|s| s * s).sum::<f32>() / chunk.len() as f32).sqrt();
+        events(VadEvent::Level(rms));
+
+        if vad.is_speech(&chunk) {
+            if !was_speaking {
+                was_speaking = true;
+                events(VadEvent::SpeechStarted);
+            }
+            if vad_tx.send(chunk).await.is_err() {
+                return;
+            }
+        } else if was_speaking {
+            was_speaking = false;
+            events(VadEvent::SpeechEnded);
+            if vad_tx.send(Vec::new()).await.is_err() {
+                return;
+            }
+        }
+    }
+
+    // Capture closed (recording stopped): flush any trailing utterance.
+    let _ = vad_tx.send(Vec::new()).await;
+}
+
 /// How one finished transcript should be delivered. Resolved per utterance so
 /// a per-app profile — and any settings change — takes effect immediately.
-struct Delivery {
-    auto_inject: bool,
-    use_paste: bool,
-    delay_ms: u64,
+pub(crate) struct Delivery {
+    pub auto_inject: bool,
+    pub use_paste: bool,
+    pub delay_ms: u64,
     /// Dictionary profile to scope replacements to, if the focused app selects one.
-    dictionary_profile: Option<i64>,
-    record_history: bool,
+    pub dictionary_profile: Option<i64>,
+    pub record_history: bool,
     /// How long to let the target read the clipboard before restoring it.
-    settle_ms: u64,
+    pub settle_ms: u64,
 }
 
 /// Resolve delivery settings for the focused app.
@@ -334,7 +373,10 @@ struct Delivery {
 /// Global settings are the baseline; a matching per-app profile overrides only
 /// the fields it actually sets (a `NULL` column means "inherit"). With no
 /// focused app or no profile, this is exactly the old global behaviour.
-fn resolve_delivery(conn: &rusqlite::Connection, focused: Option<&str>) -> Delivery {
+pub(crate) fn resolve_delivery(
+    conn: &rusqlite::Connection,
+    focused: Option<&str>,
+) -> Delivery {
     use crate::storage::repositories as repo;
 
     let get = |key: &str| repo::get_setting(conn, key).unwrap_or(None);

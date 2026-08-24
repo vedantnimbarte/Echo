@@ -1,7 +1,7 @@
 name: CI
 
-# Fast verification on every push/PR: dependency audit, Rust lint, and
-# frontend/website typecheck + build. The heavier cross-platform installer
+# Fast verification on every push/PR: dependency audit, Rust lint + tests,
+# and frontend/website typecheck + build. The heavier cross-platform installer
 # build lives in release.yml and runs only on tags.
 on:
   push:
@@ -46,6 +46,11 @@ jobs:
           workspaces: echo-app/src-tauri
       - name: cargo clippy
         run: cargo clippy --manifest-path echo-app/src-tauri/Cargo.toml --all-targets
+
+      # `clippy --all-targets` compiles the tests but never runs them, so until
+      # now nothing in CI executed a single assertion.
+      - name: cargo test
+        run: cargo test --manifest-path echo-app/src-tauri/Cargo.toml --lib
 
   frontend:
     runs-on: ubuntu-latest
