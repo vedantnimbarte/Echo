@@ -19,6 +19,11 @@ static MODEL_BYTES: &[u8] = include_bytes!("../../../resources/silero_vad.onnx")
 
 /// 512 samples = one 32 ms frame at 16 kHz (the only window v5 accepts at 16k).
 const FRAME: usize = 512;
+/// v5 prepends the tail of the previous frame to each window: the graph is fed
+/// `CONTEXT + FRAME` samples, not `FRAME`. The `input` dim is dynamic, so ONNX
+/// Runtime accepts a bare 512-sample frame and silently returns ~0 speech
+/// probabilities instead of erroring.
+const CONTEXT: usize = 64;
 const SAMPLE_RATE: i64 = 16_000;
 
 /// Probability above which a frame counts as speech (rising edge).
@@ -49,14 +54,15 @@ impl SileroModel {
         })
     }
 
-    /// Run one 512-sample frame, returning the speech probability and the next
-    /// recurrent state. `state` is the [2,1,128] tensor (zeros to start).
-    fn infer(&self, frame: &[f32], state: &[f32]) -> Result<(f32, Vec<f32>)> {
-        let input = Tensor::from_array(([1usize, FRAME], frame.to_vec()))
+    /// Run one `CONTEXT + FRAME` window, returning the speech probability and
+    /// the next recurrent state. `state` is the [2,1,128] tensor (zeros to
+    /// start).
+    fn infer(&self, window: &[f32], state: &[f32]) -> Result<(f32, Vec<f32>)> {
+        let input = Tensor::from_array(([1usize, window.len()], window.to_vec()))
             .map_err(|e| EchoError::AsrProvider(format!("vad input: {e}")))?;
         let state_t = Tensor::from_array(([2usize, 1, 128], state.to_vec()))
             .map_err(|e| EchoError::AsrProvider(format!("vad state: {e}")))?;
-        let sr_t = Tensor::from_array(([1usize], vec![SAMPLE_RATE]))
+        let sr_t = Tensor::from_array(([0usize; 0], vec![SAMPLE_RATE]))
             .map_err(|e| EchoError::AsrProvider(format!("vad sr: {e}")))?;
 
         let mut session = self
@@ -90,6 +96,8 @@ pub struct SileroVad {
     state: Vec<f32>,
     /// Samples not yet consumed into a full 512-frame.
     buffer: Vec<f32>,
+    /// Tail of the previous frame, prepended to the next window (see [`CONTEXT`]).
+    context: Vec<f32>,
     triggered: bool,
     silent_count: usize,
 }
@@ -100,6 +108,7 @@ impl SileroVad {
             model,
             state: vec![0.0; 2 * 128],
             buffer: Vec::with_capacity(FRAME * 2),
+            context: vec![0.0; CONTEXT],
             triggered: false,
             silent_count: 0,
         }
@@ -124,7 +133,11 @@ impl Vad for SileroVad {
         self.buffer.extend_from_slice(samples);
         while self.buffer.len() >= FRAME {
             let frame: Vec<f32> = self.buffer.drain(..FRAME).collect();
-            match self.model.infer(&frame, &self.state) {
+            let mut window = Vec::with_capacity(CONTEXT + FRAME);
+            window.extend_from_slice(&self.context);
+            window.extend_from_slice(&frame);
+            self.context = frame[FRAME - CONTEXT..].to_vec();
+            match self.model.infer(&window, &self.state) {
                 Ok((prob, next_state)) => {
                     self.state = next_state;
                     self.ingest_prob(prob);
@@ -144,6 +157,7 @@ impl Vad for SileroVad {
     fn reset(&mut self) {
         self.state = vec![0.0; 2 * 128];
         self.buffer.clear();
+        self.context = vec![0.0; CONTEXT];
         self.triggered = false;
         self.silent_count = 0;
     }
@@ -169,5 +183,42 @@ mod tests {
             !vad.is_speech(&silence),
             "pure silence must not trigger speech"
         );
+    }
+
+    /// A 16 kHz mono clip of clear speech, so the detector is pinned from both
+    /// sides. The silence test alone passes even when the model is fed a
+    /// malformed window and returns ~0 for everything — which is exactly how
+    /// the missing [`CONTEXT`] prefix went unnoticed and gated every utterance
+    /// out of the ASR pipeline.
+    #[test]
+    fn silero_detects_real_speech() {
+        static SPEECH_WAV: &[u8] = include_bytes!("../../../resources/test_speech_16k.wav");
+
+        let model = Arc::new(SileroModel::load().expect("Silero session should build"));
+        let mut vad = SileroVad::new(model);
+
+        // Fed in ~10 ms chunks, the way the capture task delivers them.
+        let triggered = pcm_s16_mono(SPEECH_WAV)
+            .chunks(160)
+            .any(|chunk| vad.is_speech(chunk));
+
+        assert!(triggered, "speech must trigger the detector");
+    }
+
+    /// Decode a 16-bit PCM mono WAV into the normalised f32 samples the VAD
+    /// expects.
+    fn pcm_s16_mono(bytes: &[u8]) -> Vec<f32> {
+        let mut i = 12; // skip "RIFF" + size + "WAVE"
+        while i + 8 <= bytes.len() {
+            let len = u32::from_le_bytes(bytes[i + 4..i + 8].try_into().unwrap()) as usize;
+            if &bytes[i..i + 4] == b"data" {
+                return bytes[i + 8..(i + 8 + len).min(bytes.len())]
+                    .chunks_exact(2)
+                    .map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0)
+                    .collect();
+            }
+            i += 8 + len + (len & 1); // chunks are word-aligned
+        }
+        panic!("no data chunk in fixture");
     }
 }
