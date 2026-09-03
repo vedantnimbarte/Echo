@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import PageHero from "@/components/site/PageHero";
 import Reveal from "@/components/ui/Reveal";
 import Magnetic from "@/components/ui/Magnetic";
+import CopyLine from "@/components/ui/CopyLine";
 import { DOWNLOADS, INSTALL, LINKS, VERSION } from "@/lib/links";
 
 export const metadata: Metadata = {
@@ -91,7 +92,7 @@ export default function DownloadPage() {
       <section className="mx-auto mt-14 max-w-7xl px-6 sm:px-10">
         <div className="grid gap-4 lg:grid-cols-3">
           {PLATFORMS.map((p, i) => (
-            <Reveal key={p.key} delay={i * 0.1}>
+            <Reveal key={p.key} delay={i * 0.1} className="min-w-0">
               <div
                 className={`flex h-full flex-col rounded-card p-6 ${
                   p.featured ? "panel glow-ring" : "panel"
@@ -101,7 +102,7 @@ export default function DownloadPage() {
                   <span className="text-glow">{ICONS[p.key]}</span>
                   {p.featured && (
                     <span className="font-mono text-[0.62rem] uppercase tracking-[0.2em] text-glow">
-                      most popular
+                      recommended
                     </span>
                   )}
                 </div>
@@ -137,16 +138,11 @@ export default function DownloadPage() {
                   </p>
                 )}
 
-                <div className="mt-6 rounded-xl border border-line bg-ink/50 px-4 py-3">
-                  <p className="font-mono text-[0.6rem] uppercase tracking-[0.2em] text-faint">
-                    or via terminal
-                  </p>
-                  <code className="mt-1.5 block break-all font-mono text-xs text-glow">
-                    {p.cmd}
-                  </code>
+                <div className="mt-6">
+                  <CopyLine label="or via terminal" command={p.cmd} />
                 </div>
 
-                <p className="mt-5 border-t border-line pt-4 font-mono text-[0.7rem] text-faint">
+                <p className="datum mt-5 border-t border-line pt-4 leading-relaxed">
                   {p.req}
                 </p>
               </div>
@@ -257,7 +253,7 @@ export default function DownloadPage() {
         <div className="mt-10 grid gap-4 sm:grid-cols-3">
           {[
             { k: "memory", v: "4 GB RAM for tiny models, 8 GB+ for larger ones." },
-            { k: "disk", v: "~75 MB app, plus the model you choose (40 MB–3 GB)." },
+            { k: "disk", v: "~75 MB app, plus the model you choose (40 MB–3 GB) and ~2 MB of wake-word models if you arm one." },
             { k: "microphone", v: "Any input device your OS recognizes." },
           ].map((r, i) => (
             <Reveal key={r.k} delay={i * 0.08}>

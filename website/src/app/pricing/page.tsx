@@ -14,9 +14,11 @@ export const metadata: Metadata = {
 const INCLUDED = [
   "Unlimited dictation",
   "Every local Whisper model",
+  "Wake word and command mode",
   "Works in every app",
-  "Hands-free auto mode",
+  "Per-app profiles",
   "Custom dictionary",
+  "Searchable, exportable history",
   "Plugin system",
   "No account, ever",
   "MIT licensed source",
@@ -74,10 +76,9 @@ export default function PricingPage() {
       <section className="mx-auto mt-14 max-w-3xl px-6 sm:px-10">
         <Reveal>
           <div className="panel glow-ring relative overflow-hidden rounded-3xl p-8 text-center sm:p-12">
-            <div className="scanline" aria-hidden />
             <p className="eyebrow">The whole app</p>
             <div className="mt-6 flex items-end justify-center gap-3">
-              <span className="font-display text-8xl font-bold leading-none signal-gradient">
+              <span className="font-display text-8xl font-bold leading-none glow-text">
                 $0
               </span>
               <span className="mb-2 text-lg text-fog">/ forever</span>

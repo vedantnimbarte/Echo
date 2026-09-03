@@ -1,7 +1,7 @@
 import Hero from "@/components/sections/Hero";
-import Marquee from "@/components/sections/Marquee";
+import Pipeline from "@/components/sections/Pipeline";
+import CommandMode from "@/components/sections/CommandMode";
 import FeatureIndex from "@/components/sections/FeatureIndex";
-import HowItWorks from "@/components/sections/HowItWorks";
 import Privacy from "@/components/sections/Privacy";
 import FinalCTA from "@/components/sections/FinalCTA";
 
@@ -9,9 +9,9 @@ export default function Home() {
   return (
     <>
       <Hero />
-      <Marquee />
+      <Pipeline />
+      <CommandMode />
       <FeatureIndex />
-      <HowItWorks />
       <Privacy />
       <FinalCTA />
     </>

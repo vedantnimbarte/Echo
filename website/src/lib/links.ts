@@ -46,4 +46,6 @@ export const LINKS = {
   license: `${REPO_URL}/blob/main/LICENSE`,
   issues: `${REPO_URL}/issues`,
   installing: `${REPO_URL}#installing`,
+  wakeWord: `${REPO_URL}/blob/main/docs/WAKE_WORD.md`,
+  bundling: `${REPO_URL}/blob/main/docs/BUNDLING.md`,
 } as const;
