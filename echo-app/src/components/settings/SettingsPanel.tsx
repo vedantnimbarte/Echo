@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Keyboard, AudioWaveform, Search, Check as CheckIcon, X, AlertTriangle } from "lucide-react";
+import { Keyboard, AudioWaveform, Hand, Search, Check as CheckIcon, X, AlertTriangle } from "lucide-react";
 import { commands } from "../../ipc/commands";
 import { echoEvents } from "../../ipc/events";
-import { useRecordingStore, type RecordingMode } from "../../store/recordingStore";
+import { normalizeMode, useRecordingStore, type RecordingMode } from "../../store/recordingStore";
 import { ModelSelector } from "./ModelSelector";
 import { CloudProviders } from "./CloudProviders";
 import { TelemetrySettings } from "./TelemetrySettings";
@@ -93,14 +93,21 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
     queryKey: ["setting", "recording_mode"],
     queryFn: () => commands.getSetting("recording_mode"),
   });
-  const mode: RecordingMode = savedMode === "auto" ? "auto" : "manual";
+  const mode = normalizeMode(savedMode);
+
+  // Not setSetting: hold-to-talk needs the hotkey's release as well as its
+  // press, so the backend rebinds the shortcut when the mode changes.
+  const setModeMutation = useMutation({
+    mutationFn: (m: RecordingMode) => commands.setRecordingMode(m),
+    onSuccess: (_result, m) => {
+      qc.invalidateQueries({ queryKey: ["setting", "recording_mode"] });
+      void echoEvents.emitModeChanged(m); // sync the live pill
+    },
+  });
 
   function changeMode(m: RecordingMode) {
     setStoreMode(m);
-    void commands.setSetting("recording_mode", m).then(() => {
-      qc.invalidateQueries({ queryKey: ["setting", "recording_mode"] });
-    });
-    void echoEvents.emitModeChanged(m); // sync the live pill
+    setModeMutation.mutate(m);
   }
 
   const { data: devices = [] } = useQuery({
@@ -236,16 +243,22 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
       {on("dictation", ["mode", "push to talk", "voice activated", "dictation", "recording"]) && (
         <Group
           title={label("dictation", "Mode")}
-          hint="In push to talk the microphone stays open between utterances — it stops only when you press the hotkey again."
+          hint="Hold to talk waits a beat before opening the microphone, so a shortcut like Ctrl still works in the combinations you type. Tap to toggle leaves the microphone open until you press the hotkey again."
         >
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-3 gap-2.5">
             {(
               [
                 {
-                  id: "manual" as const,
+                  id: "hold" as const,
+                  Icon: Hand,
+                  title: "Hold to talk",
+                  sub: "Records while you hold the hotkey",
+                },
+                {
+                  id: "toggle" as const,
                   Icon: Keyboard,
-                  title: "Push to talk",
-                  sub: "Start and stop with the hotkey",
+                  title: "Tap to toggle",
+                  sub: "Tap to start, tap again to stop",
                 },
                 {
                   id: "auto" as const,
@@ -361,8 +374,11 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
-      {on("dictation", ["hotkey", "shortcut", "keyboard", "chord", "global"]) && (
-        <Group title={label("dictation", "Global hotkey")}>
+      {on("dictation", ["hotkey", "shortcut", "keyboard", "chord", "global", "ctrl", "alt", "shift", "modifier"]) && (
+        <Group
+          title={label("dictation", "Global hotkey")}
+          hint="A modifier on its own works too — tap Ctrl, Alt or Shift and release it without pressing anything else. Held as part of a combination it behaves normally, so Ctrl+C is untouched. Fn can't be used: your keyboard handles it in firmware and the key never reaches Echo."
+        >
           <HotkeyCapture
             value={hotkey ?? ""}
             onChange={(accel) => registerHotkeyMutation.mutate(accel)}

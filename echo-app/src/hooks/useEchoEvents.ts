@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { echoEvents } from "../ipc/events";
 import { commands } from "../ipc/commands";
-import { useRecordingStore } from "../store/recordingStore";
+import { normalizeMode, useRecordingStore } from "../store/recordingStore";
 
 interface Options {
   /**
@@ -25,9 +25,7 @@ export function useEchoEvents({ controlHotkey = false }: Options = {}) {
 
   // Load the persisted recording mode once.
   useEffect(() => {
-    void commands.getSetting("recording_mode").then((m) => {
-      if (m === "auto" || m === "manual") setMode(m);
-    });
+    void commands.getSetting("recording_mode").then((m) => setMode(normalizeMode(m)));
   }, [setMode]);
 
   useEffect(() => {
@@ -39,9 +37,9 @@ export function useEchoEvents({ controlHotkey = false }: Options = {}) {
       echoEvents.onRecordingStopped(() => {
         setRecording(false);
         setSpeaking(false);
-        // Manual stop kicks off transcription of the final buffer; in auto mode
-        // per-utterance transcribing is driven by the speech-ended edge.
-        if (useRecordingStore.getState().mode === "manual") setTranscribing(true);
+        // Stopping by hand kicks off transcription of the final buffer; in
+        // auto mode per-utterance transcribing follows the speech-ended edge.
+        if (useRecordingStore.getState().mode !== "auto") setTranscribing(true);
       }),
       echoEvents.onSpeechStarted(() => {
         setSpeaking(true);
@@ -68,6 +66,16 @@ export function useEchoEvents({ controlHotkey = false }: Options = {}) {
         const { isRecording } = useRecordingStore.getState();
         if (isRecording) void commands.stopRecording();
         else void commands.startRecording();
+      }),
+      // Hold-to-talk. Guarded on the current state either way: the key can be
+      // released after a stop has already happened some other way.
+      echoEvents.onHotkeyPress(() => {
+        if (!controlHotkey) return;
+        if (!useRecordingStore.getState().isRecording) void commands.startRecording();
+      }),
+      echoEvents.onHotkeyRelease(() => {
+        if (!controlHotkey) return;
+        if (useRecordingStore.getState().isRecording) void commands.stopRecording();
       }),
     ]);
 

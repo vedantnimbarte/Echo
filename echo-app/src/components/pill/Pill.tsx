@@ -105,7 +105,7 @@ function usePillState() {
           : "idle";
 
   // A "hot" indicator when actually capturing speech; calm while merely armed.
-  const live = view === "transcribing" || speaking || (isRecording && mode === "manual");
+  const live = view === "transcribing" || speaking || (isRecording && mode !== "auto");
 
   function toggle() {
     if (isRecording) {
@@ -324,7 +324,7 @@ function PillLarge({
 
         {/* ---- Right controls ------------------------------------------- */}
         <div className="ml-auto flex items-center gap-0.5">
-          {view === "active" && mode === "manual" && (
+          {view === "active" && mode !== "auto" && (
             <span className="tabular mr-1.5 text-[11px] tracking-tight text-[var(--ink-muted)]">
               {formatElapsed(elapsed)}
             </span>

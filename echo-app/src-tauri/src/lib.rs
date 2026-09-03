@@ -64,10 +64,26 @@ pub fn run() {
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
-                    // On hotkey press, ask the frontend to toggle recording.
-                    if event.state == ShortcutState::Pressed {
-                        let _ = app.emit("echo://hotkey-toggle", ());
-                    }
+                    // Hold-to-talk brackets one utterance between the key going
+                    // down and coming back up; every other mode acts on the
+                    // press alone and ignores the release.
+                    let hold = app
+                        .try_state::<AppState>()
+                        .map(|s| {
+                            let conn = s.db.lock().unwrap();
+                            storage::repositories::get_setting(&conn, "recording_mode")
+                                .unwrap_or(None)
+                                .as_deref()
+                                == Some("hold")
+                        })
+                        .unwrap_or(false);
+
+                    let _ = match (hold, event.state) {
+                        (false, ShortcutState::Pressed) => app.emit("echo://hotkey-toggle", ()),
+                        (true, ShortcutState::Pressed) => app.emit("echo://hotkey-press", ()),
+                        (true, ShortcutState::Released) => app.emit("echo://hotkey-release", ()),
+                        _ => Ok(()),
+                    };
                 })
                 .build(),
         )
@@ -214,11 +230,6 @@ pub fn run() {
                 }
             }
 
-            // Resolve the global hotkey (registered after state is managed).
-            let hotkey = storage::repositories::get_setting(&conn, "hotkey")
-                .unwrap_or(None)
-                .unwrap_or_else(|| commands::hotkey::DEFAULT_HOTKEY.to_string());
-
             // First run shows the settings window with the onboarding wizard.
             let onboarding_done = storage::repositories::get_setting(&conn, "onboarding_complete")
                 .unwrap_or(None)
@@ -240,14 +251,16 @@ pub fn run() {
                 plugins: Mutex::new(plugin_loader),
                 plugins_dir,
                 recording: Mutex::new(false),
+                modtap: Mutex::new(None),
             };
 
             app.manage(app_state);
 
-            // Register the global hotkey now that state is available.
-            use tauri_plugin_global_shortcut::GlobalShortcutExt;
-            if let Err(e) = app.global_shortcut().register(hotkey.as_str()) {
-                tracing::warn!("Failed to register global hotkey '{hotkey}': {e}");
+            // Bind the global hotkey now that state is available. Which
+            // mechanism gets used depends on the shortcut itself.
+            let handle = app.handle().clone();
+            if let Err(e) = commands::hotkey::apply(&handle, &handle.state::<AppState>()) {
+                tracing::warn!("Couldn't bind the global hotkey: {e}");
             }
 
             // Drain the egress channel into the database. Requests are logged
@@ -317,6 +330,7 @@ pub fn run() {
             commands::injection::inject_text,
             commands::hotkey::get_hotkey,
             commands::hotkey::register_hotkey,
+            commands::hotkey::set_recording_mode,
             commands::providers::set_api_key,
             commands::providers::get_api_key_set,
             commands::providers::remove_api_key,

@@ -53,6 +53,10 @@ export const echoEvents = {
 
   onHotkeyToggle: (cb: () => void) => listen("echo://hotkey-toggle", cb),
 
+  // Hold-to-talk: these bracket one utterance, rather than toggling.
+  onHotkeyPress: (cb: () => void) => listen("echo://hotkey-press", cb),
+  onHotkeyRelease: (cb: () => void) => listen("echo://hotkey-release", cb),
+
   // The wake phrase was spoken; dictation is about to start.
   onWakeDetected: (cb: (phrase: string, score: number) => void) =>
     listen<{ phrase: string; score: number }>("echo://wake-detected", (e) =>

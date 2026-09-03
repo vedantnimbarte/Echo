@@ -7,6 +7,7 @@ pub mod download;
 pub mod egress;
 pub mod events;
 pub mod injection;
+pub mod modtap;
 pub mod plugins;
 pub mod runtime_deps;
 pub mod telemetry;
