@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trash2, Puzzle, ShieldAlert } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { commands, type PluginManifest } from "../../ipc/commands";
+import { Page, Group } from "../common/Page";
 
 export function PluginsPanel() {
   const qc = useQueryClient();
@@ -60,17 +61,17 @@ export function PluginsPanel() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-[var(--ink)]">Plugins</h2>
-        <button
-          onClick={handleInstall}
-          className="btn-primary px-3 py-1.5 text-xs"
-        >
+    <Page
+      title="Plugins"
+      description="Extra transcription engines, output targets and dictionaries, loaded from files you install."
+      actions={
+        <button onClick={handleInstall} className="btn-primary px-3 py-1.5 text-[11.5px]">
           <Puzzle className="w-3.5 h-3.5" /> Install from file
         </button>
-      </div>
-
+      }
+    >
+      <Group>
+      <div className="space-y-6">
       <div className="glass flex items-start gap-2.5 rounded-lg px-3 py-2.5">
         <ShieldAlert className="mt-px h-4 w-4 shrink-0 text-[var(--ink)]" />
         <p className="text-[11px] leading-snug text-[var(--ink-muted)]">
@@ -170,6 +171,8 @@ export function PluginsPanel() {
           ))}
         </ul>
       )}
-    </div>
+      </div>
+      </Group>
+    </Page>
   );
 }

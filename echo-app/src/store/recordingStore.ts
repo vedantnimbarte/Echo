@@ -1,11 +1,23 @@
 import { create } from "zustand";
 
 /**
- * "manual"  — push-to-talk: the user starts/stops via hotkey or the pill.
+ * "hold"    — record only while the hotkey is held down, the way push-to-talk
+ *             conventionally works.
+ * "toggle"  — tap the hotkey to start, tap again to stop.
  * "auto"    — voice-activated: armed once, then each utterance is captured and
  *             transcribed automatically as the user speaks and pauses.
  */
-export type RecordingMode = "manual" | "auto";
+export type RecordingMode = "hold" | "toggle" | "auto";
+
+/**
+ * Read a stored mode. `"manual"` was what tap-to-toggle was called before hold
+ * existed, so it maps forward rather than resetting anyone's setting.
+ */
+export function normalizeMode(raw: string | null | undefined): RecordingMode {
+  if (raw === "auto") return "auto";
+  if (raw === "hold") return "hold";
+  return "toggle";
+}
 
 interface RecordingState {
   /** Capture session is running (armed, in auto mode). */
@@ -34,7 +46,7 @@ export const useRecordingStore = create<RecordingState>((set) => ({
   isRecording: false,
   speaking: false,
   transcribing: false,
-  mode: "manual",
+  mode: "toggle",
   partialTranscript: "",
   finalTranscript: "",
   language: null,

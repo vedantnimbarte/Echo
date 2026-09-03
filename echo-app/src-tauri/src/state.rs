@@ -11,6 +11,7 @@ use crate::core::{
     audio::AudioService,
     dictionary::DictionaryEngine,
     injection::TextInjector,
+    modtap::ModTapWatcher,
     plugins::loader::PluginLoader,
     telemetry::TelemetryService,
     vad::SileroModel,
@@ -42,6 +43,10 @@ pub struct AppState {
     pub plugins: Mutex<PluginLoader>,
     pub plugins_dir: PathBuf,
     pub recording: Mutex<bool>,
+    /// Live watcher when the hotkey is a bare modifier, which the
+    /// global-shortcut plugin cannot express. Exactly one of the two
+    /// mechanisms is bound at a time; dropping this one unbinds it.
+    pub modtap: Mutex<Option<ModTapWatcher>>,
 }
 
 // rusqlite::Connection is not Send by default; we wrap it in Mutex<> and

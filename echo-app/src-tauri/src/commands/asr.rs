@@ -110,6 +110,20 @@ pub async fn set_whisper_model(state: State<'_, AppState>, name: String) -> Resu
     Ok(())
 }
 
+/// Delete a downloaded model's weights, freeing the disk they occupy.
+///
+/// Refuses to remove the model the local engine is set to use: that would leave
+/// transcription silently broken with nothing on screen explaining why.
+#[tauri::command]
+pub fn delete_model(state: State<'_, AppState>, name: String) -> Result<()> {
+    if current_whisper_model(state.inner()) == name {
+        return Err(EchoError::Config(format!(
+            "{name} is the model Echo is set to use. Pick another model first."
+        )));
+    }
+    state.models.delete(&name)
+}
+
 /// Whether the local engine is ready to transcribe (binary + selected model
 /// both present). Used by onboarding and settings to gate the local option.
 #[tauri::command]

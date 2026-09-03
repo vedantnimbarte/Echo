@@ -113,6 +113,12 @@ windows = { version = "0.58", features = [
     "Win32_Foundation",
 ] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# Bare-modifier hotkeys need raw key state, and XQueryKeymap reports the whole
+# keyboard in one call. X11 only: Wayland has no equivalent, and the watcher
+# reports itself unavailable there rather than binding a key that does nothing.
+x11 = { version = "2", features = ["xlib"] }
+
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = { version = "0.24", features = ["highsierra"] }
 core-foundation = "0.10"

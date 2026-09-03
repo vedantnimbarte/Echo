@@ -111,6 +111,21 @@ impl ModelManager {
             .ok_or_else(|| EchoError::NotFound(format!("Unknown model '{name}'")))
     }
 
+    /// Remove a downloaded model's weights from disk.
+    ///
+    /// Deleting a model that isn't there succeeds: the caller asked for it to
+    /// be gone, and it is. Resolving `name` through the catalog first keeps an
+    /// arbitrary string from being joined onto the models directory.
+    pub fn delete(&self, name: &str) -> Result<()> {
+        Self::spec(name)?;
+        let path = self.model_path(name);
+        if !path.exists() {
+            return Ok(());
+        }
+        std::fs::remove_file(&path)
+            .map_err(|e| EchoError::Config(format!("couldn't remove '{name}': {e}")))
+    }
+
     /// Download a model into the models directory, emitting fractional
     /// progress (0.0..1.0) on `progress_tx`.
     pub async fn download(&self, name: &str, progress_tx: mpsc::Sender<f32>) -> Result<PathBuf> {
@@ -129,4 +144,40 @@ pub fn is_whisper_model(name: &str) -> bool {
 #[allow(dead_code)]
 pub fn models_dir_of(base: &Path) -> PathBuf {
     base.join("models")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scratch() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("echo-models-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn delete_removes_the_weights_and_is_idempotent() {
+        let dir = scratch();
+        let mm = ModelManager::new(dir.clone());
+        std::fs::write(mm.model_path("base.en"), b"weights").unwrap();
+        assert!(mm.is_downloaded("base.en"));
+
+        mm.delete("base.en").unwrap();
+        assert!(!mm.is_downloaded("base.en"));
+        // Deleting again is not an error â the end state is what was asked for.
+        mm.delete("base.en").unwrap();
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn delete_rejects_a_name_outside_the_catalog() {
+        let dir = scratch();
+        let mm = ModelManager::new(dir.clone());
+        // Would otherwise be joined straight onto the models directory.
+        assert!(mm.delete("../../echo.db").is_err());
+        assert!(mm.delete("not-a-model").is_err());
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }

@@ -53,6 +53,10 @@ export const echoEvents = {
 
   onHotkeyToggle: (cb: () => void) => listen("echo://hotkey-toggle", cb),
 
+  // Hold-to-talk: these bracket one utterance, rather than toggling.
+  onHotkeyPress: (cb: () => void) => listen("echo://hotkey-press", cb),
+  onHotkeyRelease: (cb: () => void) => listen("echo://hotkey-release", cb),
+
   // The wake phrase was spoken; dictation is about to start.
   onWakeDetected: (cb: (phrase: string, score: number) => void) =>
     listen<{ phrase: string; score: number }>("echo://wake-detected", (e) =>
@@ -77,4 +81,12 @@ export const echoEvents = {
   onModeChanged: (cb: (mode: RecordingMode) => void) =>
     listen<RecordingMode>("echo://mode-changed", (e) => cb(e.payload)),
   emitModeChanged: (mode: RecordingMode) => emit("echo://mode-changed", mode),
+
+  // Pill size lives in the settings window but is rendered by the pill, and the
+  // two are separate webviews with separate stores — so the change is
+  // broadcast rather than read back on a timer.
+  onPillSizeChanged: (cb: (size: "large" | "small") => void) =>
+    listen<"large" | "small">("echo://pill-size-changed", (e) => cb(e.payload)),
+  emitPillSizeChanged: (size: "large" | "small") =>
+    emit("echo://pill-size-changed", size),
 };

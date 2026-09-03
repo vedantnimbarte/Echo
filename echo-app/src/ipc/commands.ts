@@ -163,6 +163,7 @@ export const commands = {
   listModels: () => invoke<ModelInfo[]>("list_models"),
 
   downloadModel: (name: string) => invoke<void>("download_model", { name }),
+  deleteModel: (name: string) => invoke<void>("delete_model", { name }),
 
   setAsrProvider: (name: string) => invoke<void>("set_asr_provider", { name }),
 
@@ -245,6 +246,10 @@ export const commands = {
 
   getHotkey: () => invoke<string>("get_hotkey"),
 
+  // Persisted through its own command, not setSetting: hold-to-talk needs the
+  // key's release as well as its press, so the hotkey is rebound to match.
+  setRecordingMode: (mode: string) =>
+    invoke<void>("set_recording_mode", { mode }),
   registerHotkey: (shortcut: string) =>
     invoke<void>("register_hotkey", { shortcut }),
 };

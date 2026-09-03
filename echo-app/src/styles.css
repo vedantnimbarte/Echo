@@ -189,6 +189,13 @@ body {
   }
 }
 
+/* Keyboard focus must be visible, and with hue gone the ring is the only thing
+   left to say it. :focus-visible keeps pointer clicks quiet. */
+:focus-visible {
+  outline: 1px solid var(--hairline-strong);
+  outline-offset: 2px;
+}
+
 /* ---- Native control popups ------------------------------------------------ */
 /*
   Belt and braces, because the two engines disagree:

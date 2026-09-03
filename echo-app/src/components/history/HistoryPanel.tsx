@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trash2, Copy, CornerDownLeft, Search, Check, BookPlus, Download } from "lucide-react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { commands, type TranscriptionRecord } from "../../ipc/commands";
+import { Page, Group } from "../common/Page";
 
 /* ---- time helpers --------------------------------------------------------- */
 
@@ -209,10 +210,11 @@ export function HistoryPanel() {
   }
 
   return (
-    <div className="mx-auto max-w-[560px] space-y-4 p-5">
-      <div className="flex items-center justify-between">
-        <h2 className="text-[15px] font-semibold tracking-tight">History</h2>
-        <div className="flex items-center gap-1.5">
+    <Page
+      title="History"
+      description="Every transcript Echo has produced on this machine. Search it, send it to a file, or clear it out."
+      actions={
+        <>
           <button
             onClick={async () => {
               const path = await save({
@@ -235,10 +237,12 @@ export function HistoryPanel() {
             <Trash2 className="h-3.5 w-3.5" />
             Clear all
           </button>
-        </div>
-      </div>
-
-      <div className="relative">
+        </>
+      }
+    >
+      <Group>
+      <div className="space-y-4">
+        <div className="relative">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--ink-faint)]" />
         <input
           value={query}
@@ -270,6 +274,8 @@ export function HistoryPanel() {
           ))}
         </div>
       )}
-    </div>
+      </div>
+      </Group>
+    </Page>
   );
 }
