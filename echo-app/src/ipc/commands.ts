@@ -163,6 +163,7 @@ export const commands = {
   listModels: () => invoke<ModelInfo[]>("list_models"),
 
   downloadModel: (name: string) => invoke<void>("download_model", { name }),
+  deleteModel: (name: string) => invoke<void>("delete_model", { name }),
 
   setAsrProvider: (name: string) => invoke<void>("set_asr_provider", { name }),
 

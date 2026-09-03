@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trash2, Plus, Download, Upload } from "lucide-react";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { commands } from "../../ipc/commands";
+import { Page, Group } from "../common/Page";
 
 export function DictionaryPanel() {
   const qc = useQueryClient();
@@ -86,10 +87,11 @@ export function DictionaryPanel() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-[var(--ink)]">Custom Dictionary</h2>
-        <div className="flex gap-2">
+    <Page
+      title="Dictionary"
+      description="Words Echo gets wrong, and what to write instead. Replacements run on every finished transcript."
+      actions={
+        <>
           <button
             onClick={handleImport}
             className="btn-ghost px-3 py-1.5 text-xs"
@@ -102,9 +104,11 @@ export function DictionaryPanel() {
           >
             <Download className="w-3.5 h-3.5" /> Export
           </button>
-        </div>
-      </div>
-
+        </>
+      }
+    >
+      <Group>
+      <div className="space-y-6">
       {/* Add entry form */}
       <form
         className="flex gap-2"
@@ -260,6 +264,8 @@ export function DictionaryPanel() {
           ))}
         </ul>
       )}
-    </div>
+      </div>
+      </Group>
+    </Page>
   );
 }
