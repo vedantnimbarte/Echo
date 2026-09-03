@@ -228,6 +228,13 @@ pub async fn begin_recording(
 
                 // Inject into the focused application if enabled.
                 if delivery.auto_inject && !to_inject.is_empty() {
+                    info!(
+                        focused = focused.as_deref().unwrap_or("<unknown>"),
+                        chars = to_inject.chars().count(),
+                        method = if delivery.use_paste { "paste" } else { "keystrokes" },
+                        settle_ms = delivery.settle_ms,
+                        "Injecting transcript"
+                    );
                     if delivery.delay_ms > 0 {
                         tokio::time::sleep(std::time::Duration::from_millis(delivery.delay_ms))
                             .await;
@@ -245,8 +252,16 @@ pub async fn begin_recording(
                     match result {
                         Ok(Err(e)) => error!("Text injection failed: {e}"),
                         Err(e) => error!("Injection task panicked: {e}"),
-                        Ok(Ok(())) => {}
+                        Ok(Ok(())) => info!("Transcript injected"),
                     }
+                } else {
+                    // Silently dropping the transcript here is the one outcome
+                    // that looks identical to a broken pipeline from outside.
+                    info!(
+                        auto_inject = delivery.auto_inject,
+                        empty = to_inject.is_empty(),
+                        "Transcript not injected"
+                    );
                 }
             } else {
                 if let Err(e) = app_clone.emit(

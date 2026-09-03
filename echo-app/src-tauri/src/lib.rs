@@ -27,12 +27,38 @@ use core::{
 use state::AppState;
 use storage::db;
 
+/// Log to stdout *and* to `echo.log` beside the database.
+///
+/// Everything downstream of capture — VAD, ASR, injection — reports failure by
+/// logging and carrying on, which is invisible in a packaged build and in any
+/// dev run whose console has scrolled away. The file is the only record a user
+/// can actually send us.
+fn init_tracing(data_dir: &std::path::Path) {
+    use tracing_subscriber::fmt::writer::MakeWriterExt;
+
+    let filter = || {
+        EnvFilter::from_default_env().add_directive("echo=debug".parse().unwrap())
+    };
+
+    // Best effort: if the log file can't be opened, stdout alone still works.
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(data_dir.join("echo.log"))
+        .ok();
+
+    match file {
+        Some(file) => tracing_subscriber::fmt()
+            .with_env_filter(filter())
+            .with_ansi(false)
+            .with_writer(std::io::stdout.and(std::sync::Mutex::new(file)))
+            .init(),
+        None => tracing_subscriber::fmt().with_env_filter(filter()).init(),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env().add_directive("echo=debug".parse().unwrap()))
-        .init();
-
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(
@@ -57,6 +83,7 @@ pub fn run() {
                 .expect("Could not resolve app data directory");
 
             std::fs::create_dir_all(&data_dir)?;
+            init_tracing(&data_dir);
             let db_path = data_dir.join("echo.db");
 
             info!("Opening database at {}", db_path.display());
@@ -272,6 +299,7 @@ pub fn run() {
             commands::asr::download_model,
             commands::asr::set_asr_provider,
             commands::asr::set_whisper_model,
+            commands::asr::delete_model,
             commands::asr::whisper_ready,
             commands::asr::download_whisper_binary,
             commands::recording::start_recording,
