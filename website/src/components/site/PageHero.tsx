@@ -17,8 +17,8 @@ export default function PageHero({
       <div className="mx-auto max-w-4xl text-center">
         <Reveal>
           <p className="eyebrow">{eyebrow}</p>
-          <h1 className="mt-5 text-balance text-6xl font-semibold leading-[0.95] sm:text-8xl">
-            {title} {highlight && <span className="signal-gradient">{highlight}</span>}
+          <h1 className="mt-5 text-balance text-5xl font-semibold leading-[0.95] sm:text-7xl lg:text-8xl">
+            {title} {highlight && <span className="glow-text">{highlight}</span>}
           </h1>
           {subtitle && (
             <p className="mx-auto mt-6 max-w-2xl text-balance text-lg leading-relaxed text-fog sm:text-xl">

@@ -1,36 +1,40 @@
 @import "tailwindcss";
 
 /* ============================================================
-   ECHO — deep dark + acoustic glow design system
+   ECHO — acoustic glow, mk.II
+   A dark room with one instrument lit. Colour is signal:
+   glow = live, ember = detected, violet = depth. Nothing else.
    ============================================================ */
 
 @theme {
   /* fonts (wired to next/font CSS vars in layout.tsx) */
-  --font-display: var(--font-open-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-sans: var(--font-open-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
 
-  /* ink (backgrounds, deepest -> raised) */
-  --color-ink: #05070a;
-  --color-ink-1: #080b10;
-  --color-ink-2: #0b1017;
-  --color-ink-3: #11171f;
+  /* ink — deepest to raised */
+  --color-ink: #04070b;
+  --color-ink-1: #070c13;
+  --color-ink-2: #0c131c;
+  --color-ink-3: #131c27;
 
   /* text */
-  --color-text: #e9eef4;
-  --color-fog: #8b97a6;
-  --color-faint: #5a6573;
+  --color-text: #eaf0f6;
+  --color-fog: #8e9aa9;
+  --color-faint: #78848f;
 
-  /* acoustic glow accents */
-  --color-glow: #4ff0e6; /* aqua-cyan, primary signal */
-  --color-mint: #79f7c7; /* mint, output/text side */
-  --color-sky: #58c4ff; /* sky, depth */
+  /* signal */
+  --color-glow: #4ff0e6; /* live / primary */
+  --color-ember: #ff8a4c; /* detected / recording — used sparingly */
+  --color-violet: #6b5cff; /* depth only, never text */
 
   /* hairlines */
-  --color-line: #1a222c;
-  --color-line-2: #232e3a;
+  --color-line: #17202b;
+  --color-line-2: #212d3a;
 
-  --radius-card: 16px;
+  --radius-card: 18px;
+
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @layer base {
@@ -41,6 +45,7 @@
   html {
     scroll-behavior: smooth;
     background: var(--color-ink);
+    color-scheme: dark;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -49,35 +54,49 @@
     background: var(--color-ink);
     color: var(--color-text);
     font-family: var(--font-sans);
-    font-feature-settings: "ss01", "cv01";
     overflow-x: clip;
   }
 
   ::selection {
-    background: color-mix(in oklab, var(--color-glow) 35%, transparent);
+    background: color-mix(in oklab, var(--color-glow) 30%, transparent);
     color: #ffffff;
   }
 
-  h1, h2, h3, h4 {
+  h1,
+  h2,
+  h3,
+  h4 {
     font-family: var(--font-display);
     font-weight: 600;
-    letter-spacing: -0.03em;
-    line-height: 0.98;
+    letter-spacing: -0.035em;
+    line-height: 0.95;
   }
 
-  /* thin futuristic scrollbar */
-  ::-webkit-scrollbar { width: 10px; height: 10px; }
-  ::-webkit-scrollbar-track { background: var(--color-ink); }
+  :focus-visible {
+    outline: 2px solid var(--color-glow);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-ink);
+  }
   ::-webkit-scrollbar-thumb {
     background: var(--color-line-2);
     border-radius: 99px;
     border: 3px solid var(--color-ink);
   }
-  ::-webkit-scrollbar-thumb:hover { background: var(--color-glow); }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-glow);
+  }
 }
 
 /* ----------------------------------------------------------------
-   Atmosphere: grain + ambient field
+   Atmosphere
    ---------------------------------------------------------------- */
 .grain::before {
   content: "";
@@ -85,7 +104,7 @@
   inset: 0;
   z-index: 60;
   pointer-events: none;
-  opacity: 0.045;
+  opacity: 0.04;
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
@@ -96,44 +115,111 @@
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(60% 50% at 50% -10%, color-mix(in oklab, var(--color-glow) 14%, transparent), transparent 70%),
-    radial-gradient(50% 40% at 85% 20%, color-mix(in oklab, var(--color-sky) 9%, transparent), transparent 70%),
-    radial-gradient(45% 45% at 10% 60%, color-mix(in oklab, var(--color-mint) 7%, transparent), transparent 70%);
+    radial-gradient(
+      55% 45% at 50% -5%,
+      color-mix(in oklab, var(--color-glow) 11%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      45% 40% at 88% 18%,
+      color-mix(in oklab, var(--color-violet) 12%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      40% 40% at 6% 62%,
+      color-mix(in oklab, var(--color-violet) 8%, transparent),
+      transparent 70%
+    );
 }
 
-/* faint dotted measurement grid */
+/* A grid laid in perspective — the room floor the instrument sits on. */
+.floor-grid {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 60vh;
+  pointer-events: none;
+  perspective: 320px;
+  overflow: hidden;
+}
+.floor-grid::before {
+  content: "";
+  position: absolute;
+  inset: -60% -25% -10% -25%;
+  transform: rotateX(74deg);
+  transform-origin: bottom center;
+  background-image:
+    linear-gradient(to right, var(--color-line-2) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--color-line-2) 1px, transparent 1px);
+  background-size: 72px 72px;
+  -webkit-mask-image: linear-gradient(to top, #000 4%, transparent 62%);
+  mask-image: linear-gradient(to top, #000 4%, transparent 62%);
+  opacity: 0.55;
+}
+
+/* flat measurement grid, for interior pages */
 .measure-grid {
   background-image:
     linear-gradient(to right, var(--color-line) 1px, transparent 1px),
     linear-gradient(to bottom, var(--color-line) 1px, transparent 1px);
   background-size: 64px 64px;
-  -webkit-mask-image: radial-gradient(circle at center, black, transparent 78%);
-  mask-image: radial-gradient(circle at center, black, transparent 78%);
+  -webkit-mask-image: radial-gradient(circle at center, black, transparent 76%);
+  mask-image: radial-gradient(circle at center, black, transparent 76%);
 }
 
 /* ----------------------------------------------------------------
    Surfaces
    ---------------------------------------------------------------- */
 .glass {
-  background: color-mix(in oklab, var(--color-ink-2) 72%, transparent);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  background: color-mix(in oklab, var(--color-ink-2) 68%, transparent);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
   border: 1px solid var(--color-line);
 }
 
 .panel {
-  background:
-    linear-gradient(180deg, color-mix(in oklab, var(--color-ink-3) 90%, transparent), var(--color-ink-1));
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--color-ink-3) 88%, transparent),
+    var(--color-ink-1)
+  );
   border: 1px solid var(--color-line);
+  box-shadow:
+    inset 0 1px 0 0 color-mix(in oklab, #ffffff 5%, transparent),
+    0 24px 60px -40px #000;
 }
-
-.hairline { border: 1px solid var(--color-line); }
 
 .glow-ring {
   box-shadow:
-    0 0 0 1px color-mix(in oklab, var(--color-glow) 28%, transparent),
-    0 0 40px -8px color-mix(in oklab, var(--color-glow) 45%, transparent),
-    inset 0 0 30px -18px color-mix(in oklab, var(--color-glow) 60%, transparent);
+    0 0 0 1px color-mix(in oklab, var(--color-glow) 26%, transparent),
+    0 0 44px -10px color-mix(in oklab, var(--color-glow) 45%, transparent),
+    inset 0 0 32px -20px color-mix(in oklab, var(--color-glow) 60%, transparent);
+}
+
+/* ----------------------------------------------------------------
+   Depth: cards that sit in a real perspective space
+   ---------------------------------------------------------------- */
+.stage {
+  perspective: 1400px;
+  perspective-origin: 50% 40%;
+}
+
+.card-3d {
+  transition:
+    transform 0.5s var(--ease-out-soft),
+    border-color 0.4s ease,
+    box-shadow 0.5s ease;
+  will-change: transform;
+}
+
+.lift {
+  transform: translateZ(0);
+  transition:
+    transform 0.45s var(--ease-out-soft),
+    border-color 0.35s ease;
+}
+.lift:hover {
+  transform: translateY(-4px);
+  border-color: var(--color-line-2);
 }
 
 /* ----------------------------------------------------------------
@@ -141,104 +227,148 @@
    ---------------------------------------------------------------- */
 .glow-text {
   color: var(--color-glow);
-  text-shadow: 0 0 24px color-mix(in oklab, var(--color-glow) 55%, transparent);
-}
-
-.signal-gradient {
-  background: linear-gradient(100deg, var(--color-glow), var(--color-mint) 55%, var(--color-sky));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  text-shadow: 0 0 28px color-mix(in oklab, var(--color-glow) 45%, transparent);
 }
 
 .eyebrow {
   font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.32em;
+  font-size: 0.7rem;
+  letter-spacing: 0.3em;
   text-transform: uppercase;
-  color: var(--color-fog);
+  color: var(--color-faint);
+}
+
+/* mono data label — model names, tensor shapes, hosts */
+.datum {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  color: var(--color-faint);
 }
 
 /* ----------------------------------------------------------------
    Buttons
    ---------------------------------------------------------------- */
-.btn-glow {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  padding: 0.8rem 1.45rem;
-  border-radius: 999px;
-  font-weight: 600;
-  color: #02100f;
-  background: linear-gradient(100deg, var(--color-glow), var(--color-mint));
-  box-shadow: 0 0 32px -6px color-mix(in oklab, var(--color-glow) 70%, transparent);
-  transition: box-shadow 0.3s ease, transform 0.2s ease;
-}
-.btn-glow:hover { box-shadow: 0 0 52px -2px color-mix(in oklab, var(--color-glow) 85%, transparent); }
+@layer components {
+  .btn-glow {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    padding: 0.85rem 1.5rem;
+    border-radius: 999px;
+    font-weight: 600;
+    color: #021312;
+    background: linear-gradient(
+      100deg,
+      var(--color-glow),
+      color-mix(in oklab, var(--color-glow) 70%, #ffffff)
+    );
+    box-shadow: 0 0 34px -8px color-mix(in oklab, var(--color-glow) 70%, transparent);
+    transition:
+      box-shadow 0.35s ease,
+      transform 0.25s var(--ease-out-soft);
+  }
+  .btn-glow:hover {
+    box-shadow: 0 0 56px -4px color-mix(in oklab, var(--color-glow) 85%, transparent);
+  }
 
-.btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  padding: 0.8rem 1.45rem;
-  border-radius: 999px;
-  font-weight: 500;
-  color: var(--color-text);
-  border: 1px solid var(--color-line-2);
-  background: color-mix(in oklab, var(--color-ink-2) 60%, transparent);
-  transition: border-color 0.3s ease, background 0.3s ease;
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    padding: 0.85rem 1.5rem;
+    border-radius: 999px;
+    font-weight: 500;
+    color: var(--color-text);
+    border: 1px solid var(--color-line-2);
+    background: color-mix(in oklab, var(--color-ink-2) 55%, transparent);
+    transition:
+      border-color 0.35s ease,
+      background 0.35s ease;
+  }
+  .btn-ghost:hover {
+    border-color: color-mix(in oklab, var(--color-glow) 45%, transparent);
+    background: var(--color-ink-2);
+  }
 }
-.btn-ghost:hover { border-color: color-mix(in oklab, var(--color-glow) 50%, transparent); background: var(--color-ink-2); }
 
 /* ----------------------------------------------------------------
-   Keyframes / animations
+   Motion
    ---------------------------------------------------------------- */
 @keyframes float-y {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-9px);
+  }
 }
 @keyframes pulse-soft {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
 }
-@keyframes scan {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(300%); }
-}
-@keyframes marquee {
-  0% { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
-}
-@keyframes blink {
-  0%, 49% { opacity: 1; }
-  50%, 100% { opacity: 0; }
+@keyframes rail {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  20%,
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(340%);
+    opacity: 0;
+  }
 }
 
-.anim-float { animation: float-y 7s ease-in-out infinite; }
-.anim-pulse { animation: pulse-soft 2.6s ease-in-out infinite; }
-.anim-blink { animation: blink 1.1s steps(1) infinite; }
-.marquee-track { animation: marquee 38s linear infinite; }
-.marquee-pause:hover .marquee-track { animation-play-state: paused; }
+.anim-float {
+  animation: float-y 7.5s ease-in-out infinite;
+}
+.anim-pulse {
+  animation: pulse-soft 2.6s ease-in-out infinite;
+}
 
-.scanline {
-  position: absolute;
-  inset: 0;
+/* a packet of audio travelling down a connector line */
+.rail {
+  position: relative;
   overflow: hidden;
-  pointer-events: none;
 }
-.scanline::after {
+.rail::after {
   content: "";
   position: absolute;
+  inset-inline: -1px;
   top: 0;
-  left: 0;
-  width: 30%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--color-glow) 22%, transparent), transparent);
-  animation: scan 5s ease-in-out infinite;
+  height: 30%;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    var(--color-glow),
+    transparent
+  );
+  animation: rail 3.4s var(--ease-out-soft) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .anim-float, .anim-pulse, .marquee-track, .scanline::after { animation: none !important; }
-  html { scroll-behavior: auto; }
+  .anim-float,
+  .anim-pulse,
+  .rail::after {
+    animation: none !important;
+  }
+  .card-3d,
+  .lift {
+    transition: none !important;
+  }
+  html {
+    scroll-behavior: auto;
+  }
 }

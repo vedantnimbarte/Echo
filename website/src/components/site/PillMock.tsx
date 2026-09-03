@@ -1,49 +1,64 @@
 "use client";
 
-import { motion } from "motion/react";
-
-const BARS = [0.4, 0.85, 0.55, 1, 0.65, 0.3, 0.75, 0.5, 0.9, 0.45, 0.7, 0.35];
+import { useEffect, useRef } from "react";
+import useOnScreen from "@/components/ui/useOnScreen";
 
 /**
- * A faithful mock of Echo's floating pill — the surface users actually see
- * while dictating. Live equalizer bars + recording state.
+ * Echo's actual surface: a frameless pill pinned to the bottom of the screen.
+ * The bars are driven by one rAF writing heights directly, the way the real
+ * one is driven by the capture task's RMS events.
  */
-export default function PillMock({
-  state = "listening",
-  className = "",
-}: {
-  state?: "listening" | "done";
-  className?: string;
-}) {
+export default function PillMock({ className = "" }: { className?: string }) {
+  const bars = useRef<(HTMLSpanElement | null)[]>([]);
+  const [host, onScreen] = useOnScreen<HTMLDivElement>();
+
+  useEffect(() => {
+    if (!onScreen) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      bars.current.forEach((b, i) => {
+        if (b) b.style.height = `${20 + ((i * 37) % 60)}%`;
+      });
+      return;
+    }
+    let raf = 0;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const t = (now - start) / 1000;
+      bars.current.forEach((b, i) => {
+        if (!b) return;
+        const v =
+          Math.sin(t * 5.2 + i * 0.75) * 0.5 +
+          Math.sin(t * 2.1 + i * 1.9) * 0.32 +
+          Math.sin(t * 9.4 + i * 0.4) * 0.18;
+        b.style.height = `${18 + Math.abs(v) * 74}%`;
+      });
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [onScreen]);
+
   return (
     <div
-      className={`glass glow-ring inline-flex items-center gap-3 rounded-full px-5 py-3 ${className}`}
+      ref={host}
+      className={`glass glow-ring inline-flex items-center gap-3 rounded-full px-4 py-2.5 ${className}`}
+      role="img"
+      aria-label="Echo's floating pill, listening"
     >
-      <span className="relative flex h-2.5 w-2.5">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-glow opacity-60" />
-        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-glow" />
-      </span>
-
-      <div className="flex h-6 items-center gap-[3px]">
-        {BARS.map((b, i) => (
-          <motion.span
+      <span className="h-2 w-2 shrink-0 rounded-full bg-ember" />
+      <span className="flex h-6 items-center gap-[3px]">
+        {Array.from({ length: 22 }).map((_, i) => (
+          <span
             key={i}
-            className="w-[3px] rounded-full bg-gradient-to-t from-glow to-mint"
-            animate={{ scaleY: state === "done" ? 0.18 : [b * 0.4, b, b * 0.5] }}
-            transition={{
-              duration: 0.9 + (i % 4) * 0.18,
-              repeat: state === "done" ? 0 : Infinity,
-              repeatType: "mirror",
-              ease: "easeInOut",
+            ref={(el) => {
+              bars.current[i] = el;
             }}
-            style={{ height: 22, transformOrigin: "center" }}
+            className="w-[2px] rounded-full bg-glow"
+            style={{ height: "30%" }}
           />
         ))}
-      </div>
-
-      <span className="font-mono text-xs tracking-wide text-fog">
-        {state === "done" ? "transcribed" : "0:04"}
       </span>
+      <span className="font-mono text-xs tabular-nums text-fog">0:07</span>
     </div>
   );
 }

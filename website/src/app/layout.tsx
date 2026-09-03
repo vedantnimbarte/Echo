@@ -1,11 +1,17 @@
 import type { Metadata } from "next";
-import { Open_Sans, JetBrains_Mono } from "next/font/google";
+import { Bricolage_Grotesque, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import Nav from "@/components/site/Nav";
 import Footer from "@/components/site/Footer";
 
-const openSans = Open_Sans({
-  variable: "--font-open-sans",
+const bricolage = Bricolage_Grotesque({
+  variable: "--font-bricolage",
+  subsets: ["latin"],
+  display: "swap",
+});
+
+const hanken = Hanken_Grotesk({
+  variable: "--font-hanken",
   subsets: ["latin"],
   display: "swap",
 });
@@ -17,14 +23,14 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Echo — speak, it's typed.",
+  title: "Echo — say the word, start talking",
   description:
-    "Echo turns your voice into text in any app — fully on-device, open-source, and private. Your voice never leaves your machine.",
+    "Echo is a voice keyboard for macOS, Windows, and Linux. Say your wake word and it types what you say into whatever app is focused — wake word, transcription, and models all running on your own machine.",
   metadataBase: new URL("https://echo.app"),
   openGraph: {
-    title: "Echo — speak, it's typed.",
+    title: "Echo — say the word, start talking",
     description:
-      "On-device voice dictation for every app. Open-source. Private. Fast.",
+      "Hands-free dictation into any app. On-device, open-source, MIT.",
     type: "website",
   },
 };
@@ -35,7 +41,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${openSans.variable} ${jetbrains.variable}`}
+      className={`${bricolage.variable} ${hanken.variable} ${jetbrains.variable}`}
     >
       <body className="grain min-h-screen antialiased">
         <div className="field" aria-hidden />

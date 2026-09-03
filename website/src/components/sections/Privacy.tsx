@@ -1,59 +1,100 @@
 import Reveal from "@/components/ui/Reveal";
-import WaveSignal from "@/components/ui/WaveSignal";
+import TiltCard from "@/components/ui/TiltCard";
 
-const POINTS = [
-  { k: "no servers", v: "Audio is processed by a model on your own CPU/GPU. There is no backend to send it to." },
-  { k: "no telemetry", v: "Usage stays local. Optional analytics are stored on disk and never transmitted." },
-  { k: "no account", v: "Download and dictate. There's no sign-up, no email, no license server." },
+const REQUESTS = [
+  { host: "api.github.com", why: "checked for an update", when: "2 days ago" },
+  {
+    host: "objects.githubusercontent.com",
+    why: "downloaded whisper base.en",
+    when: "9 days ago",
+  },
+  {
+    host: "github.com",
+    why: "downloaded wake-word models",
+    when: "9 days ago",
+  },
+];
+
+const FACTS = [
+  {
+    title: "Telemetry never leaves",
+    body: "Opt-in, stored in SQLite on your machine, and viewable as counts you can delete. No audio, no transcript text, no window titles.",
+  },
+  {
+    title: "Keys live in the keychain",
+    body: "If you add a cloud provider, the key goes to the OS keychain and is never handed back to the interface that stored it.",
+  },
+  {
+    title: "Offline is a real mode",
+    body: "With local Whisper and the update check off, Echo makes no requests at all — and the log below is how you confirm it.",
+  },
 ];
 
 export default function Privacy() {
   return (
-    <section className="relative mx-auto mt-24 max-w-7xl px-6 sm:px-10">
-      <div className="panel relative overflow-hidden rounded-3xl p-7 sm:p-12">
-        <div className="scanline" aria-hidden />
-        <div className="grid items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]">
-          <Reveal>
-            <p className="eyebrow">Privacy isn&apos;t a setting</p>
-            <h2 className="mt-4 text-5xl font-semibold leading-[0.95] sm:text-7xl">
-              Your voice never
-              <br />
-              leaves <span className="signal-gradient">this device</span>.
-            </h2>
-            <p className="mt-6 max-w-lg text-lg leading-relaxed text-fog">
-              Most dictation tools stream your microphone to someone else&apos;s
-              computer. Echo doesn&apos;t. The model lives with you, so what you
-              say stays exactly where you said it.
-            </p>
+    <section className="mx-auto mt-28 max-w-7xl px-6 sm:mt-40 sm:px-10">
+      <div className="grid items-start gap-14 lg:grid-cols-[1.05fr_0.95fr] lg:gap-20">
+        <Reveal>
+          <TiltCard className="panel rounded-[var(--radius-card)] p-5 sm:p-7" max={4}>
+            <div className="flex items-center justify-between gap-4">
+              <span className="datum uppercase tracking-[0.24em]">
+                requests echo made
+              </span>
+              <span className="flex items-center gap-2 font-mono text-[0.7rem] text-glow">
+                <span className="h-1.5 w-1.5 rounded-full bg-glow" />
+                offline-capable
+              </span>
+            </div>
 
-            <dl className="mt-8 grid gap-px overflow-hidden rounded-2xl border border-line sm:grid-cols-3">
-              {POINTS.map((p) => (
-                <div key={p.k} className="bg-ink-1/60 p-5">
-                  <dt className="font-mono text-xs uppercase tracking-[0.18em] text-glow">
-                    {p.k}
-                  </dt>
-                  <dd className="mt-3 text-sm leading-relaxed text-fog">{p.v}</dd>
+            <div className="mt-5 divide-y divide-line">
+              {REQUESTS.map((r) => (
+                <div
+                  key={r.host + r.when}
+                  className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3"
+                >
+                  <span className="font-mono text-sm text-text">{r.host}</span>
+                  <span className="datum">{r.when}</span>
+                  <span className="w-full text-sm text-fog">{r.why}</span>
                 </div>
               ))}
-            </dl>
+            </div>
+
+            <p className="datum mt-5 border-t border-line pt-4">
+              nothing since — transcription is running locally
+            </p>
+          </TiltCard>
+        </Reveal>
+
+        <div>
+          <Reveal>
+            <p className="eyebrow">Privacy</p>
+            <h2 className="mt-5 text-5xl sm:text-6xl">
+              Proof, not a <span className="glow-text">promise</span>.
+            </h2>
+            <p className="mt-6 text-lg leading-relaxed text-fog">
+              Echo logs every outbound request it makes — the host, the reason,
+              and when. Local transcription makes none, so you can watch the log
+              stay empty instead of taking our word for it.
+            </p>
           </Reveal>
 
-          {/* contained "this machine" boundary */}
-          <Reveal delay={0.15}>
-            <div className="relative">
-              <div className="rounded-3xl border border-dashed border-line-2 p-5">
-                <div className="flex items-center justify-between font-mono text-[0.66rem] uppercase tracking-[0.2em] text-faint">
-                  <span>localhost</span>
-                  <span className="text-glow">● secure</span>
-                </div>
-                <div className="mt-2 overflow-hidden rounded-2xl bg-ink/60">
-                  <WaveSignal height={180} lines={4} intensity={0.85} speed={0.8} />
-                </div>
-                <p className="mt-3 text-center font-mono text-[0.66rem] uppercase tracking-[0.2em] text-faint">
-                  audio in · text out · nothing outbound
-                </p>
-              </div>
-            </div>
+          <div className="mt-10 space-y-7">
+            {FACTS.map((f, i) => (
+              <Reveal key={f.title} delay={0.06 * (i + 1)}>
+                <h3 className="text-lg font-semibold">{f.title}</h3>
+                <p className="mt-2 leading-relaxed text-fog">{f.body}</p>
+              </Reveal>
+            ))}
+          </div>
+
+          <Reveal delay={0.24}>
+            <p className="mt-10 border-l-2 border-line-2 pl-5 text-sm leading-relaxed text-faint">
+              Read that claim precisely. The log records requests{" "}
+              <em className="not-italic text-fog">Echo itself</em> made. It is
+              not proof that nothing else left your machine — no process can
+              observe its own OS&rsquo;s traffic, and a native plugin can make
+              requests that never pass through the code this instruments.
+            </p>
           </Reveal>
         </div>
       </div>
