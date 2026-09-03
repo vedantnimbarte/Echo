@@ -77,4 +77,12 @@ export const echoEvents = {
   onModeChanged: (cb: (mode: RecordingMode) => void) =>
     listen<RecordingMode>("echo://mode-changed", (e) => cb(e.payload)),
   emitModeChanged: (mode: RecordingMode) => emit("echo://mode-changed", mode),
+
+  // Pill size lives in the settings window but is rendered by the pill, and the
+  // two are separate webviews with separate stores — so the change is
+  // broadcast rather than read back on a timer.
+  onPillSizeChanged: (cb: (size: "large" | "small") => void) =>
+    listen<"large" | "small">("echo://pill-size-changed", (e) => cb(e.payload)),
+  emitPillSizeChanged: (size: "large" | "small") =>
+    emit("echo://pill-size-changed", size),
 };

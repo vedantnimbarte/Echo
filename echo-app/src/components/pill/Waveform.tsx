@@ -42,17 +42,18 @@ export function Waveform({ mode }: { mode: WaveMode }) {
         let target: number;
         if (m === "listening") {
           target = levels.current[i];
+        } else if (m === "idle") {
+          // At rest the meter is flat — a hairline through the middle of the
+          // capsule. Nothing is happening, so nothing moves.
+          target = 0.06;
         } else if (reduced.current) {
-          // Reduced motion: static bars for non-listening states.
-          target = m === "transcribing" ? 0.4 : 0.12;
-        } else if (m === "transcribing") {
-          // A bright pulse sweeping left→right over a low rolling base.
+          // Reduced motion: hold the transcribing bars still.
+          target = 0.4;
+        } else {
+          // Transcribing: a bright pulse sweeping left→right over a low base.
           const head = (t * 13) % (BARS + 8);
           const pulse = Math.exp(-Math.abs(i - head) / 3.2);
           target = 0.18 + 0.7 * pulse + 0.08 * Math.sin(t * 6 - i * 0.5);
-        } else {
-          // Idle: a slow, shallow breath.
-          target = 0.1 + 0.07 * (0.5 + 0.5 * Math.sin(t * 1.8 - i * 0.45));
         }
         // Snappy rise, gentler fall feels closest to a real meter.
         const k = target > cur[i] ? 0.4 : 0.16;
@@ -60,7 +61,7 @@ export function Waveform({ mode }: { mode: WaveMode }) {
         const h = Math.max(0.05, Math.min(1, cur[i]));
         const bar = bars[i];
         bar.style.transform = `scaleY(${h.toFixed(3)})`;
-        bar.style.opacity = (0.35 + 0.65 * h).toFixed(3);
+        bar.style.opacity = (0.45 + 0.55 * h).toFixed(3);
       }
       raf = requestAnimationFrame(tick);
     };
