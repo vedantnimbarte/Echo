@@ -91,7 +91,8 @@ impl DictionaryEngine {
         (!prompt.is_empty()).then_some(prompt)
     }
 
-    fn apply_replacements(&self, mut text: String, profile: Option<i64>) -> String {
+    fn apply_replacements(&self, text: String, profile: Option<i64>) -> String {
+        let mut text = text;
         for entry in &self.entries {
             if !entry.enabled {
                 continue;
@@ -99,20 +100,84 @@ impl DictionaryEngine {
             if entry.profile_id.is_some() && entry.profile_id != profile {
                 continue;
             }
-            // Case-insensitive whole-phrase match using a simple replace.
-            let lower_text = text.to_lowercase();
-            let lower_phrase = entry.phrase.to_lowercase();
-            if let Some(pos) = lower_text.find(&lower_phrase) {
-                text = format!(
-                    "{}{}{}",
-                    &text[..pos],
-                    entry.replacement,
-                    &text[pos + entry.phrase.len()..]
-                );
-            }
+            text = replace_all_ci(&text, &entry.phrase, &entry.replacement);
         }
         text
     }
+}
+
+/// Replace every case-insensitive occurrence of `phrase` in `text`.
+///
+/// The obvious implementation — search `text.to_lowercase()` and slice `text`
+/// at the offset it returns — is wrong twice over, and both ways bite only on
+/// input the author is unlikely to type:
+///
+/// 1. Lowercasing can change a string's *length*. `İ` is two bytes but
+///    lowercases to three, so every offset past it is shifted; slicing the
+///    original at one lands mid-character or off the end and panics. Since
+///    this runs inside the transcript task, that panic took the transcript
+///    with it and showed the user nothing.
+/// 2. `str::find` returns the first match only, so "teh cat and teh dog"
+///    kept the second "teh" — a replacement rule that fixes one of two
+///    identical mistakes.
+///
+/// So the match is done against the original text, comparing lowercased
+/// characters, and the range it reports is always a valid range *of the
+/// original*.
+fn replace_all_ci(text: &str, phrase: &str, replacement: &str) -> String {
+    // An empty phrase matches everywhere and would never advance the cursor.
+    if phrase.is_empty() {
+        return text.to_string();
+    }
+    let phrase_lower: Vec<char> = phrase.chars().flat_map(char::to_lowercase).collect();
+
+    let mut out = String::with_capacity(text.len());
+    let mut cursor = 0;
+
+    while let Some((start, end)) = find_from(text, &phrase_lower, cursor) {
+        out.push_str(&text[cursor..start]);
+        out.push_str(replacement);
+        cursor = end;
+    }
+    out.push_str(&text[cursor..]);
+    out
+}
+
+/// Byte range of the next case-insensitive match at or after `from`.
+fn find_from(text: &str, phrase_lower: &[char], from: usize) -> Option<(usize, usize)> {
+    if from > text.len() {
+        return None;
+    }
+    text[from..]
+        .char_indices()
+        .find_map(|(offset, _)| {
+            let start = from + offset;
+            match_at(text, start, phrase_lower).map(|end| (start, end))
+        })
+}
+
+/// If `phrase_lower` matches `text` at `start`, the byte offset just past it.
+fn match_at(text: &str, start: usize, phrase_lower: &[char]) -> Option<usize> {
+    let mut matched = 0usize;
+    let mut end = start;
+
+    for c in text[start..].chars() {
+        if matched == phrase_lower.len() {
+            break;
+        }
+        // One source character can lowercase to several. If the phrase runs
+        // out partway through one, the match would have to end mid-character —
+        // there is no range that expresses that, so it is not a match.
+        for lowered in c.to_lowercase() {
+            if matched >= phrase_lower.len() || phrase_lower[matched] != lowered {
+                return None;
+            }
+            matched += 1;
+        }
+        end += c.len_utf8();
+    }
+
+    (matched == phrase_lower.len()).then_some(end)
 }
 
 #[cfg(test)]
@@ -180,6 +245,71 @@ mod tests {
             entry("kube", "Kubernetes", None),
         ]);
         assert_eq!(e.prompt_terms(None).as_deref(), Some("Kubernetes"));
+    }
+
+    /// Regression: this panicked with "start byte index 7 is out of bounds for
+    /// string of length 6". `İ` occupies two bytes and lowercases to three, so
+    /// an offset found in a lowercased copy does not address the original.
+    #[test]
+    fn a_character_that_grows_when_lowercased_does_not_panic() {
+        let e = DictionaryEngine::new(vec![entry("teh", "the", None)]);
+        assert_eq!(e.process_for("\u{130} teh", None), "\u{130} the");
+    }
+
+    /// Regression: only the first occurrence used to be replaced.
+    #[test]
+    fn every_occurrence_is_replaced() {
+        let e = DictionaryEngine::new(vec![entry("teh", "the", None)]);
+        assert_eq!(
+            e.process_for("teh cat and teh dog and teh bird", None),
+            "the cat and the dog and the bird"
+        );
+    }
+
+    #[test]
+    fn matching_ignores_case_but_the_replacement_is_verbatim() {
+        let e = DictionaryEngine::new(vec![entry("github", "GitHub", None)]);
+        assert_eq!(
+            e.process_for("GITHUB and GitHub and github", None),
+            "GitHub and GitHub and GitHub"
+        );
+    }
+
+    #[test]
+    fn adjacent_matches_are_both_replaced() {
+        let e = DictionaryEngine::new(vec![entry("ab", "X", None)]);
+        assert_eq!(e.process_for("ababab", None), "XXX");
+    }
+
+    /// A replacement that contains its own phrase must not be rescanned, or the
+    /// loop would never terminate.
+    #[test]
+    fn a_self_containing_replacement_terminates() {
+        let e = DictionaryEngine::new(vec![entry("the", "the very", None)]);
+        assert_eq!(e.process_for("the cat", None), "the very cat");
+    }
+
+    /// An empty phrase matches at every position and would never advance.
+    #[test]
+    fn an_empty_phrase_leaves_the_text_alone() {
+        let e = DictionaryEngine::new(vec![entry("", "X", None)]);
+        assert_eq!(e.process_for("unchanged", None), "unchanged");
+    }
+
+    #[test]
+    fn multibyte_text_around_a_match_survives_intact() {
+        let e = DictionaryEngine::new(vec![entry("cafe", "caf\u{e9}", None)]);
+        assert_eq!(
+            e.process_for("\u{4f60}\u{597d} cafe \u{1f600} cafe", None),
+            "\u{4f60}\u{597d} caf\u{e9} \u{1f600} caf\u{e9}"
+        );
+    }
+
+    /// The phrase itself may be multi-byte.
+    #[test]
+    fn a_multibyte_phrase_is_matched_and_replaced() {
+        let e = DictionaryEngine::new(vec![entry("\u{e9}l\u{e8}ve", "student", None)]);
+        assert_eq!(e.process_for("un \u{e9}l\u{e8}ve ici", None), "un student ici");
     }
 
     #[test]
