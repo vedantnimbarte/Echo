@@ -155,6 +155,14 @@ const _: () = assert!(EMBED_WINDOW * 2 >= EMBED_WINDOW + MEL_FRAMES_PER_CHUNK);
 /// than on every overlapping window. ~19 chunks ≈ 1.5 s.
 const COOLDOWN_CHUNKS: u32 = 19;
 
+/// Chunks of silence fed at construction so the chain is immediately usable.
+///
+/// The classifier cannot run until the mel buffer holds a full embedding
+/// window and the feature buffer holds a full classifier window: ten chunks to
+/// fill the first, sixteen more to fill the second. Derived rather than
+/// written as 26 so it follows the window sizes if they ever change.
+const PRIME_CHUNKS: usize = EMBED_WINDOW.div_ceil(MEL_FRAMES_PER_CHUNK) + CLASSIFIER_FRAMES;
+
 /// Streaming wake-phrase detector over a loaded [`WakeModel`].
 ///
 /// Feed it arbitrary-length audio; it buffers internally to the fixed `CHUNK`
@@ -175,7 +183,7 @@ pub struct WakeSpotter {
 
 impl WakeSpotter {
     pub fn new(model: std::sync::Arc<WakeModel>, threshold: f32) -> Self {
-        Self {
+        let mut spotter = Self {
             model,
             pending: Vec::with_capacity(CHUNK * 2),
             raw: Vec::with_capacity(CHUNK + MEL_PAD),
@@ -183,6 +191,26 @@ impl WakeSpotter {
             feats: Vec::with_capacity(CLASSIFIER_FRAMES * 2 * EMBED_DIM),
             threshold: threshold.clamp(0.05, 0.99),
             cooldown: 0,
+        };
+        spotter.prime();
+        spotter
+    }
+
+    /// Fill the buffers with silence so the very next audio can be scored.
+    ///
+    /// Without this the chain needs ~2.1 seconds of audio before the
+    /// classifier can run at all, so a freshly-armed listener is simply deaf
+    /// for two seconds. That is not a corner case: the listener is re-armed
+    /// after every dictation, which is precisely when someone is most likely
+    /// to speak again immediately — and the phrase would be silently missed.
+    ///
+    /// Costs a few dozen milliseconds of inference once, off the audio thread,
+    /// and the primed silence is flushed out by real audio within two seconds.
+    fn prime(&mut self) {
+        let silence = [0.0f32; CHUNK];
+        for _ in 0..PRIME_CHUNKS {
+            // Silence scores ~0, so this cannot produce a spurious detection.
+            self.step(&silence);
         }
     }
 
@@ -290,3 +318,9 @@ mod tests {
         assert_eq!(small, vec![1.0, 2.0]);
     }
 }
+
+// Tests against the real downloaded models live in their own file; as a child
+// module they still see the private sessions and buffers they need to inspect.
+#[cfg(test)]
+#[path = "onnx_tests.rs"]
+mod real_models;
