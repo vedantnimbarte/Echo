@@ -2,7 +2,6 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use futures_util::StreamExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 
@@ -68,6 +67,19 @@ impl Pack {
             Pack::Cpu => "cpu",
             Pack::Cuda11 => "cuda11",
             Pack::Cuda12 => "cuda12",
+        }
+    }
+
+    /// Download size in megabytes, rounded.
+    ///
+    /// Worth showing before the click rather than after: the CUDA 12 build is
+    /// 443 MB compressed and roughly a gigabyte unpacked, which is not
+    /// something to start silently on somebody's connection.
+    pub fn download_mb(self) -> u32 {
+        match self {
+            Pack::Cpu => 4,
+            Pack::Cuda11 => 45,
+            Pack::Cuda12 => 443,
         }
     }
 
@@ -292,7 +304,11 @@ impl BinaryManager {
 
             crate::core::egress::record(&url, "whisper binary download");
 
-            let resp = reqwest::get(&url)
+            // Same stall timeout as every other download: without one a dead
+            // connection freezes the progress bar forever. See core::download.
+            let resp = crate::core::download::client()?
+                .get(&url)
+                .send()
                 .await
                 .map_err(|e| EchoError::AsrProvider(e.to_string()))?
                 .error_for_status()
@@ -306,8 +322,9 @@ impl BinaryManager {
                 .await
                 .map_err(|e| EchoError::Config(e.to_string()))?;
             let mut stream = resp.bytes_stream();
-            while let Some(chunk) = stream.next().await {
-                let chunk = chunk.map_err(|e| EchoError::AsrProvider(e.to_string()))?;
+            // Same per-chunk stall timeout as every other download; a frozen
+            // connection must error rather than hang. See core::download.
+            while let Some(chunk) = crate::core::download::next_chunk(&mut stream).await? {
                 file.write_all(&chunk)
                     .await
                     .map_err(|e| EchoError::Config(e.to_string()))?;

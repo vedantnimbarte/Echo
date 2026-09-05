@@ -77,6 +77,65 @@ fn smart_spacing(text: &str) -> String {
     }
 }
 
+/// Which tool types text on a Linux desktop, and with which arguments.
+///
+/// Lives here rather than in `platform/linux.rs` so it can be tested from any
+/// host. That module only compiles on Linux, which is precisely why this — the
+/// part with a real failure mode — had no tests at all.
+///
+/// The `--` matters more than it looks: without it a transcript that happens to
+/// begin with a dash ("-- as I was saying") is parsed by xdotool as options
+/// rather than text, and either errors or types nothing.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(crate) fn linux_type_command(wayland: bool, text: &str) -> (&'static str, Vec<String>) {
+    // ydotool talks to the kernel uinput device and so works under Wayland,
+    // but needs the ydotoold daemon; xdotool drives X11.
+    if wayland {
+        ("ydotool", vec!["type".into(), "--".into(), text.to_owned()])
+    } else {
+        (
+            "xdotool",
+            vec![
+                "type".into(),
+                "--clearmodifiers".into(),
+                "--".into(),
+                text.to_owned(),
+            ],
+        )
+    }
+}
+
+/// A Ctrl chord. ydotool addresses keys by Linux input-event code
+/// (29 = LEFTCTRL); xdotool uses the key name.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(crate) fn linux_chord_command(
+    wayland: bool,
+    keycode: u8,
+    xdotool_key: &str,
+) -> (&'static str, Vec<String>) {
+    if wayland {
+        (
+            "ydotool",
+            vec![
+                "key".into(),
+                "29:1".into(),
+                format!("{keycode}:1"),
+                format!("{keycode}:0"),
+                "29:0".into(),
+            ],
+        )
+    } else {
+        (
+            "xdotool",
+            vec![
+                "key".into(),
+                "--clearmodifiers".into(),
+                xdotool_key.to_owned(),
+            ],
+        )
+    }
+}
+
 /// Scripts and punctuation blocks that do not separate words with spaces.
 fn is_unspaced_script(c: char) -> bool {
     matches!(c as u32,
@@ -199,6 +258,53 @@ mod tests {
 
     // `deliver(_, _, false)` types keystrokes and never sends a paste shortcut.
     // (The paste branch touches the real clipboard, so it needs device testing.)
+
+    /// A transcript beginning with a dash must be typed, not parsed as options.
+    /// This is the reason `--` is in the argument list at all.
+    #[test]
+    fn linux_text_is_separated_from_the_options() {
+        for wayland in [false, true] {
+            let (_, args) = linux_type_command(wayland, "-- as I was saying");
+            let sep = args.iter().position(|a| a == "--").expect("no -- separator");
+            assert_eq!(
+                args.last().unwrap(),
+                "-- as I was saying",
+                "the text must survive verbatim"
+            );
+            assert_eq!(sep, args.len() - 2, "-- must sit immediately before the text");
+        }
+    }
+
+    /// The whole transcript is one argument. Splitting it would turn a spoken
+    /// sentence into a series of flags.
+    #[test]
+    fn linux_text_is_a_single_argument() {
+        let (_, args) = linux_type_command(false, "hello there friend");
+        assert_eq!(args.iter().filter(|a| a.contains("hello")).count(), 1);
+        assert_eq!(args.last().unwrap(), "hello there friend");
+    }
+
+    #[test]
+    fn linux_picks_the_tool_that_matches_the_display_server() {
+        assert_eq!(linux_type_command(false, "x").0, "xdotool");
+        assert_eq!(linux_type_command(true, "x").0, "ydotool");
+        assert_eq!(linux_chord_command(false, 47, "ctrl+v").0, "xdotool");
+        assert_eq!(linux_chord_command(true, 47, "ctrl+v").0, "ydotool");
+    }
+
+    /// The paste chord must press Ctrl, press and release the key, then release
+    /// Ctrl. Leaving Ctrl held would wedge the user's keyboard.
+    #[test]
+    fn linux_wayland_chord_presses_and_releases_ctrl_around_the_key() {
+        let (_, args) = linux_chord_command(true, 47, "ctrl+v");
+        assert_eq!(args, vec!["key", "29:1", "47:1", "47:0", "29:0"]);
+    }
+
+    #[test]
+    fn linux_x11_chord_uses_the_key_name() {
+        let (_, args) = linux_chord_command(false, 47, "ctrl+v");
+        assert_eq!(args, vec!["key", "--clearmodifiers", "ctrl+v"]);
+    }
     #[test]
     fn deliver_type_routes_to_keystrokes() {
         let spy = SpyInjector::default();
