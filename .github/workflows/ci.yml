@@ -80,6 +80,13 @@ jobs:
           cargo build --manifest-path echo-app/src-tauri/Cargo.toml
           xvfb-run -a ./echo-app/src-tauri/target/debug/echo --selftest
 
+      # Not for the timings — a shared runner is far too noisy for those to
+      # mean anything, and it has no model to transcribe with. This only
+      # proves the harness still runs, so it cannot rot unnoticed between
+      # the times somebody actually wants a measurement.
+      - name: Benchmark harness runs
+        run: xvfb-run -a ./echo-app/src-tauri/target/debug/echo --benchmark
+
   frontend:
     runs-on: ubuntu-latest
     steps:

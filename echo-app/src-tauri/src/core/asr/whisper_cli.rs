@@ -46,7 +46,7 @@ pub(super) async fn initial_prompt(
 ///
 /// Shared with [`super::local::LocalWhisperProvider`] so the CLI fallback and
 /// the standalone provider cannot drift apart in flags or output handling.
-pub(super) async fn run_cli(
+pub(crate) async fn run_cli(
     binary: &Path,
     model_path: &Path,
     wav: &[u8],

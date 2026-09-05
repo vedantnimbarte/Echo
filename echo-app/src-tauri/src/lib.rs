@@ -1,3 +1,4 @@
+mod benchmark;
 mod commands;
 mod core;
 mod error;
@@ -339,6 +340,9 @@ pub fn run() {
             // setup has run. It never returns.
             if selftest::requested() {
                 selftest::run(app.handle());
+            }
+            if benchmark::requested() {
+                benchmark::run(app.handle());
             }
 
             // Surface the settings window on first launch so onboarding can run.
