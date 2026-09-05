@@ -52,6 +52,34 @@ jobs:
       - name: cargo test
         run: cargo test --manifest-path echo-app/src-tauri/Cargo.toml --lib
 
+      # Unit tests never launch the binary, and two real bugs shipped in the
+      # gap: a `tokio::spawn` in Tauri's setup hook that panicked before the
+      # window appeared, and a dictionary panic inside the transcript task.
+      # `--selftest` runs a real startup and pushes synthetic audio through
+      # the pipeline, so that class of failure is caught here rather than by
+      # whoever installs the release.
+      #
+      # Tauri creates a webview before `setup` runs, so this needs a display
+      # even though nothing is ever shown; xvfb provides one. The frontend
+      # has to exist first because `frontendDist` points at ../dist.
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: echo-app/package-lock.json
+      - name: Build the frontend
+        working-directory: echo-app
+        run: |
+          npm ci
+          npm run build
+      - name: Install xvfb
+        run: sudo apt-get install -y xvfb
+      - name: Self-test a real startup
+        run: |
+          cargo build --manifest-path echo-app/src-tauri/Cargo.toml
+          xvfb-run -a ./echo-app/src-tauri/target/debug/echo --selftest
+
   frontend:
     runs-on: ubuntu-latest
     steps:

@@ -2,6 +2,7 @@ mod commands;
 mod core;
 mod error;
 mod platform;
+mod selftest;
 mod state;
 mod storage;
 
@@ -332,6 +333,14 @@ pub fn run() {
             // Arm the wake-word listener if the user enabled it last session.
             commands::wake::rearm(app.handle());
 
+            // `--selftest` runs here rather than in main(): the point is to
+            // exercise a real startup, and everything worth checking — the
+            // database, the audio router, the ASR provider — only exists once
+            // setup has run. It never returns.
+            if selftest::requested() {
+                selftest::run(app.handle());
+            }
+
             // Surface the settings window on first launch so onboarding can run.
             if !onboarding_done {
                 if let Some(win) = app.get_webview_window("main") {
@@ -415,6 +424,24 @@ pub fn run() {
             commands::settings::get_setting,
             commands::settings::set_setting,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running echo");
+        .build(tauri::generate_context!())
+        .expect("error while building echo")
+        .run(|app, event| {
+            // The resident whisper model is a child process holding a few
+            // hundred megabytes. `AppHandle::exit` — which the Quit button
+            // calls — ends the process without running destructors, so
+            // `kill_on_drop` never fires and the server is orphaned: it
+            // outlives Echo, keeps the model in RAM, and accumulates one copy
+            // per launch.
+            //
+            // ponytail: this covers an orderly exit, which is the one we
+            // control. A crash or a force-kill still orphans the child; a Job
+            // Object on Windows and a process group elsewhere would close that
+            // gap if it ever proves to matter.
+            if matches!(event, tauri::RunEvent::Exit) {
+                if let Some(state) = app.try_state::<AppState>() {
+                    tauri::async_runtime::block_on(state.whisper_server.shutdown());
+                }
+            }
+        });
 }
