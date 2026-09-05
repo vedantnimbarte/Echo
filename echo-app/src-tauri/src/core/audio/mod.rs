@@ -93,7 +93,11 @@ impl AudioService {
     pub fn new() -> Result<Self> {
         let host = cpal::default_host();
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
-        tokio::spawn(route(cmd_rx));
+        // `tauri::async_runtime::spawn`, not `tokio::spawn`: this is built in
+        // Tauri's `setup` hook, which is not inside a Tokio runtime context —
+        // a bare `tokio::spawn` there panics with "no reactor running" before
+        // the window ever appears.
+        tauri::async_runtime::spawn(route(cmd_rx));
         Ok(Self {
             host,
             open: Mutex::new(None),
@@ -139,7 +143,9 @@ impl AudioService {
         let generation = self.warm_generation.fetch_add(1, Ordering::SeqCst) + 1;
         let tx = self.cmd_tx.clone();
         let gen_handle = self.warm_generation.clone();
-        tokio::spawn(async move {
+        // Same reasoning as in `new`: `warm` is reachable from a synchronous
+        // Tauri command, which does not run inside a Tokio runtime either.
+        tauri::async_runtime::spawn(async move {
             tokio::time::sleep(WARM_TIMEOUT).await;
             // A newer warm-up or a started recording has superseded this timer.
             if gen_handle.load(Ordering::SeqCst) != generation {
