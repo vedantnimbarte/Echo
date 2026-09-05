@@ -9,6 +9,16 @@ pub fn open(path: &Path) -> Result<Connection> {
     Ok(conn)
 }
 
+/// Re-run the migrator against an existing connection.
+///
+/// `open` always starts from whatever is on disk, so the upgrade path — an
+/// old database meeting new code, which is the one that reaches existing
+/// users — can only be exercised by calling this directly.
+#[cfg(test)]
+pub fn migrate_for_test(conn: &Connection) -> Result<()> {
+    migrate(conn)
+}
+
 fn migrate(conn: &Connection) -> Result<()> {
     conn.execute_batch("
         CREATE TABLE IF NOT EXISTS schema_migrations (

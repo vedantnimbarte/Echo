@@ -83,9 +83,13 @@ pub fn insert_history(conn: &Connection, record: &TranscriptionRecord) -> Result
 }
 
 pub fn list_history(conn: &Connection, limit: i64) -> Result<Vec<TranscriptionRecord>> {
+    // `created_at` only resolves to the second, so several dictations in the
+    // same second tie and SQLite may return them in any order — in practice
+    // oldest-first, the exact opposite of what History shows. `id DESC` breaks
+    // the tie by insertion order, matching `list_egress`.
     let mut stmt = conn.prepare(
         "SELECT id, text, language, provider, created_at
-         FROM transcription_history ORDER BY created_at DESC LIMIT ?1",
+         FROM transcription_history ORDER BY created_at DESC, id DESC LIMIT ?1",
     )?;
     let records = stmt
         .query_map(params![limit], |r| {
@@ -207,8 +211,15 @@ pub fn find_app_profile(conn: &Connection, app_match: &str) -> Result<Option<App
     Ok(row)
 }
 
+/// Insert or update the profile for an application, returning its id.
+///
+/// `RETURNING id` rather than `last_insert_rowid()`: on the conflict path no
+/// insert happens, so the rowid counter still holds whatever was inserted last
+/// on this connection — a different profile entirely. That id is handed to the
+/// frontend, which uses it to address the profile afterwards, so returning the
+/// wrong one points later edits and deletes at somebody else's row.
 pub fn upsert_app_profile(conn: &Connection, p: &AppProfile) -> Result<i64> {
-    conn.execute(
+    let id = conn.query_row(
         "INSERT INTO app_profiles
             (app_match, label, auto_inject, injection_method, profile_id, enabled)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)
@@ -217,7 +228,8 @@ pub fn upsert_app_profile(conn: &Connection, p: &AppProfile) -> Result<i64> {
             auto_inject = excluded.auto_inject,
             injection_method = excluded.injection_method,
             profile_id = excluded.profile_id,
-            enabled = excluded.enabled",
+            enabled = excluded.enabled
+         RETURNING id",
         params![
             p.app_match.to_lowercase(),
             p.label,
@@ -226,8 +238,9 @@ pub fn upsert_app_profile(conn: &Connection, p: &AppProfile) -> Result<i64> {
             p.profile_id,
             p.enabled as i64,
         ],
+        |r| r.get(0),
     )?;
-    Ok(conn.last_insert_rowid())
+    Ok(id)
 }
 
 pub fn delete_app_profile(conn: &Connection, id: i64) -> Result<()> {
