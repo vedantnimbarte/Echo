@@ -102,6 +102,9 @@ export function Performance() {
               <p className="text-[10.5px] leading-relaxed text-[var(--ink-muted)]">
                 A build for your GPU is available and will make local
                 transcription substantially faster.
+                {gpu?.available_pack_mb
+                  ? ` It is a ${gpu.available_pack_mb} MB download.`
+                  : ""}
               </p>
               <button
                 type="button"

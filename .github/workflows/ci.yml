@@ -87,6 +87,27 @@ jobs:
       - name: Benchmark harness runs
         run: xvfb-run -a ./echo-app/src-tauri/target/debug/echo --benchmark
 
+  # `platform/macos.rs` is cfg-gated, so the Linux job never compiles a line of
+  # it. Until now it was built only when a release tag fired, which meant a
+  # break in the macOS injector was discovered while cutting a release. Runners
+  # are free for public repositories, so there is no reason to wait that long.
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: echo-app/src-tauri
+      - name: cargo clippy
+        run: cargo clippy --manifest-path echo-app/src-tauri/Cargo.toml --all-targets
+      - name: cargo test
+        run: cargo test --manifest-path echo-app/src-tauri/Cargo.toml --lib
+
   frontend:
     runs-on: ubuntu-latest
     steps:

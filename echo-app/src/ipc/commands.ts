@@ -27,6 +27,8 @@ export interface GpuStatus {
   detected: string;
   /** Id of the accelerated pack this machine could run, if any. */
   available_pack: string | null;
+  /** Its download size in MB, so the user knows what they are agreeing to. */
+  available_pack_mb: number | null;
   pack_installed: boolean;
   /** Whether acceleration is actually in use for the next utterance. */
   active: boolean;

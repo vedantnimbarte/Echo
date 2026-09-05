@@ -9,6 +9,9 @@ pub mod fallback;
 pub mod local;
 pub mod manager;
 pub mod model_manager;
+
+#[cfg(test)]
+mod pack_tests;
 pub mod wav;
 pub mod whisper_cli;
 pub mod whisper_server;

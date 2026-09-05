@@ -193,6 +193,8 @@ pub struct GpuStatus {
     pub detected: String,
     /// Id of the accelerated pack this machine could run, if any.
     pub available_pack: Option<String>,
+    /// Its download size in MB, so the user knows what they are agreeing to.
+    pub available_pack_mb: Option<u32>,
     /// Whether that pack is downloaded.
     pub pack_installed: bool,
     /// Whether acceleration is actually being used for the next utterance.
@@ -214,6 +216,7 @@ pub fn gpu_status(state: State<'_, AppState>) -> GpuStatus {
     GpuStatus {
         detected: state.binaries.gpu().label(),
         available_pack: available.map(|p| p.id().to_string()),
+        available_pack_mb: available.map(|p| p.download_mb()),
         pack_installed: available.map(|p| state.binaries.pack_installed(p)).unwrap_or(false),
         active: enabled && state.binaries.active_gpu_pack().is_some(),
         failed: state.binaries.gpu_failed(),
