@@ -38,12 +38,7 @@ impl AsrManager {
     }
 
     pub async fn transcribe(&self, audio: Vec<f32>, language: Option<&str>) -> Result<TranscriptSegment> {
-        let name = self.active_provider.read().await.clone();
-        let providers = self.providers.read().await;
-        let provider = providers
-            .get(&name)
-            .ok_or_else(|| EchoError::NotFound(format!("Active ASR provider '{name}' not found")))?;
-        provider.transcribe(audio, language).await
+        self.active().await?.transcribe(audio, language).await
     }
 
     pub async fn transcribe_stream(
@@ -52,13 +47,27 @@ impl AsrManager {
         tx: mpsc::Sender<TranscriptSegment>,
         language: Option<&str>,
     ) -> Result<()> {
+        self.active()
+            .await?
+            .transcribe_stream(audio_rx, tx, language)
+            .await
+    }
+
+    /// The provider to transcribe with, already wrapped in its fallback.
+    ///
+    /// Resolved per call rather than cached at registration, because the point
+    /// of the fallback is to cover failures that appear later — the offline
+    /// engine may have finished downloading since the last utterance.
+    async fn active(&self) -> Result<Arc<dyn AsrProvider>> {
         let name = self.active_provider.read().await.clone();
         let providers = self.providers.read().await;
         let provider = providers
             .get(&name)
             .ok_or_else(|| EchoError::NotFound(format!("Active ASR provider '{name}' not found")))?
             .clone();
+        let local = providers.get("local").cloned();
         drop(providers);
-        provider.transcribe_stream(audio_rx, tx, language).await
+
+        Ok(super::fallback::FallbackProvider::wrap(provider, local))
     }
 }

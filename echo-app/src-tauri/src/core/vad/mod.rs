@@ -9,6 +9,7 @@
 //! The recording task owns a single boxed `Vad` for the session and reads a
 //! debounced speech/no-speech boolean from it per audio chunk.
 
+pub mod gate;
 mod silero;
 
 pub use silero::{SileroModel, SileroVad};

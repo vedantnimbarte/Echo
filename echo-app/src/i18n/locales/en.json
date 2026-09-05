@@ -1,0 +1,20 @@
+{
+  "pill.startRecording": "Start recording",
+  "pill.stopRecording": "Stop recording",
+  "pill.transcribing": "Transcribing",
+  "pill.tryAgain": "Try again",
+  "pill.openSettings": "Open settings",
+  "pill.quit": "Quit Echo",
+  "pill.genericError": "Something went wrong",
+  "settings.dictation.title": "Dictation",
+  "settings.dictation.description": "How recording starts, and which microphone Echo listens to.",
+  "settings.engine.title": "Engine",
+  "settings.engine.description": "What turns your speech into words, and the models it runs on.",
+  "settings.output.title": "Output",
+  "settings.output.description": "Where the finished text goes, and how it gets there.",
+  "settings.privacy.title": "Privacy",
+  "settings.privacy.description": "What Echo keeps on this machine, and what it sends off it.",
+  "settings.search": "Search settings",
+  "settings.language": "Interface language",
+  "settings.language.auto": "Match my system"
+}

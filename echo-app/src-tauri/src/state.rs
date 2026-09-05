@@ -8,6 +8,7 @@ use crate::core::{
     asr::binary_manager::BinaryManager,
     asr::manager::AsrManager,
     asr::model_manager::ModelManager,
+    asr::whisper_server::WhisperServer,
     audio::AudioService,
     dictionary::DictionaryEngine,
     injection::TextInjector,
@@ -29,6 +30,9 @@ pub struct AppState {
     pub asr: Arc<AsrManager>,
     pub models: Arc<ModelManager>,
     pub binaries: Arc<BinaryManager>,
+    /// The resident whisper.cpp model. Shared so switching models or
+    /// engines reuses the same supervised process rather than leaking one.
+    pub whisper_server: Arc<WhisperServer>,
     /// Loaded Silero VAD model, shared read-only across recording sessions.
     /// `None` if the ONNX model failed to load (falls back to energy VAD).
     pub silero: Option<Arc<SileroModel>>,

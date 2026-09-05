@@ -48,11 +48,48 @@ const COPY_POLL_STEP_MS: u64 = 20;
 /// - `use_paste = true` → put `text` on the clipboard, send the paste shortcut,
 ///   then restore the prior clipboard. Reliable for long transcripts.
 pub fn deliver(inj: &dyn TextInjector, text: &str, use_paste: bool, settle_ms: u64) -> Result<()> {
+    let text = &smart_spacing(text);
     if use_paste {
         paste_text(inj, text, settle_ms)
     } else {
         inj.inject_text(text)
     }
+}
+
+/// Append a trailing space so the next dictation does not run into this one
+/// ("hello worldgoodbye"), except where a space would be wrong.
+///
+/// Han, kana and CJK punctuation are not word-separated: a trailing ASCII space
+/// after "你好" or "です。" is a typography error, and because it is added on
+/// every dictation the gaps accumulate down the line. Hangul is deliberately
+/// *not* in the exclusion list — Korean does separate words with spaces.
+///
+/// Applied here, in the one function every delivery path routes through, rather
+/// than at the call sites: re-injecting from History and command-mode replies
+/// want the same treatment, and this way they cannot drift apart.
+fn smart_spacing(text: &str) -> String {
+    match text.chars().last() {
+        // Nothing to space, or the caller already ended with whitespace.
+        None => String::new(),
+        Some(last) if last.is_whitespace() => text.to_string(),
+        Some(last) if is_unspaced_script(last) => text.to_string(),
+        Some(_) => format!("{text} "),
+    }
+}
+
+/// Scripts and punctuation blocks that do not separate words with spaces.
+fn is_unspaced_script(c: char) -> bool {
+    matches!(c as u32,
+        0x3000..=0x303F   // CJK symbols and punctuation (。、「」)
+        | 0x3040..=0x309F // Hiragana
+        | 0x30A0..=0x30FF // Katakana
+        | 0x3400..=0x4DBF // CJK unified ideographs extension A
+        | 0x4E00..=0x9FFF // CJK unified ideographs
+        | 0xF900..=0xFAFF // CJK compatibility ideographs
+        | 0xFE10..=0xFE1F // vertical forms
+        | 0xFE30..=0xFE4F // CJK compatibility forms
+        | 0xFF00..=0xFF65 // fullwidth / halfwidth forms
+    )
 }
 
 /// Clipboard-paste injection: save the current clipboard, set it to `text`,

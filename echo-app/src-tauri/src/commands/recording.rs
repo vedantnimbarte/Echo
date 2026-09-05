@@ -296,7 +296,32 @@ pub async fn end_recording(app: AppHandle, state: &AppState) -> Result<()> {
         *recording = false;
     }
 
-    state.audio.stop_capture();
+    // People dictate in bursts. Keeping the device open for a few seconds
+    // means the next sentence starts instantly instead of paying the
+    // device-open cost again — and the pre-roll it collects means a word begun
+    // before the hotkey registers is still captured.
+    //
+    // It is opt-out because an open microphone lights the OS "in use"
+    // indicator, and that is the user's call to make, not ours.
+    let warm = {
+        let conn = state.db.lock().unwrap();
+        crate::storage::repositories::get_setting(&conn, "warm_mic")
+            .unwrap_or(None)
+            .map(|v| v != "false")
+            .unwrap_or(true)
+    };
+    if warm {
+        let device = {
+            let conn = state.db.lock().unwrap();
+            crate::storage::repositories::get_setting(&conn, "audio_device")
+                .unwrap_or(None)
+                .filter(|s| !s.is_empty())
+        };
+        state.audio.stop_capture_warm(device.as_deref());
+    } else {
+        state.audio.stop_capture();
+    }
+
     app.emit(AppEvent::RecordingStopped.event_name(), AppEvent::RecordingStopped)
         .map_err(|e| EchoError::Plugin(e.to_string()))?;
     info!("Recording stopped");
@@ -309,6 +334,27 @@ pub async fn end_recording(app: AppHandle, state: &AppState) -> Result<()> {
 #[tauri::command]
 pub fn is_recording(state: State<'_, AppState>) -> bool {
     *state.recording.lock().unwrap()
+}
+
+/// Open the microphone before it is needed, so the recording that follows
+/// starts instantly and keeps the half-second before the key press.
+///
+/// Called on the interactions that reliably precede a dictation — pressing the
+/// pill, arming the hotkey. Best-effort by design: it returns nothing and fails
+/// silently, because a failed warm-up must never stop a recording from starting
+/// the ordinary way.
+#[tauri::command]
+pub fn warm_microphone(state: State<'_, AppState>) {
+    let (enabled, device) = {
+        let conn = state.db.lock().unwrap();
+        let get = |k: &str| crate::storage::repositories::get_setting(&conn, k).unwrap_or(None);
+        let enabled = get("warm_mic").map(|v| v != "false").unwrap_or(true);
+        (enabled, get("audio_device").filter(|s| !s.is_empty()))
+    };
+    if !enabled || *state.recording.lock().unwrap() {
+        return;
+    }
+    state.audio.warm(device.as_deref());
 }
 
 /// Signals the VAD stage produces for the UI.

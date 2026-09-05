@@ -106,6 +106,25 @@ pub fn clear_history(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Delete history older than `days`, returning how many rows went.
+///
+/// Retention is a privacy feature before it is a housekeeping one: transcripts
+/// are a verbatim record of everything the user has said to their computer, and
+/// keeping them forever by default is a decision nobody consciously made. Zero
+/// or a negative value means "keep everything" — the caller decides whether to
+/// call at all, but a nonsense value must not silently wipe the history.
+pub fn trim_history_older_than(conn: &Connection, days: i64) -> Result<usize> {
+    if days <= 0 {
+        return Ok(0);
+    }
+    let removed = conn.execute(
+        "DELETE FROM transcription_history
+         WHERE created_at < datetime('now', ?1)",
+        params![format!("-{days} days")],
+    )?;
+    Ok(removed)
+}
+
 // ── Dictionary profiles ──────────────────────────────────────────────────────
 //
 // `profiles` has existed since migration 1 but had no queries; per-app profiles

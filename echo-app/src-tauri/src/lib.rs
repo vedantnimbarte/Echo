@@ -117,6 +117,28 @@ pub fn run() {
                 })
                 .collect();
 
+            // Built before the ASR providers: the local engine holds a handle
+            // to it so dictionary terms can bias whisper's decoder, not just
+            // patch its output afterwards.
+            let dictionary = Arc::new(RwLock::new(DictionaryEngine::new(entries)));
+
+            // Apply the history retention policy at startup. Doing it here
+            // rather than on a timer means it also runs for someone who just
+            // shortened the window, instead of waiting for the next tick.
+            match storage::repositories::get_setting(&conn, "history_retention_days")
+                .unwrap_or(None)
+                .and_then(|v| v.parse::<i64>().ok())
+            {
+                Some(days) if days > 0 => {
+                    match storage::repositories::trim_history_older_than(&conn, days) {
+                        Ok(0) => {}
+                        Ok(n) => info!("Removed {n} transcript(s) older than {days} days"),
+                        Err(e) => tracing::warn!("History retention pass failed: {e}"),
+                    }
+                }
+                _ => {}
+            }
+
             // Default to the local (offline) Whisper engine on first run.
             let active_provider = storage::repositories::get_setting(&conn, "asr_provider")
                 .unwrap_or(None)
@@ -135,8 +157,16 @@ pub fn run() {
             let bin_dir = data_dir.join("bin");
             std::fs::create_dir_all(&bin_dir)?;
             let bundled_bin = core::runtime_deps::bundled_whisper_dir(app.handle());
-            let binary_manager =
-                Arc::new(BinaryManager::new(bin_dir).with_bundled_dir(bundled_bin));
+            // Probed once here rather than per transcription: it costs a
+            // process spawn, and the answer cannot change while we run.
+            let gpu = core::gpu::detect();
+            info!("Compute backend: {}", gpu.label());
+            let binary_manager = Arc::new(
+                BinaryManager::new(bin_dir)
+                    .with_bundled_dir(bundled_bin)
+                    .with_gpu(gpu),
+            );
+            let whisper_server = Arc::new(core::asr::whisper_server::WhisperServer::new());
 
             // Selected local model (defaults to base.en).
             let whisper_model = storage::repositories::get_setting(&conn, "whisper_model")
@@ -149,11 +179,17 @@ pub fn run() {
             // onboarding downloads the binary + model and calls set_asr_provider.
             if let Some(binary) = binary_manager.resolve() {
                 if model_manager.is_downloaded(&whisper_model) {
-                    let provider = core::asr::whisper_cli::WhisperCliProvider::new(
-                        binary,
+                    let _ = binary; // presence check only; the provider resolves per call
+                    let (threads, gpu_allowed) = commands::asr::local_decode_settings(&conn);
+                    let provider = core::asr::local::LocalWhisperProvider::new(
+                        binary_manager.clone(),
+                        whisper_server.clone(),
                         model_manager.model_path(&whisper_model),
                         whisper_model.clone(),
-                    );
+                    )
+                    .with_dictionary(dictionary.clone())
+                    .with_threads(threads)
+                    .with_gpu_allowed(gpu_allowed);
                     let asr = asr_manager.clone();
                     tauri::async_runtime::block_on(async move {
                         asr.register(Arc::new(provider)).await;
@@ -242,10 +278,11 @@ pub fn run() {
                 asr: asr_manager,
                 models: model_manager,
                 binaries: binary_manager,
+                whisper_server,
                 silero,
                 wake_models,
                 wake_active: Arc::new(std::sync::atomic::AtomicBool::new(false)),
-                dictionary: Arc::new(RwLock::new(DictionaryEngine::new(entries))),
+                dictionary,
                 injector: Arc::from(platform_injector()),
                 telemetry,
                 plugins: Mutex::new(plugin_loader),
@@ -315,21 +352,31 @@ pub fn run() {
             commands::asr::delete_model,
             commands::asr::whisper_ready,
             commands::asr::download_whisper_binary,
+            commands::asr::gpu_status,
+            commands::asr::download_gpu_pack,
+            commands::asr::set_gpu_enabled,
+            commands::asr::set_whisper_threads,
+            commands::asr::installed_packs,
+            commands::import::transcribe_file,
+            commands::import::supported_import_formats,
             commands::recording::start_recording,
             commands::recording::stop_recording,
             commands::recording::is_recording,
+            commands::recording::warm_microphone,
             commands::dictionary::list_dictionary,
             commands::dictionary::add_dictionary_entry,
             commands::dictionary::delete_dictionary_entry,
             commands::dictionary::toggle_dictionary_entry,
             commands::dictionary::export_dictionary,
             commands::dictionary::import_dictionary,
+            commands::dictionary::learn_from_correction,
             commands::history::get_history,
             commands::history::clear_history,
             commands::injection::check_accessibility_permission,
             commands::injection::inject_text,
             commands::hotkey::get_hotkey,
             commands::hotkey::register_hotkey,
+            commands::hotkey::hotkey_support,
             commands::hotkey::set_recording_mode,
             commands::providers::set_api_key,
             commands::providers::get_api_key_set,

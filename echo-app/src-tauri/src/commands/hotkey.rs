@@ -44,6 +44,17 @@ pub fn get_hotkey(state: State<'_, AppState>) -> Result<String> {
     Ok(setting(state.inner(), "hotkey", DEFAULT_HOTKEY))
 }
 
+/// Whether global hotkeys can work in this desktop session, and what to do if
+/// they cannot.
+///
+/// Surfaced in Settings beside the hotkey picker, because the failure this
+/// describes is silent: on Wayland the shortcut registers without complaint and
+/// then never fires.
+#[tauri::command]
+pub fn hotkey_support() -> crate::core::session::HotkeySupport {
+    crate::core::session::hotkey_support()
+}
+
 /// Bind `accelerator`, using whichever mechanism can express it.
 ///
 /// A modifier on its own cannot be registered as a system shortcut — see

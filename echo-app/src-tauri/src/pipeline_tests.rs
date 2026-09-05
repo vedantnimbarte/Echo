@@ -463,9 +463,11 @@ async fn pipeline_delivers_dictionary_corrected_text_to_the_focused_app() {
         }
     }
 
+    // Trailing space is `deliver`'s smart spacing, so back-to-back dictations
+    // don't run together ("listeningEcho is"). See `core::injection`.
     assert_eq!(
         injector.typed.lock().unwrap().as_slice(),
-        &["Echo is listening".to_string()],
+        &["Echo is listening ".to_string()],
         "the focused app should receive the dictionary-corrected transcript"
     );
 
@@ -505,9 +507,10 @@ async fn a_per_app_profile_switches_which_dictionary_entries_apply() {
         profile_id: Some(profile_id),
     }]);
 
+    // Expectations carry `deliver`'s trailing smart space.
     for (app, expected) in [
-        ("slack.exe", ":shipit: today"),
-        ("notepad.exe", "ship it today"),
+        ("slack.exe", ":shipit: today "),
+        ("notepad.exe", "ship it today "),
     ] {
         let delivery = resolve_delivery(&conn, Some(app));
         let processed = dictionary.process_for("ship it today", delivery.dictionary_profile);
@@ -518,4 +521,63 @@ async fn a_per_app_profile_switches_which_dictionary_entries_apply() {
             "entry scoped to '{app}' should only apply under its own profile"
         );
     }
+}
+
+/// Retention deletes old transcripts and *only* old ones.
+///
+/// This is the one path in the app that destroys user data on its own, without
+/// anybody pressing anything, so the boundary matters more than the happy path:
+/// an off-by-one here silently eats transcripts the user meant to keep.
+#[test]
+fn retention_removes_only_transcripts_past_the_window() {
+    let conn = test_db();
+
+    let insert = |text: &str, age_days: i64| {
+        conn.execute(
+            "INSERT INTO transcription_history (text, language, provider, created_at)
+             VALUES (?1, NULL, 'test', datetime('now', ?2))",
+            rusqlite::params![text, format!("-{age_days} days")],
+        )
+        .unwrap();
+    };
+
+    insert("today", 0);
+    insert("last week", 7);
+    insert("last year", 365);
+
+    let removed = crate::storage::repositories::trim_history_older_than(&conn, 30).unwrap();
+    assert_eq!(removed, 1, "only the year-old transcript is past a 30-day window");
+
+    let kept: Vec<String> = crate::storage::repositories::list_history(&conn, 100)
+        .unwrap()
+        .into_iter()
+        .map(|r| r.text)
+        .collect();
+    assert!(kept.contains(&"today".to_string()));
+    assert!(kept.contains(&"last week".to_string()));
+    assert!(!kept.contains(&"last year".to_string()));
+}
+
+/// "Keep everything" must never be mistaken for "delete everything".
+#[test]
+fn retention_of_zero_or_less_keeps_all_history() {
+    let conn = test_db();
+    conn.execute(
+        "INSERT INTO transcription_history (text, language, provider, created_at)
+         VALUES ('ancient', NULL, 'test', datetime('now', '-4000 days'))",
+        [],
+    )
+    .unwrap();
+
+    for days in [0, -1] {
+        assert_eq!(
+            crate::storage::repositories::trim_history_older_than(&conn, days).unwrap(),
+            0,
+            "days={days} must be treated as unlimited retention"
+        );
+    }
+    assert_eq!(
+        crate::storage::repositories::list_history(&conn, 100).unwrap().len(),
+        1
+    );
 }
