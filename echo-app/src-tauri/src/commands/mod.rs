@@ -4,6 +4,7 @@ pub mod audio;
 pub mod dictionary;
 pub mod egress;
 pub mod history;
+pub mod import;
 pub mod hotkey;
 pub mod injection;
 pub mod plugins;

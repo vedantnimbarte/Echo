@@ -5,8 +5,10 @@ use tokio::sync::mpsc;
 
 use crate::{
     core::{
+        asr::binary_manager::Pack,
+        asr::decode_opts,
+        asr::local::LocalWhisperProvider,
         asr::model_manager::{ModelInfo, DEFAULT_MODEL},
-        asr::whisper_cli::WhisperCliProvider,
         events::AppEvent,
     },
     error::{EchoError, Result},
@@ -62,7 +64,20 @@ pub async fn register_local_provider(state: &AppState) -> Result<()> {
     let binary = state.binaries.resolve().ok_or_else(|| {
         EchoError::NotFound("The whisper-cli binary is not installed yet".into())
     })?;
-    let provider = WhisperCliProvider::new(binary, state.models.model_path(&model), model);
+    let _ = binary; // presence check only; the provider re-resolves per call
+    let (threads, gpu_allowed) = {
+        let conn = state.db.lock().unwrap();
+        local_decode_settings(&conn)
+    };
+    let provider = LocalWhisperProvider::new(
+        state.binaries.clone(),
+        state.whisper_server.clone(),
+        state.models.model_path(&model),
+        model,
+    )
+    .with_dictionary(state.dictionary.clone())
+    .with_threads(threads)
+    .with_gpu_allowed(gpu_allowed);
     state.asr.register(Arc::new(provider)).await;
     Ok(())
 }
@@ -148,4 +163,136 @@ pub async fn download_whisper_binary(app: AppHandle, state: State<'_, AppState>)
     binaries.download(tx).await?;
     let _ = app.emit("echo://whisper-binary-progress", 1.0_f32);
     Ok(())
+}
+
+/// Read the decode knobs for the local engine: thread count and whether the
+/// GPU may be used at all.
+///
+/// Defaults are "auto" and "yes" — Echo prefers the GPU whenever the machine
+/// has one it can drive, and only a deliberate opt-out or a runtime failure
+/// takes it back to the CPU.
+pub fn local_decode_settings(conn: &rusqlite::Connection) -> (usize, bool) {
+    use crate::storage::repositories::get_setting;
+    let threads = decode_opts::resolve_threads(
+        get_setting(conn, "whisper_threads")
+            .unwrap_or(None)
+            .as_deref(),
+    );
+    let gpu_allowed = get_setting(conn, "gpu_enabled")
+        .unwrap_or(None)
+        .map(|v| v != "false")
+        .unwrap_or(true);
+    (threads, gpu_allowed)
+}
+
+/// What the settings UI needs to show about compute: what was detected, what is
+/// installed, and what is actually in use right now.
+#[derive(serde::Serialize)]
+pub struct GpuStatus {
+    /// Human-readable detected backend, e.g. "NVIDIA CUDA 12.x".
+    pub detected: String,
+    /// Id of the accelerated pack this machine could run, if any.
+    pub available_pack: Option<String>,
+    /// Whether that pack is downloaded.
+    pub pack_installed: bool,
+    /// Whether acceleration is actually being used for the next utterance.
+    pub active: bool,
+    /// True once an accelerated run failed and we latched to CPU.
+    pub failed: bool,
+    /// The user's opt-out.
+    pub enabled: bool,
+    pub threads: usize,
+}
+
+#[tauri::command]
+pub fn gpu_status(state: State<'_, AppState>) -> GpuStatus {
+    let (threads, enabled) = {
+        let conn = state.db.lock().unwrap();
+        local_decode_settings(&conn)
+    };
+    let available = state.binaries.available_gpu_pack();
+    GpuStatus {
+        detected: state.binaries.gpu().label(),
+        available_pack: available.map(|p| p.id().to_string()),
+        pack_installed: available.map(|p| state.binaries.pack_installed(p)).unwrap_or(false),
+        active: enabled && state.binaries.active_gpu_pack().is_some(),
+        failed: state.binaries.gpu_failed(),
+        enabled,
+        threads,
+    }
+}
+
+/// Download the accelerated whisper.cpp build this machine can run, emitting
+/// `echo://whisper-binary-progress` (bare f32, 0..1).
+#[tauri::command]
+pub async fn download_gpu_pack(app: AppHandle, state: State<'_, AppState>) -> Result<()> {
+    let pack = state.binaries.available_gpu_pack().ok_or_else(|| {
+        EchoError::NotFound(
+            "No accelerated whisper build is available for this machine".into(),
+        )
+    })?;
+
+    let binaries = state.binaries.clone();
+    let (tx, mut rx) = mpsc::channel::<f32>(32);
+    let app_progress = app.clone();
+    tokio::spawn(async move {
+        while let Some(p) = rx.recv().await {
+            let _ = app_progress.emit("echo://whisper-binary-progress", p);
+        }
+    });
+    binaries.download_pack(pack, tx).await?;
+    let _ = app.emit("echo://whisper-binary-progress", 1.0_f32);
+
+    // The pack changes which binary we resolve, which changes the server's
+    // signature — restart it so the next utterance runs on the GPU rather than
+    // being served by the CPU process still holding the model.
+    state.whisper_server.shutdown().await;
+    if state.asr.active_provider_name().await == "local" {
+        register_local_provider(state.inner()).await?;
+    }
+    Ok(())
+}
+
+/// Turn GPU decoding on or off. Also clears a latched failure, so this doubles
+/// as the "try the GPU again" control after fixing a driver.
+#[tauri::command]
+pub async fn set_gpu_enabled(state: State<'_, AppState>, enabled: bool) -> Result<()> {
+    {
+        let conn = state.db.lock().unwrap();
+        crate::storage::repositories::set_setting(
+            &conn,
+            "gpu_enabled",
+            if enabled { "true" } else { "false" },
+        )?;
+    }
+    state.whisper_server.shutdown().await;
+    if state.asr.active_provider_name().await == "local" {
+        register_local_provider(state.inner()).await?;
+    }
+    Ok(())
+}
+
+/// Pin the decode thread count, or pass "auto" to let Echo choose.
+#[tauri::command]
+pub async fn set_whisper_threads(state: State<'_, AppState>, threads: String) -> Result<()> {
+    {
+        let conn = state.db.lock().unwrap();
+        crate::storage::repositories::set_setting(&conn, "whisper_threads", &threads)?;
+    }
+    state.whisper_server.shutdown().await;
+    if state.asr.active_provider_name().await == "local" {
+        register_local_provider(state.inner()).await?;
+    }
+    Ok(())
+}
+
+/// Ids of every binary pack currently installed on disk. Lets the settings UI
+/// offer to reclaim the disk a superseded pack is using.
+#[tauri::command]
+pub fn installed_packs(state: State<'_, AppState>) -> Vec<String> {
+    [Pack::Cpu, Pack::Cuda11, Pack::Cuda12]
+        .into_iter()
+        .filter(|p| state.binaries.pack_installed(*p))
+        .map(|p| p.id().to_string())
+        .collect()
 }
