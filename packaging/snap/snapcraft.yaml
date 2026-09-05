@@ -1,6 +1,6 @@
 name: echo
 base: core22
-version: "0.1.0"
+version: "0.2.0"
 summary: Privacy-first universal voice keyboard
 description: |
   Echo transcribes your speech locally (Whisper) or via cloud providers and

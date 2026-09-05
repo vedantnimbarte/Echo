@@ -1,6 +1,6 @@
 cask "echo" do
-  version "0.1.0"
-  sha256 "58463bcc94cdcefc656749cb35dd09f012108b0200b35b5035cb5975b2c401a7"
+  version "0.2.0"
+  sha256 "52e90415a348affa0f9f96585620b0e1391fcb6d5a67256a351bb776a47571c6"
 
   url "https://github.com/vedantnimbarte/Echo/releases/download/v#{version}/Echo_#{version}_aarch64.dmg",
       verified: "github.com/vedantnimbarte/Echo/"
