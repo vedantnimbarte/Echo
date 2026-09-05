@@ -5,6 +5,7 @@ import { getAllWebviewWindows } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { useRecordingStore } from "../../store/recordingStore";
+import { t } from "../../i18n";
 import { commands } from "../../ipc/commands";
 import { Waveform, type WaveMode } from "./Waveform";
 import { RingMeter } from "./RingMeter";
@@ -256,8 +257,8 @@ function PillLarge({
         {view === "error" ? (
           <button
             onClick={retry}
-            aria-label="Try again"
-            title="Try again"
+            aria-label={t("pill.tryAgain")}
+            title={t("pill.tryAgain")}
             className="flex h-8 w-8 items-center justify-center rounded-full border border-[var(--hairline-strong)] bg-[var(--surface-3)] text-[var(--ink)] transition hover:bg-white/20"
           >
             <AlertTriangle className="h-3.5 w-3.5" />
@@ -269,7 +270,13 @@ function PillLarge({
         ) : (
           <button
             onClick={toggle}
-            aria-label={isRecording ? "Stop recording" : "Start recording"}
+            // Reaching for the button is the most reliable warning we get that
+            // a dictation is about to start. Opening the device now means the
+            // click itself is instant and the first word is not clipped.
+            onPointerEnter={() => {
+              if (!isRecording) void commands.warmMicrophone();
+            }}
+            aria-label={isRecording ? t("pill.stopRecording") : t("pill.startRecording")}
             className={clsx(
               "flex h-8 w-8 items-center justify-center rounded-full transition-all active:scale-90",
               !isRecording &&
@@ -305,7 +312,7 @@ function PillLarge({
 
           {view === "transcribing" && (
             <span className="text-shimmer whitespace-nowrap text-[11px] font-medium tracking-tight">
-              Transcribing
+              {t("pill.transcribing")}
             </span>
           )}
 
@@ -332,7 +339,7 @@ function PillLarge({
 
           <button
             onClick={() => void openSettings()}
-            aria-label="Open settings"
+            aria-label={t("pill.openSettings")}
             className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--ink-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--ink)]"
           >
             <Settings className="h-[14px] w-[14px]" />
@@ -374,10 +381,10 @@ function PillSmall({ view, live, isRecording, error, toggle, retry }: PillState)
 
   const title =
     view === "error"
-      ? (error ?? "Something went wrong")
+      ? (error ?? t("pill.genericError"))
       : isRecording
-        ? "Stop recording"
-        : "Start recording";
+        ? t("pill.stopRecording")
+        : t("pill.startRecording");
 
   return (
     <div className="relative h-full w-full select-none overflow-hidden">
@@ -418,7 +425,7 @@ function PillSmall({ view, live, isRecording, error, toggle, retry }: PillState)
           >
             <button
               onClick={() => void openSettings()}
-              aria-label="Open settings"
+              aria-label={t("pill.openSettings")}
               tabIndex={hovered ? 0 : -1}
               className="flex h-11 w-10 items-center justify-center rounded-full pr-1 text-[var(--ink-muted)] transition-colors hover:text-[var(--ink)]"
             >

@@ -22,6 +22,30 @@ export interface TranscriptionRecord {
   created_at: string;
 }
 
+export interface GpuStatus {
+  /** Human-readable detected backend, e.g. "NVIDIA CUDA 12.x". */
+  detected: string;
+  /** Id of the accelerated pack this machine could run, if any. */
+  available_pack: string | null;
+  pack_installed: boolean;
+  /** Whether acceleration is actually in use for the next utterance. */
+  active: boolean;
+  /** True once an accelerated run failed and Echo latched to CPU. */
+  failed: boolean;
+  enabled: boolean;
+  threads: number;
+}
+
+export interface HotkeySupport {
+  session: "native" | "x11" | "wayland" | "unknown";
+  desktop: string | null;
+  /** Whether Echo can register the hotkey itself. */
+  can_bind: boolean;
+  supports_bare_modifier: boolean;
+  /** Plain-language explanation; empty when everything works. */
+  advice: string;
+}
+
 export interface ModelInfo {
   name: string;
   downloaded: boolean;
@@ -250,6 +274,41 @@ export const commands = {
   // key's release as well as its press, so the hotkey is rebound to match.
   setRecordingMode: (mode: string) =>
     invoke<void>("set_recording_mode", { mode }),
+  gpuStatus: () => invoke<GpuStatus>("gpu_status"),
+
+  /** Download the accelerated whisper build this machine can run. */
+  downloadGpuPack: () => invoke<void>("download_gpu_pack"),
+
+  /** Also clears a latched failure, so it doubles as "try the GPU again". */
+  setGpuEnabled: (enabled: boolean) =>
+    invoke<void>("set_gpu_enabled", { enabled }),
+
+  /** A number as a string, or "auto". */
+  setWhisperThreads: (threads: string) =>
+    invoke<void>("set_whisper_threads", { threads }),
+
+  installedPacks: () => invoke<string[]>("installed_packs"),
+
+  /** Open the microphone before it is needed, so recording starts instantly. */
+  warmMicrophone: () => invoke<void>("warm_microphone"),
+
+  /**
+   * Learn dictionary entries from a transcript the user edited by hand.
+   * Returns only what was actually stored — usually nothing.
+   */
+  learnFromCorrection: (original: string, edited: string) =>
+    invoke<{ phrase: string; replacement: string; enabled: boolean }[]>(
+      "learn_from_correction",
+      { original, edited },
+    ),
+
+  transcribeFile: (path: string, language?: string) =>
+    invoke<string>("transcribe_file", { path, language }),
+
+  supportedImportFormats: () => invoke<string[]>("supported_import_formats"),
+
+  hotkeySupport: () => invoke<HotkeySupport>("hotkey_support"),
+
   registerHotkey: (shortcut: string) =>
     invoke<void>("register_hotkey", { shortcut }),
 };

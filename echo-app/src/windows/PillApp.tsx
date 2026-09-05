@@ -13,6 +13,8 @@ import { useEchoEvents } from "../hooks/useEchoEvents";
 import { commands } from "../ipc/commands";
 import { echoEvents } from "../ipc/events";
 import { Pill, type PillSize } from "../components/pill/Pill";
+import { useRecordingStore } from "../store/recordingStore";
+import { cueStart, cueStop } from "../lib/cues";
 
 /**
  * Window footprint per variant, in logical px. Wider than the capsule it holds:
@@ -105,6 +107,7 @@ export function PillApp() {
   // The variant is only known after the setting loads. Placing before then
   // would size the window to the default first and snap a moment later.
   const [sizeLoaded, setSizeLoaded] = useState(false);
+  const [cues, setCues] = useState(false);
   // Only a move the user started should overwrite the saved position — our own
   // placement calls fire `onMoved` too. Set on the first drag and left set:
   // every later programmatic placement resolves to the same centre anyway.
@@ -129,6 +132,28 @@ export function PillApp() {
   useEffect(() => {
     if (sizeLoaded) void place(size);
   }, [size, sizeLoaded]);
+
+  // Audio cues. The pill is often not where the user is looking — that is the
+  // point of dictating into another app — so a sound is the only feedback that
+  // reliably lands. Read once and kept live over the event bus, the same way
+  // the size setting is, because the toggle lives in the other webview.
+  useEffect(() => {
+    void commands.getSetting("sound_cues").then((v) => setCues(v === "true"));
+  }, []);
+
+  const isRecording = useRecordingStore((s) => s.isRecording);
+  const wasRecording = useRef(false);
+  useEffect(() => {
+    if (!cues) {
+      wasRecording.current = isRecording;
+      return;
+    }
+    // Edge-triggered: the store updates on unrelated fields too, and a cue on
+    // every render would be unbearable.
+    if (isRecording && !wasRecording.current) cueStart();
+    if (!isRecording && wasRecording.current) cueStop();
+    wasRecording.current = isRecording;
+  }, [isRecording, cues]);
 
   // Remember where it was dropped. `onMoved` fires continuously while dragging,
   // so settle first and write once.

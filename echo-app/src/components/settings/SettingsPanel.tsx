@@ -11,30 +11,21 @@ import { WakeWordSettings } from "./WakeWordSettings";
 import { CommandMode } from "./CommandMode";
 import { AppProfiles } from "./AppProfiles";
 import { EgressLog } from "./EgressLog";
+import { Performance } from "./Performance";
+import { AudioImport } from "./AudioImport";
 import { HotkeyCapture } from "../common/HotkeyCapture";
 import type { PillSize } from "../pill/Pill";
 import { Page, Group, Field, Check } from "../common/Page";
+import { t, LOCALES, setLocale } from "../../i18n";
 
 export type SettingsPage = "dictation" | "engine" | "output" | "privacy";
 
-const PAGE_META: Record<SettingsPage, { title: string; description: string }> = {
-  dictation: {
-    title: "Dictation",
-    description: "How recording starts, and which microphone Echo listens to.",
-  },
-  engine: {
-    title: "Engine",
-    description: "What turns your speech into words, and the models it runs on.",
-  },
-  output: {
-    title: "Output",
-    description: "Where the finished text goes, and how it gets there.",
-  },
-  privacy: {
-    title: "Privacy",
-    description: "What Echo keeps on this machine, and what it sends off it.",
-  },
-};
+// Read through `t` at call time rather than baked into a constant, so a
+// language change takes effect on the next render instead of the next launch.
+const pageMeta = (page: SettingsPage) => ({
+  title: t(`settings.${page}.title`),
+  description: t(`settings.${page}.description`),
+});
 
 /**
  * Languages Whisper handles well, plus auto-detect. Not the full ~99-language
@@ -86,7 +77,7 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
     searching ? terms.some((t) => t.includes(query)) : owner === page;
   // While searching, groups arrive out of context — say where each one lives.
   const label = (owner: SettingsPage, title: string) =>
-    searching ? `${PAGE_META[owner].title} · ${title}` : title;
+    searching ? `${pageMeta(owner).title} · ${title}` : title;
 
   /* ---- recording mode + device ------------------------------------------ */
   const { data: savedMode } = useQuery({
@@ -207,14 +198,44 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["setting", "history_enabled"] }),
   });
 
+  // Three settings below are plain string reads and writes; the shape was
+  // already repeated four times above, so it earns a helper here rather than
+  // another four copies.
+  function useStringSetting(key: string) {
+    const { data } = useQuery({
+      queryKey: ["setting", key],
+      queryFn: () => commands.getSetting(key),
+    });
+    const mutation = useMutation({
+      mutationFn: (v: string) => commands.setSetting(key, v),
+      onSuccess: () => qc.invalidateQueries({ queryKey: ["setting", key] }),
+    });
+    return [data, (v: string) => mutation.mutate(v)] as const;
+  }
+
+  const [soundCues, setSoundCues] = useStringSetting("sound_cues");
+  const [uiLanguage, setUiLanguageSetting] = useStringSetting("ui_language");
+  // Applied immediately as well as persisted: the whole window is already
+  // mounted, so waiting for a restart to see the change would be baffling.
+  const setUiLanguage = (v: string) => {
+    setLocale(v);
+    setUiLanguageSetting(v);
+  };
+  const [autoLearn, setAutoLearn] = useStringSetting("auto_learn");
+  const [retention, setRetention] = useStringSetting("history_retention_days");
+
   const { data: hotkey } = useQuery({ queryKey: ["hotkey"], queryFn: commands.getHotkey });
+  const { data: hotkeySupport } = useQuery({
+    queryKey: ["hotkey-support"],
+    queryFn: commands.hotkeySupport,
+  });
   const registerHotkeyMutation = useMutation({
     mutationFn: (v: string) => commands.registerHotkey(v),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["hotkey"] }),
   });
 
   const activeProvider = provider ?? "local";
-  const meta = PAGE_META[page];
+  const meta = pageMeta(page);
 
   const search = (
     <div className="relative w-[184px]">
@@ -222,8 +243,8 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Search settings"
-        aria-label="Search settings"
+        placeholder={t("settings.search")}
+        aria-label={t("settings.search")}
         className="field py-1.5 pl-8 pr-2.5"
       />
     </div>
@@ -374,6 +395,42 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
+      {on("dictation", ["language", "interface", "translation", "locale", "english", "español", "deutsch", "français"]) && (
+        <Group
+          title={label("dictation", "Interface language")}
+          hint="This is the language Echo's own buttons and labels use. It has no effect on which language it transcribes — that is set under Engine."
+        >
+          <Field label={t("settings.language")}>
+            <select
+              className="field w-full"
+              value={uiLanguage ?? "auto"}
+              onChange={(e) => setUiLanguage(e.target.value)}
+            >
+              <option value="auto">{t("settings.language.auto")}</option>
+              {Object.entries(LOCALES).map(([code, { label: name }]) => (
+                <option key={code} value={code}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </Group>
+      )}
+
+      {on("dictation", ["sound", "sounds", "cue", "cues", "tone", "beep", "audio feedback", "chime"]) && (
+        <Group
+          title={label("dictation", "Sound")}
+          hint="A short rising tone when Echo starts listening and a falling one when it stops. Useful when the pill is behind the window you are dictating into."
+        >
+          <Check
+            checked={soundCues === "true"}
+            onChange={(v) => setSoundCues(v ? "true" : "false")}
+          >
+            Play a sound when recording starts and stops
+          </Check>
+        </Group>
+      )}
+
       {on("dictation", ["hotkey", "shortcut", "keyboard", "chord", "global", "ctrl", "alt", "shift", "modifier"]) && (
         <Group
           title={label("dictation", "Global hotkey")}
@@ -385,6 +442,11 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
           />
           {registerHotkeyMutation.isError && (
             <Problem>{String(registerHotkeyMutation.error)}</Problem>
+          )}
+          {/* On Wayland the shortcut registers without complaining and then
+              never fires, so the only way the user finds out is if we say so. */}
+          {hotkeySupport && hotkeySupport.advice !== "" && (
+            <Problem>{hotkeySupport.advice}</Problem>
           )}
         </Group>
       )}
@@ -440,6 +502,19 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
               </option>
             ))}
           </select>
+        </Group>
+      )}
+
+      {on("engine", ["gpu", "cuda", "nvidia", "metal", "acceleration", "accelerated", "threads", "cpu", "performance", "speed", "slow", "warm", "microphone"]) && (
+        <Performance />
+      )}
+
+      {on("engine", ["import", "file", "audio file", "recording", "mp3", "wav", "transcribe file", "voice memo"]) && (
+        <Group
+          title={label("engine", "Transcribe a file")}
+          hint="Uses the offline engine and the model selected above, so nothing is uploaded."
+        >
+          <AudioImport />
         </Group>
       )}
 
@@ -569,6 +644,35 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
             onChange={(v) => setHistoryMutation.mutate(v ? "true" : "false")}
           >
             Keep a searchable record of what you dictated
+          </Check>
+
+          <Field label="Delete transcripts after">
+            <select
+              className="field w-full"
+              value={retention ?? "0"}
+              onChange={(e) => setRetention(e.target.value)}
+              disabled={historyEnabled === "false"}
+            >
+              <option value="0">Never</option>
+              <option value="7">7 days</option>
+              <option value="30">30 days</option>
+              <option value="90">90 days</option>
+              <option value="365">1 year</option>
+            </select>
+          </Field>
+        </Group>
+      )}
+
+      {on("privacy", ["learn", "auto-learn", "corrections", "dictionary", "teach"]) && (
+        <Group
+          title={label("privacy", "Learning")}
+          hint="When you fix a word in History, Echo can add that correction to your dictionary so the mistake stops happening. Only confident, small corrections are kept, and every one shows up in the Dictionary where you can remove it."
+        >
+          <Check
+            checked={autoLearn !== "false"}
+            onChange={(v) => setAutoLearn(v ? "true" : "false")}
+          >
+            Learn from corrections you make
           </Check>
         </Group>
       )}

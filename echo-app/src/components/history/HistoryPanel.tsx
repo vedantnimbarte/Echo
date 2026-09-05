@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2, Copy, CornerDownLeft, Search, Check, BookPlus, Download } from "lucide-react";
+import { Trash2, Copy, CornerDownLeft, Search, Check, BookPlus, Download, Pencil } from "lucide-react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { commands, type TranscriptionRecord } from "../../ipc/commands";
 import { Page, Group } from "../common/Page";
@@ -56,6 +56,7 @@ function HistoryRow({ record }: { record: TranscriptionRecord }) {
   }
 
   const [fixing, setFixing] = useState(false);
+  const [editing, setEditing] = useState(false);
   const when = parseTs(record.created_at);
 
   // Prefill with the whole transcript when it's short enough to be the mistake
@@ -94,7 +95,21 @@ function HistoryRow({ record }: { record: TranscriptionRecord }) {
             <CornerDownLeft className="h-3.5 w-3.5" />
           </button>
           <button
-            onClick={() => setFixing((f) => !f)}
+            onClick={() => {
+              setEditing((e) => !e);
+              setFixing(false);
+            }}
+            aria-label="Fix this transcript"
+            title="Fix this transcript"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--ink-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--ink)]"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={() => {
+              setFixing((f) => !f);
+              setEditing(false);
+            }}
             aria-label="Teach Echo a correction"
             title="Teach Echo a correction"
             className="flex h-6 w-6 items-center justify-center rounded-md text-[var(--ink-muted)] transition hover:bg-[var(--surface-2)] hover:text-[var(--ink)]"
@@ -103,6 +118,13 @@ function HistoryRow({ record }: { record: TranscriptionRecord }) {
           </button>
         </div>
       </div>
+
+      {editing && (
+        <TranscriptFix
+          original={record.text}
+          onDone={() => setEditing(false)}
+        />
+      )}
 
       {fixing && (
         <CorrectionForm
@@ -115,11 +137,11 @@ function HistoryRow({ record }: { record: TranscriptionRecord }) {
 }
 
 /**
- * Turn a misheard phrase into a dictionary entry.
+ * Turn a misheard phrase into a dictionary entry, by naming both halves.
  *
- * Deliberately manual. Detecting corrections automatically would mean watching
- * what you type in other applications, which is exactly the thing Echo exists
- * not to do — so the user points at the mistake instead.
+ * The exact form still has its place — it is how you add a rule for something
+ * you have not dictated yet — but [`TranscriptFix`] is the easier path when the
+ * mistake is already on screen.
  */
 function CorrectionForm({
   suggestion,
@@ -277,5 +299,89 @@ export function HistoryPanel() {
       </div>
       </Group>
     </Page>
+  );
+}
+
+/**
+ * Fix a transcript by rewriting it, and let Echo work out what changed.
+ *
+ * Echo still refuses to watch what you type in other applications — that is the
+ * thing it exists not to do, and no amount of convenience is worth it. But an
+ * edit you make *here*, to a transcript already in front of you, was handed to
+ * us deliberately. Diffing that is not surveillance, and it is far less work
+ * than typing out both halves of a correction by hand.
+ *
+ * Only confident, small corrections survive the diff, so most edits teach
+ * nothing at all — which is why this reports what it learned rather than
+ * claiming success.
+ */
+function TranscriptFix({
+  original,
+  onDone,
+}: {
+  original: string;
+  onDone: () => void;
+}) {
+  const qc = useQueryClient();
+  const [text, setText] = useState(original);
+  const [learned, setLearned] = useState<{ phrase: string; replacement: string }[] | null>(
+    null,
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    if (text.trim() === original.trim()) {
+      onDone();
+      return;
+    }
+    try {
+      const result = await commands.learnFromCorrection(original, text);
+      setLearned(result);
+      if (result.length > 0) qc.invalidateQueries({ queryKey: ["dictionary"] });
+      // Nothing learned is a normal outcome, so close rather than sit there
+      // looking like it failed.
+      if (result.length === 0) onDone();
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  return (
+    <div className="mt-2 space-y-1.5 border-t border-[var(--hairline)] pt-2">
+      <p className="text-[10.5px] text-[var(--ink-faint)]">
+        Correct the text. If the change looks like a fixed mishearing, Echo adds
+        it to your dictionary so it stops happening.
+      </p>
+      <textarea
+        className="field w-full resize-y text-[12px] leading-snug"
+        rows={3}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+      />
+      <div className="flex items-center justify-end gap-1.5">
+        <button onClick={onDone} className="btn-ghost px-2.5 py-1 text-[11px]">
+          Cancel
+        </button>
+        <button
+          onClick={save}
+          disabled={!text.trim()}
+          className="btn-primary shrink-0 px-2.5 py-1 text-[11px]"
+        >
+          Save
+        </button>
+      </div>
+      {learned && learned.length > 0 && (
+        <div className="space-y-1 pt-0.5">
+          <p className="text-[10.5px] text-[var(--ink-muted)]">Learned:</p>
+          {learned.map((l) => (
+            <p key={l.phrase} className="text-[11px] text-[var(--ink)]">
+              {l.phrase} <span className="text-[var(--ink-faint)]">&rarr;</span>{" "}
+              {l.replacement}
+            </p>
+          ))}
+        </div>
+      )}
+      {error && <p className="text-[11px] text-[var(--ink)]">{error}</p>}
+    </div>
   );
 }

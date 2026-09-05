@@ -1,0 +1,20 @@
+{
+  "pill.startRecording": "Aufnahme starten",
+  "pill.stopRecording": "Aufnahme beenden",
+  "pill.transcribing": "Wird transkribiert",
+  "pill.tryAgain": "Erneut versuchen",
+  "pill.openSettings": "Einstellungen öffnen",
+  "pill.quit": "Echo beenden",
+  "pill.genericError": "Etwas ist schiefgelaufen",
+  "settings.dictation.title": "Diktat",
+  "settings.dictation.description": "Wie die Aufnahme startet und welches Mikrofon Echo verwendet.",
+  "settings.engine.title": "Engine",
+  "settings.engine.description": "Was deine Sprache in Text umwandelt und mit welchen Modellen.",
+  "settings.output.title": "Ausgabe",
+  "settings.output.description": "Wohin der fertige Text geht und wie er dorthin gelangt.",
+  "settings.privacy.title": "Privatsphäre",
+  "settings.privacy.description": "Was Echo auf diesem Gerät behält und was es nach außen sendet.",
+  "settings.search": "Einstellungen durchsuchen",
+  "settings.language": "Sprache der Oberfläche",
+  "settings.language.auto": "Systemsprache verwenden"
+}
