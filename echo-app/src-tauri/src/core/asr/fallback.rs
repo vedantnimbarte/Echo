@@ -102,6 +102,13 @@ impl AsrProvider for FallbackProvider {
     fn supports_streaming(&self) -> bool {
         self.primary.supports_streaming()
     }
+
+    /// Both halves are told: a fallback that fires mid-session must produce
+    /// the same kind of output the primary was producing.
+    fn set_partials_wanted(&self, wanted: bool) {
+        self.primary.set_partials_wanted(wanted);
+        self.local.set_partials_wanted(wanted);
+    }
 }
 
 #[cfg(test)]

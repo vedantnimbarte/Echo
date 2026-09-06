@@ -85,6 +85,14 @@ impl AsrManager {
             .unwrap_or(false)
     }
 
+    /// Pass the partials-wanted hint to the active provider before a session.
+    pub async fn set_partials_wanted(&self, wanted: bool) {
+        let name = self.active_provider.read().await.clone();
+        if let Some(provider) = self.providers.read().await.get(&name) {
+            provider.set_partials_wanted(wanted);
+        }
+    }
+
     pub async fn transcribe_stream(
         &self,
         audio_rx: mpsc::Receiver<Vec<f32>>,
