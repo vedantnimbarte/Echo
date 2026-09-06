@@ -143,5 +143,16 @@ fn migrate(conn: &Connection) -> Result<()> {
         ")?;
     }
 
+    if version < 5 {
+        conn.execute_batch("
+            -- SHA-256 of the plugin library as installed. NULL for plugins that
+            -- predate this column; those adopt their current hash on next load
+            -- rather than being locked out. See core::plugins::integrity.
+            ALTER TABLE plugins ADD COLUMN lib_sha256 TEXT;
+
+            INSERT INTO schema_migrations (version) VALUES (5);
+        ")?;
+    }
+
     Ok(())
 }

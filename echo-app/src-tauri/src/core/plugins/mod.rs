@@ -3,6 +3,7 @@ use std::sync::Arc;
 use crate::core::asr::AsrProvider;
 use crate::core::dictionary::DictionaryEntry;
 
+pub mod integrity;
 pub mod loader;
 
 // The base plugin API lives in the standalone `echo-sdk` crate so external
