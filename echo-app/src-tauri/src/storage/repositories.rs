@@ -309,28 +309,51 @@ pub fn upsert_plugin(
     version: &str,
     enabled: bool,
     manifest: &str,
+    lib_sha256: Option<&str>,
 ) -> Result<()> {
     conn.execute(
-        "INSERT INTO plugins (name, version, enabled, manifest) VALUES (?1, ?2, ?3, ?4)
+        "INSERT INTO plugins (name, version, enabled, manifest, lib_sha256)
+         VALUES (?1, ?2, ?3, ?4, ?5)
          ON CONFLICT(name) DO UPDATE SET version = excluded.version,
-            enabled = excluded.enabled, manifest = excluded.manifest",
-        params![name, version, enabled as i64, manifest],
+            enabled = excluded.enabled, manifest = excluded.manifest,
+            lib_sha256 = excluded.lib_sha256",
+        params![name, version, enabled as i64, manifest, lib_sha256],
     )?;
     Ok(())
 }
 
-/// Returns (name, version, enabled, manifest) rows for all installed plugins.
-pub fn list_plugins(conn: &Connection) -> Result<Vec<(String, String, bool, String)>> {
-    let mut stmt =
-        conn.prepare("SELECT name, version, enabled, manifest FROM plugins ORDER BY name")?;
+/// Record the fingerprint of an already-installed plugin without touching
+/// anything else about it. Used to adopt one that predates the column.
+pub fn set_plugin_fingerprint(conn: &Connection, name: &str, sha256: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE plugins SET lib_sha256 = ?2 WHERE name = ?1",
+        params![name, sha256],
+    )?;
+    Ok(())
+}
+
+/// One installed plugin, as the loader needs it.
+pub struct InstalledPlugin {
+    pub name: String,
+    pub enabled: bool,
+    pub manifest: String,
+    /// `None` for a plugin installed before fingerprints were recorded.
+    pub lib_sha256: Option<String>,
+}
+
+/// Every installed plugin, in name order.
+pub fn list_plugins(conn: &Connection) -> Result<Vec<InstalledPlugin>> {
+    let mut stmt = conn.prepare(
+        "SELECT name, enabled, manifest, lib_sha256 FROM plugins ORDER BY name",
+    )?;
     let rows = stmt
         .query_map([], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, String>(1)?,
-                r.get::<_, i64>(2)? != 0,
-                r.get::<_, String>(3)?,
-            ))
+            Ok(InstalledPlugin {
+                name: r.get(0)?,
+                enabled: r.get::<_, i64>(1)? != 0,
+                manifest: r.get(2)?,
+                lib_sha256: r.get(3)?,
+            })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
     Ok(rows)

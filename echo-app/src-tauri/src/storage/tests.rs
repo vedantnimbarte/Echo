@@ -98,7 +98,7 @@ fn a_fresh_database_has_every_table_the_app_uses() {
     ] {
         assert!(table_exists(&conn, table), "{table} is missing");
     }
-    assert_eq!(schema_version(&conn), 4);
+    assert_eq!(schema_version(&conn), 5);
 }
 
 /// Every launch runs `migrate`. Applying a migration twice must be harmless,
@@ -111,11 +111,11 @@ fn migrating_an_already_current_database_changes_nothing() {
     db::migrate_for_test(&conn).unwrap();
     db::migrate_for_test(&conn).unwrap();
 
-    assert_eq!(schema_version(&conn), 4);
+    assert_eq!(schema_version(&conn), 5);
     let rows: i64 = conn
         .query_row("SELECT count(*) FROM schema_migrations", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(rows, 4, "one row per version, not one per launch");
+    assert_eq!(rows, 5, "one row per version, not one per launch");
     assert_eq!(repo::get_setting(&conn, "keep").unwrap().as_deref(), Some("me"));
 }
 
@@ -137,6 +137,18 @@ fn an_old_database_upgrades_without_losing_data() {
     conn.execute_batch(
         "DROP TABLE app_profiles;
          DROP TABLE egress_log;
+         -- Migration 5 adds a column to `plugins`, so a genuine version-1
+         -- database has the table without it. Recreating it in the old shape
+         -- is what makes this a rewind rather than a half-migrated hybrid.
+         DROP TABLE plugins;
+         CREATE TABLE plugins (
+             id          INTEGER PRIMARY KEY AUTOINCREMENT,
+             name        TEXT NOT NULL UNIQUE,
+             version     TEXT NOT NULL,
+             enabled     INTEGER NOT NULL DEFAULT 1,
+             manifest    TEXT NOT NULL,
+             installed_at TEXT NOT NULL DEFAULT (datetime('now'))
+         );
          DELETE FROM schema_migrations WHERE version >= 2;",
     )
     .unwrap();
@@ -144,7 +156,7 @@ fn an_old_database_upgrades_without_losing_data() {
 
     db::migrate_for_test(&conn).unwrap();
 
-    assert_eq!(schema_version(&conn), 4);
+    assert_eq!(schema_version(&conn), 5);
     assert!(table_exists(&conn, "app_profiles"));
     assert!(table_exists(&conn, "egress_log"));
     // Migration 3's column has to survive being applied on top of a table
@@ -152,6 +164,10 @@ fn an_old_database_upgrades_without_losing_data() {
     assert!(
         repo::list_app_profiles(&conn).is_ok(),
         "stream_partials is missing after the upgrade"
+    );
+    assert!(
+        repo::list_plugins(&conn).is_ok(),
+        "lib_sha256 is missing after the upgrade"
     );
 
     assert_eq!(

@@ -265,17 +265,44 @@ pub fn run() {
                     data_dir: plugins_dir.clone(),
                     settings: Arc::new(|_| None),
                 };
-                for (name, _version, enabled, manifest_str) in rows {
-                    if !enabled {
+                for row in rows {
+                    if !row.enabled {
                         continue;
                     }
-                    if let Ok(manifest) =
-                        serde_json::from_str::<core::plugins::PluginManifest>(&manifest_str)
-                    {
-                        let lib = plugins_dir.join(&name).join(&manifest.entry);
-                        if let Err(e) = plugin_loader.load(&lib, &ctx) {
-                            tracing::error!("Failed to load plugin '{name}': {e}");
+                    let Ok(manifest) =
+                        serde_json::from_str::<core::plugins::PluginManifest>(&row.manifest)
+                    else {
+                        continue;
+                    };
+                    let name = row.name;
+                    let lib = plugins_dir.join(&name).join(&manifest.entry);
+
+                    // A plugin whose library changed since it was installed is
+                    // not the one the user agreed to run. Disable rather than
+                    // load, so the next launch does not silently try again.
+                    match core::plugins::integrity::verify(&lib, row.lib_sha256.as_deref()) {
+                        Ok(verdict) if !verdict.is_trusted() => {
+                            tracing::error!("{}", verdict.refusal(&name));
+                            let _ =
+                                storage::repositories::set_plugin_enabled(&conn, &name, false);
+                            continue;
                         }
+                        Ok(core::plugins::integrity::Verdict::FirstSeen(hash)) => {
+                            // Installed before fingerprints existed: adopt what
+                            // is there now, and check it from here on.
+                            let _ = storage::repositories::set_plugin_fingerprint(
+                                &conn, &name, &hash,
+                            );
+                        }
+                        Ok(_) => {}
+                        Err(e) => {
+                            tracing::error!("Can't verify plugin '{name}', not loading it: {e}");
+                            continue;
+                        }
+                    }
+
+                    if let Err(e) = plugin_loader.load(&lib, &ctx) {
+                        tracing::error!("Failed to load plugin '{name}': {e}");
                     }
                 }
             }

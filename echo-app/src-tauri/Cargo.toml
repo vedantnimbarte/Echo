@@ -92,6 +92,10 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "sync-s
 # Dynamic loading of native plugins (experimental, advisory permission model).
 libloading = "0.8"
 
+# Fingerprinting plugin libraries, so one swapped after install is refused.
+# Already in the tree transitively; named here because we now depend on it.
+sha2 = "0.10"
+
 # Cross-platform clipboard for paste-based text injection (save → set → paste →
 # restore). More reliable than per-keystroke synthesis for long transcripts and
 # works where synthetic typing is blocked (e.g. some Wayland compositors).

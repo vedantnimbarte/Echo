@@ -36,20 +36,18 @@ pub fn list_plugins(state: State<'_, AppState>) -> Result<Vec<PluginInfo>> {
     let rows = repositories::list_plugins(&conn)?;
     let infos = rows
         .into_iter()
-        .map(|(name, version, enabled, manifest)| {
-            let (description, author) = serde_json::from_str::<PluginManifest>(&manifest)
-                .map(|m| (m.description, m.author))
-                .unwrap_or_default();
-            let permissions = serde_json::from_str::<PluginManifest>(&manifest)
-                .map(|m| m.permissions)
-                .unwrap_or_default();
+        .map(|row| {
+            let manifest = serde_json::from_str::<PluginManifest>(&row.manifest).ok();
             PluginInfo {
-                name,
-                version,
-                description,
-                author,
-                enabled,
-                permissions,
+                name: row.name,
+                version: manifest.as_ref().map(|m| m.version.clone()).unwrap_or_default(),
+                description: manifest
+                    .as_ref()
+                    .map(|m| m.description.clone())
+                    .unwrap_or_default(),
+                author: manifest.as_ref().map(|m| m.author.clone()).unwrap_or_default(),
+                enabled: row.enabled,
+                permissions: manifest.map(|m| m.permissions).unwrap_or_default(),
             }
         })
         .collect();
@@ -101,9 +99,21 @@ pub fn install_plugin(state: State<'_, AppState>, path: String, acknowledged: bo
     std::fs::write(dest_dir.join("plugin.json"), &manifest_str)
         .map_err(|e| EchoError::Plugin(e.to_string()))?;
 
+    // Fingerprint the copy, not the source: the copy is what will be loaded,
+    // and hashing the original would certify a file Echo never runs again.
+    let installed_lib = dest_dir.join(&manifest.entry);
+    let fingerprint = crate::core::plugins::integrity::fingerprint(&installed_lib)?;
+
     {
         let conn = state.db.lock().unwrap();
-        repositories::upsert_plugin(&conn, &manifest.name, &manifest.version, true, &manifest_str)?;
+        repositories::upsert_plugin(
+            &conn,
+            &manifest.name,
+            &manifest.version,
+            true,
+            &manifest_str,
+            Some(&fingerprint),
+        )?;
     }
 
     let ctx = make_context(state.plugins_dir.clone());
@@ -121,6 +131,25 @@ pub fn enable_plugin(state: State<'_, AppState>, name: String) -> Result<()> {
     }
     let ctx = make_context(state.plugins_dir.clone());
     let lib = installed_lib_path(&state.plugins_dir, &manifest);
+
+    // Same check the startup path makes: enabling is a load, and a library that
+    // changed since install is not the one that was agreed to.
+    {
+        let conn = state.db.lock().unwrap();
+        let recorded = repositories::list_plugins(&conn)?
+            .into_iter()
+            .find(|p| p.name == name)
+            .and_then(|p| p.lib_sha256);
+        let verdict = crate::core::plugins::integrity::verify(&lib, recorded.as_deref())?;
+        if !verdict.is_trusted() {
+            repositories::set_plugin_enabled(&conn, &name, false)?;
+            return Err(EchoError::PermissionDenied(verdict.refusal(&name)));
+        }
+        if let crate::core::plugins::integrity::Verdict::FirstSeen(hash) = verdict {
+            repositories::set_plugin_fingerprint(&conn, &name, &hash)?;
+        }
+    }
+
     let mut loader = state.plugins.lock().unwrap();
     if !loader.is_loaded(&name) {
         loader.load(&lib, &ctx)?;

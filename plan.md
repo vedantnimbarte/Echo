@@ -24,6 +24,7 @@
 | 11 | Formatting & Field Awareness | ✅ Spoken punctuation, numbers, password guard, auto-method, CLI |
 | 12 | Local streaming | ✅ Live text works offline (rolling re-decode) |
 | 13 | Measurement & languages | ✅ 9.2 measured; punctuation in 7 languages |
+| 14 | Plugin integrity | ✅ Fingerprinted at install, refused if changed (not a sandbox) |
 
 ---
 
@@ -839,7 +840,7 @@ strategy:
 ### 9.1 Security review checklist
 
 - [x] API keys never logged or emitted in events (verified: no key values in any log/event; kept in OS keychain)
-- [ ] Plugin permissions enforced at load time (intentionally advisory in v1 — plugins run in-process; enforcement awaits a WASM/sandbox runtime)
+- [ ] Plugin permissions enforced at load time — **still advisory, and honestly so.** Phase 14 added integrity instead: the library is fingerprinted at install and refused if it changed, so the code that runs is the code the user agreed to. Enforcing the *permission list* needs an OS boundary (child process with a restricted token, or WASM) plus a wire protocol replacing the FFI, since a trait object cannot cross a process boundary. That rewrites every plugin and is scoped as its own project, not smuggled in behind a hash.
 - [ ] SQLite data at rest: consider SQLCipher if user requests encryption (not requested)
 - [x] No shell injection in Linux injector (verified: `Command::new(prog).args(&args)` with `--`, never a shell)
 - [x] CSP headers configured in `tauri.conf.json`
@@ -1327,6 +1328,68 @@ Number words are grammar, not a word list — "quatre-vingt-dix-sept",
 `numbers::covers()` claims English only and the stage is skipped elsewhere. A
 half-right conversion is worse than none, because the reader cannot tell it was
 Echo that changed the figure.
+
+---
+
+## Phase 14 — Plugin Integrity ✅ (and why it is not a sandbox)
+
+The last of the four remaining gaps, and the one where the honest answer is
+narrower than the request.
+
+### 14.1 What cannot be done, and why saying so matters
+
+A native plugin is `dlopen`'d into Echo's own process. Once its code runs it has
+every privilege Echo has: the microphone, the transcripts, the keychain-loaded
+API key in memory, the filesystem, the network. **No check performed inside that
+same process can take any of it away.**
+
+So "enforce the manifest permissions at load time" — the open 9.1 item — cannot
+be delivered in-process. It could be *simulated*: read the list, refuse to load
+on a permission the user declined, show a green tick in Settings. That is
+theatre, and worse than the current blunt warning precisely because it would be
+believed. A user who thinks a plugin is confined to `["dictionary"]` behaves
+differently from one who knows it is not.
+
+A real boundary needs the OS to enforce it: a child process with a restricted
+token or seccomp filter, or a WASM runtime. Either replaces the FFI with a wire
+protocol — a `Box<dyn Plugin>` cannot cross a process boundary, so audio,
+transcripts and dictionary entries all become serialised messages — and every
+existing plugin needs rewriting. That is a project with its own design, not a
+patch, and it stays in 9.1 as one.
+
+### 14.2 What *was* closed: the file cannot change underneath you
+
+There was a real hole next to the theoretical one, and it needed no sandbox.
+
+Consent was already required — installing prints the risks and demands
+confirmation. But consent was to a *file*, and nothing checked that the file
+stayed the same. Anything able to write into the plugins directory — another
+program, a sync client, an installer — could replace a plugin the user had
+vetted, and the next launch would load it without a word.
+
+`core::plugins::integrity` records a SHA-256 at install and verifies it on every
+load path (startup and enable). A mismatch **disables** the plugin rather than
+loading it, and logs both fingerprints so the user can see what changed.
+
+The guarantee is narrow and worth stating exactly: *the code running is the code
+you agreed to run.* It says nothing about what that code then does.
+
+**The copy is hashed, not the source.** Hashing the file the user selected would
+certify something Echo never runs again; the installed copy is the artefact.
+
+**A plugin predating the column adopts its current hash rather than being
+refused.** The file on disk is the one they have been running all along, and
+locking them out over an upgrade they did not ask for would be punishing the
+wrong person. It is checked from that load onwards.
+
+### 14.3 The migration test earns its keep
+
+Migration 5 alters `plugins`, and the upgrade-path test rewinds a database to
+version 1 by dropping what later migrations added. It had been dropping only
+tables, so re-running migration 5 hit `duplicate column name`. The test now
+recreates `plugins` in its version-1 shape, which makes it a genuine rewind
+rather than a half-migrated hybrid — and the failure is exactly the kind that
+test exists to catch.
 
 ---
 
