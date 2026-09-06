@@ -107,6 +107,8 @@ export interface AppProfile {
   injection_method: string | null;
   /** Type partials as you speak. Null inherits the global setting. */
   stream_partials: boolean | null;
+  /** Run the formatting pass here. Null inherits the global setting. */
+  formatting: boolean | null;
   profile_id: number | null;
   enabled: boolean;
 }
@@ -336,4 +338,10 @@ export const commands = {
   /** `which` is "undo" or "retry"; pass "off" to unbind. */
   setFixupHotkey: (which: "undo" | "retry", shortcut: string) =>
     invoke<void>("set_fixup_hotkey", { which, shortcut }),
+
+  /**
+   * Whether this platform can tell a password field from an ordinary one.
+   * False on Linux, where no protection is actually in force.
+   */
+  secureFieldDetection: () => invoke<boolean>("secure_field_detection"),
 };

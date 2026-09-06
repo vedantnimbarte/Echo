@@ -111,7 +111,7 @@ export function DictionaryPanel() {
       <div className="space-y-6">
       {/* Add entry form */}
       <form
-        className="flex gap-2"
+        className="flex items-start gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           if (phrase && replacement) addMutation.mutate();
@@ -123,11 +123,22 @@ export function DictionaryPanel() {
           value={phrase}
           onChange={(e) => setPhrase(e.target.value)}
         />
-        <input
-          className="field flex-1 px-3 py-2 text-sm"
-          placeholder="Replacement (e.g. src/agents/router.rs)"
+        {/* A textarea rather than an input: the replacement can be a whole
+            block — a signature, an address, a boilerplate paragraph — and a
+            single-line field made that impossible to enter. Enter submits, so
+            multi-line entry needs Shift+Enter. */}
+        <textarea
+          className="field min-h-[38px] flex-1 resize-y px-3 py-2 text-sm"
+          rows={1}
+          placeholder="Replacement (Shift+Enter for a new line)"
           value={replacement}
           onChange={(e) => setReplacement(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              if (phrase && replacement) addMutation.mutate();
+            }
+          }}
         />
         <button
           type="submit"
@@ -224,8 +235,8 @@ export function DictionaryPanel() {
               <span
                 className={
                   entry.enabled
-                    ? "text-[var(--ink-muted)] font-mono flex-1"
-                    : "text-[var(--ink-faint)] font-mono flex-1 line-through"
+                    ? "text-[var(--ink-muted)] font-mono flex-1 whitespace-pre-wrap"
+                    : "text-[var(--ink-faint)] font-mono flex-1 line-through whitespace-pre-wrap"
                 }
               >
                 {entry.replacement}

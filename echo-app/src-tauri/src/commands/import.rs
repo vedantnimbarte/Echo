@@ -32,6 +32,19 @@ pub async fn transcribe_file(
     path: String,
     language: Option<String>,
 ) -> Result<String> {
+    transcribe_path(&state, &path, language.as_deref()).await
+}
+
+/// The transcription itself, without the Tauri command wrapper.
+///
+/// Split out so [`crate::cli`] can reach it: the command form takes owned
+/// `String`s because that is what the IPC layer deserializes into, and a
+/// command-line caller has no reason to allocate them.
+pub async fn transcribe_path(
+    state: &AppState,
+    path: &str,
+    language: Option<&str>,
+) -> Result<String> {
     let path = PathBuf::from(path);
     validate(&path)?;
 
@@ -68,7 +81,7 @@ pub async fn transcribe_file(
     };
 
     let prompt = state.dictionary.read().await.prompt_terms(None);
-    let lang = whisper_cli::resolve_language(&model_name, language.as_deref());
+    let lang = whisper_cli::resolve_language(&model_name, language);
 
     let text = whisper_cli::run_cli_on_file(
         &binary,
@@ -80,7 +93,14 @@ pub async fn transcribe_file(
     )
     .await?;
 
-    Ok(state.dictionary.read().await.process_for(&text, None))
+    let text = state.dictionary.read().await.process_for(&text, None);
+    // The same formatting dictation gets. An import has no focused app, so the
+    // global settings apply with no per-app override.
+    let format = {
+        let conn = state.db.lock().unwrap();
+        crate::commands::recording::resolve_delivery(&conn, None).format
+    };
+    Ok(crate::core::format::apply(&text, format))
 }
 
 /// The formats this can accept, for a file-picker filter.

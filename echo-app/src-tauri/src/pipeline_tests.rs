@@ -380,7 +380,7 @@ fn delivery_falls_back_to_global_settings() {
     // Nothing configured at all: the documented defaults.
     let d = resolve_delivery(&conn, None);
     assert!(d.auto_inject, "auto-insert defaults on");
-    assert!(!d.use_paste, "typing is the default insert method");
+    assert!(!d.use_paste("some text"), "typing is the default insert method");
     assert!(d.record_history, "history defaults on");
     assert_eq!(d.dictionary_profile, None);
 
@@ -389,7 +389,7 @@ fn delivery_falls_back_to_global_settings() {
     repo::set_setting(&conn, "history_enabled", "false").unwrap();
     let d = resolve_delivery(&conn, None);
     assert!(!d.auto_inject);
-    assert!(d.use_paste);
+    assert!(d.use_paste("some text"));
     assert!(!d.record_history);
 }
 
@@ -409,6 +409,7 @@ fn an_app_profile_overrides_only_the_fields_it_sets() {
             auto_inject: Some(false),
             injection_method: None,
             stream_partials: None,
+            formatting: None,
             profile_id: None,
             enabled: true,
         },
@@ -418,7 +419,7 @@ fn an_app_profile_overrides_only_the_fields_it_sets() {
     let d = resolve_delivery(&conn, Some("1password.exe"));
     assert!(!d.auto_inject, "the profile's override applies");
     assert!(
-        !d.use_paste,
+        !d.use_paste("some text"),
         "a NULL override must inherit the global setting, not reset it"
     );
 
@@ -439,6 +440,7 @@ fn app_matching_is_case_insensitive_and_disabled_profiles_are_ignored() {
             auto_inject: Some(false),
             injection_method: None,
             stream_partials: None,
+            formatting: None,
             profile_id: None,
             enabled: true,
         },
@@ -457,6 +459,7 @@ fn app_matching_is_case_insensitive_and_disabled_profiles_are_ignored() {
             auto_inject: Some(false),
             injection_method: None,
             stream_partials: None,
+            formatting: None,
             profile_id: None,
             enabled: false,
         },
@@ -532,7 +535,8 @@ async fn pipeline_delivers_dictionary_corrected_text_to_the_focused_app() {
             .unwrap();
         }
         if delivery.auto_inject {
-            deliver(&injector, &processed, delivery.use_paste, delivery.settle_ms).unwrap();
+            let use_paste = delivery.use_paste(&processed);
+            deliver(&injector, &processed, use_paste, delivery.settle_ms).unwrap();
         }
     }
 
@@ -567,6 +571,7 @@ async fn a_per_app_profile_switches_which_dictionary_entries_apply() {
             auto_inject: None,
             injection_method: None,
             stream_partials: None,
+            formatting: None,
             profile_id: Some(profile_id),
             enabled: true,
         },

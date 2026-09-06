@@ -131,5 +131,17 @@ fn migrate(conn: &Connection) -> Result<()> {
         ")?;
     }
 
+    if version < 4 {
+        conn.execute_batch("
+            -- Whether the formatting pass (spoken punctuation, numbers, tidy)
+            -- runs for this app. NULL inherits the global setting. A terminal
+            -- wants the words exactly as spoken; an email wants sentences —
+            -- and that is an on/off decision per app, not a per-stage one.
+            ALTER TABLE app_profiles ADD COLUMN formatting INTEGER;
+
+            INSERT INTO schema_migrations (version) VALUES (4);
+        ")?;
+    }
+
     Ok(())
 }

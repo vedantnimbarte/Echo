@@ -96,21 +96,30 @@ pub async fn retry_last(app: AppHandle) -> Result<Option<String>> {
         (state.dictionary.clone(), state.prompt_ctx.profile())
     };
     let text = dictionary.read().await.process_for(&text, profile);
+    // Same pass dictation runs, so a retry cannot come out formatted
+    // differently from the transcript it replaces.
+    let text = {
+        let state = app.state::<AppState>();
+        let conn = state.db.lock().unwrap();
+        let format = super::recording::resolve_delivery(&conn, None).format;
+        crate::core::format::apply(&text, format)
+    };
 
     // Settings are read after the dictionary pass: the guard must not be held
     // across an await (architectural rule 2).
-    let (use_paste, settle_ms) = {
+    let (method, settle_ms) = {
         let state = app.state::<AppState>();
         let conn = state.db.lock().unwrap();
         let get = |k: &str| crate::storage::repositories::get_setting(&conn, k).unwrap_or(None);
         (
-            get("injection_method").map(|v| v == "paste").unwrap_or(false),
+            get("injection_method"),
             get("clipboard_settle_ms")
                 .and_then(|v| v.parse::<u64>().ok())
                 .unwrap_or(crate::core::injection::DEFAULT_SETTLE_MS),
         )
     };
 
+    let use_paste = crate::core::injection::use_paste_for(method.as_deref(), &text);
     let deliver_text = text.clone();
     tokio::task::spawn_blocking(move || {
         crate::core::injection::deliver(injector.as_ref(), &deliver_text, use_paste, settle_ms)

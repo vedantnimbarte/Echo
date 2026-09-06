@@ -1,4 +1,5 @@
 mod benchmark;
+mod cli;
 mod commands;
 mod core;
 mod error;
@@ -349,6 +350,13 @@ pub fn run() {
             if selftest::requested() {
                 selftest::run(app.handle());
             }
+            // `--transcribe <file>` prints a transcript and exits, so Echo can
+            // sit in the middle of a shell pipeline. Same placement and the
+            // same reason as the selftest above: everything it needs — the
+            // database, the model, the engine — only exists once setup has run.
+            if cli::requested() {
+                cli::run(app.handle());
+            }
             if benchmark::requested() {
                 benchmark::run(app.handle());
             }
@@ -395,6 +403,7 @@ pub fn run() {
             commands::history::clear_history,
             commands::injection::check_accessibility_permission,
             commands::injection::inject_text,
+            commands::injection::secure_field_detection,
             commands::hotkey::get_hotkey,
             commands::hotkey::register_hotkey,
             commands::hotkey::hotkey_support,
