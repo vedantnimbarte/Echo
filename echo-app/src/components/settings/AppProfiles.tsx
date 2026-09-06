@@ -64,6 +64,7 @@ export function AppProfiles() {
         label: null,
         auto_inject: null,
         injection_method: null,
+        stream_partials: null,
         profile_id: null,
         enabled: true,
       })
@@ -133,7 +134,7 @@ export function AppProfiles() {
                 </button>
               </div>
 
-              <div className="mt-2 grid grid-cols-3 gap-1.5">
+              <div className="mt-2 grid grid-cols-4 gap-1.5">
                 <label className="block">
                   <span className="mb-0.5 block text-[9.5px] uppercase tracking-wide text-[var(--ink-faint)]">
                     Insert text
@@ -173,6 +174,33 @@ export function AppProfiles() {
                     <option value="global">Global</option>
                     <option value="type">Type</option>
                     <option value="paste">Paste</option>
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-0.5 block text-[9.5px] uppercase tracking-wide text-[var(--ink-faint)]">
+                    Live text
+                  </span>
+                  <select
+                    className="field text-[11px]"
+                    value={
+                      p.stream_partials === null
+                        ? "global"
+                        : p.stream_partials
+                          ? "on"
+                          : "off"
+                    }
+                    onChange={(e) =>
+                      update(p, {
+                        stream_partials:
+                          e.target.value === "global" ? null : e.target.value === "on",
+                      })
+                    }
+                    title="Type words as you speak them, correcting as the decoder revises. Rewrites text in this app, so turn it on per app."
+                  >
+                    <option value="global">Global</option>
+                    <option value="on">Stream</option>
+                    <option value="off">Wait</option>
                   </select>
                 </label>
 

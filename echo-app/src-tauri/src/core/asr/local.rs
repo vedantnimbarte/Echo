@@ -24,6 +24,7 @@ use tokio::sync::RwLock;
 
 use super::binary_manager::BinaryManager;
 use super::decode_opts::DecodeConfig;
+use super::prompt::PromptContext;
 use super::wav::pcm_f32_to_wav;
 use super::whisper_cli::{initial_prompt, is_english_only, resolve_language, run_cli};
 use super::whisper_server::{DecodeConfigKey, Signature, WhisperServer};
@@ -37,6 +38,9 @@ pub struct LocalWhisperProvider {
     model_path: PathBuf,
     model_name: String,
     dictionary: Option<Arc<RwLock<DictionaryEngine>>>,
+    /// What the focused app implies and what was just said — see
+    /// [`super::prompt`]. `None` outside the dictation pipeline (imports).
+    context: Option<Arc<PromptContext>>,
     /// Thread count, and whether the user has opted out of GPU use entirely.
     threads: usize,
     gpu_allowed: bool,
@@ -55,6 +59,7 @@ impl LocalWhisperProvider {
             model_path,
             model_name: model_name.into(),
             dictionary: None,
+            context: None,
             threads: super::decode_opts::auto_threads(),
             gpu_allowed: true,
         }
@@ -62,6 +67,11 @@ impl LocalWhisperProvider {
 
     pub fn with_dictionary(mut self, dictionary: Arc<RwLock<DictionaryEngine>>) -> Self {
         self.dictionary = Some(dictionary);
+        self
+    }
+
+    pub fn with_prompt_context(mut self, context: Arc<PromptContext>) -> Self {
+        self.context = Some(context);
         self
     }
 
@@ -116,7 +126,7 @@ impl AsrProvider for LocalWhisperProvider {
 
         let decode = self.decode_config();
         let lang = resolve_language(&self.model_name, language);
-        let prompt = initial_prompt(self.dictionary.as_ref()).await;
+        let prompt = initial_prompt(self.dictionary.as_ref(), self.context.as_ref()).await;
         let audio_seconds = (audio.len() / 16_000) as u32;
         let wav = pcm_f32_to_wav(&audio, 16_000)?;
 

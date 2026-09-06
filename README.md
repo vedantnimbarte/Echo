@@ -15,6 +15,10 @@ Built with **Rust · Tauri v2 · React 19 · TypeScript · TailwindCSS v4 · SQL
 - 🧠 **Local transcription** via Whisper (whisper.cpp) — fully offline
 - ☁️ **Cloud transcription** via OpenAI Whisper, Groq, or Deepgram
 - ⌨️ **Text injection** into the focused app — type keystrokes *or* clipboard-paste
+- ↩️ **Undo the last insert** with a global hotkey, or by saying "scratch that"
+- 🔁 **Retry the last utterance** on a stronger model without saying it again
+- ⚡ **Live text** (opt-in, per app) — words appear as you speak them
+- 📁 **Transcribe a file** you already have — wav, mp3, ogg or flac, offline
 - 📖 **Custom dictionary** with replacements, enable/disable, JSON import/export
 - 🗂️ **Per-app profiles** — override insert behaviour and dictionary scope per application
 - 🌍 **Language selection** — pin a dictation language or let Whisper auto-detect

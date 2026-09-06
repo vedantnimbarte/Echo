@@ -105,6 +105,8 @@ export interface AppProfile {
   label: string | null;
   auto_inject: boolean | null;
   injection_method: string | null;
+  /** Type partials as you speak. Null inherits the global setting. */
+  stream_partials: boolean | null;
   profile_id: number | null;
   enabled: boolean;
 }
@@ -313,4 +315,25 @@ export const commands = {
 
   registerHotkey: (shortcut: string) =>
     invoke<void>("register_hotkey", { shortcut }),
+
+  /* ---- fixing a transcript after it was typed --------------------------- */
+
+  /** Take back the last insert. False means there was nothing to undo. */
+  undoLastInsert: () => invoke<boolean>("undo_last_insert"),
+
+  /**
+   * Re-decode the last utterance on the configured retry target and replace
+   * what was typed. Rejects when there is no recent dictation to retry.
+   */
+  retryLast: () => invoke<string | null>("retry_last"),
+
+  /** Downloaded local models plus registered cloud providers. */
+  retryTargets: () => invoke<string[]>("retry_targets"),
+
+  /** `[undo, retry]` accelerators, or the literal "off". */
+  getFixupHotkeys: () => invoke<[string, string]>("get_fixup_hotkeys"),
+
+  /** `which` is "undo" or "retry"; pass "off" to unbind. */
+  setFixupHotkey: (which: "undo" | "retry", shortcut: string) =>
+    invoke<void>("set_fixup_hotkey", { which, shortcut }),
 };

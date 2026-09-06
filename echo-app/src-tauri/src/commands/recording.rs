@@ -118,11 +118,60 @@ pub async fn begin_recording(
         .await;
     });
 
+    // Which app is focused *now*, used only to prime the decoder and to decide
+    // whether partials may be typed. Delivery resolves focus again when the
+    // transcript is ready — see `core::asr::prompt` for why the two differ.
+    let focused_at_start = tokio::task::spawn_blocking(crate::core::appcontext::foreground_app)
+        .await
+        .ok()
+        .flatten();
+    let start_delivery = {
+        let conn = state.db.lock().unwrap();
+        resolve_delivery(&conn, focused_at_start.as_deref())
+    };
+    state
+        .prompt_ctx
+        .set_app(focused_at_start.clone(), start_delivery.dictionary_profile);
+
+    // Keep each finished utterance so a retry can re-decode it on a stronger
+    // model rather than asking the user to say it again.
+    let retain = {
+        let conn = state.db.lock().unwrap();
+        crate::storage::repositories::get_setting(&conn, "retry_enabled")
+            .unwrap_or(None)
+            .map(|v| v != "false")
+            .unwrap_or(true)
+    };
+    let asr_rx = if retain {
+        let (keep_tx, keep_rx) = mpsc::channel::<Vec<f32>>(256);
+        let slot = state.last_utterance.clone();
+        tokio::spawn(retain_utterances(vad_rx, keep_tx, slot));
+        keep_rx
+    } else {
+        *state.last_utterance.lock().unwrap() = None;
+        vad_rx
+    };
+
     let asr = state.asr.clone();
     let lang = language.clone();
 
+    // Partial injection needs a provider that actually streams: under the
+    // buffered default there is one segment per utterance, so it would carry
+    // the risk of rewriting another app's text with none of the benefit. It is
+    // also keystrokes-only — paste-mode partials would thrash the clipboard
+    // dozens of times a sentence and lose whatever the user had on it.
+    let stream_partials = start_delivery.stream_partials
+        && start_delivery.auto_inject
+        && !start_delivery.use_paste
+        && asr.supports_streaming().await
+        // Command mode turns an utterance into an instruction for a model, and
+        // an instruction is not text the user wants in their document even
+        // briefly. Streaming would type "make this more formal" into it and
+        // then take it back — and if the model call fails, not take it back.
+        && !command_config(state).enabled;
+
     tokio::spawn(async move {
-        if let Err(e) = asr.transcribe_stream(vad_rx, transcript_tx, lang.as_deref()).await {
+        if let Err(e) = asr.transcribe_stream(asr_rx, transcript_tx, lang.as_deref()).await {
             error!("ASR stream error: {e}");
         }
     });
@@ -130,6 +179,14 @@ pub async fn begin_recording(
     // Capture shared handles before the spawn — `state` is not 'static.
     let dictionary = state.dictionary.clone();
     let injector = state.injector.clone();
+    let prompt_ctx = state.prompt_ctx.clone();
+    let scratch_enabled = {
+        let conn = state.db.lock().unwrap();
+        crate::storage::repositories::get_setting(&conn, "scratch_that_enabled")
+            .unwrap_or(None)
+            .map(|v| v == "true")
+            .unwrap_or(false)
+    };
 
     // Command mode: a transcript opening with the prefix word is an instruction
     // for the LLM rather than text to type. Read once per session so a settings
@@ -143,6 +200,14 @@ pub async fn begin_recording(
 
     let app_clone = app.clone();
     tokio::spawn(async move {
+        // Partial text this process has typed into the focused app and not yet
+        // replaced. Empty whenever nothing is streamed, which is the only state
+        // in which a backspace count would be a guess.
+        let mut shown = String::new();
+        // Streaming can be abandoned mid-utterance and is re-armed for the next
+        // one — a single failure should not silence partials for the session.
+        let mut stream_live = stream_partials;
+
         while let Some(segment) = transcript_rx.recv().await {
             if segment.is_final {
                 // Which app is focused decides how the text is delivered and
@@ -166,6 +231,32 @@ pub async fn begin_recording(
                     .read()
                     .await
                     .process_for(&segment.text, delivery.dictionary_profile);
+
+                // "Scratch that" is a correction, not dictation: take back the
+                // last delivery instead of typing the words. Checked before
+                // history so the log stays a record of what was said and kept.
+                if scratch_enabled && crate::core::undo::is_scratch_phrase(&processed) {
+                    // The phrase itself may already be on screen from streaming;
+                    // remove it before undoing what came before it.
+                    if !shown.is_empty() {
+                        let inj = injector.clone();
+                        let typed = std::mem::take(&mut shown);
+                        let _ = tokio::task::spawn_blocking(move || {
+                            crate::core::injection::rewrite(inj.as_ref(), &typed, "")
+                        })
+                        .await;
+                    }
+                    prompt_ctx.clear_previous();
+                    match crate::commands::fixup::undo_delivery(&app_clone).await {
+                        Ok(true) => info!("Scratch that: last insert undone"),
+                        Ok(false) => info!("Scratch that: nothing to undo"),
+                        Err(e) => error!("Scratch that failed: {e}"),
+                    }
+                    continue;
+                }
+
+                // Carry this sentence into the next utterance's decoder prompt.
+                prompt_ctx.set_previous(&processed);
 
                 // Record it before command mode rewrites anything: history is a
                 // log of what you said, not of what the model replied.
@@ -240,19 +331,41 @@ pub async fn begin_recording(
                             .await;
                     }
                     let inj = injector.clone();
+                    // When partials were streamed, the target already holds an
+                    // approximation of this sentence; only its differing tail
+                    // is rewritten rather than the whole line being retyped.
+                    let typed = std::mem::take(&mut shown);
+                    stream_live = stream_partials;
+                    let text = to_inject.clone();
                     let result = tokio::task::spawn_blocking(move || {
-                        crate::core::injection::deliver(
-                            inj.as_ref(),
-                            &to_inject,
-                            delivery.use_paste,
-                            delivery.settle_ms,
-                        )
+                        if typed.is_empty() {
+                            crate::core::injection::deliver(
+                                inj.as_ref(),
+                                &text,
+                                delivery.use_paste,
+                                delivery.settle_ms,
+                            )
+                        } else {
+                            crate::core::injection::finish_streamed(inj.as_ref(), &typed, &text)
+                                .map(|_| ())
+                        }
                     })
                     .await;
                     match result {
-                        Ok(Err(e)) => error!("Text injection failed: {e}"),
+                        Ok(Err(e)) => {
+                            error!("Text injection failed: {e}");
+                            rescue_to_clipboard(&app_clone, &to_inject, &e.to_string());
+                        }
                         Err(e) => error!("Injection task panicked: {e}"),
-                        Ok(Ok(())) => info!("Transcript injected"),
+                        Ok(Ok(())) => {
+                            info!("Transcript injected");
+                            let state = app_clone.state::<AppState>();
+                            *state.last_delivery.lock().unwrap() =
+                                Some(crate::core::undo::LastDelivery {
+                                    text: to_inject,
+                                    used_paste: delivery.use_paste,
+                                });
+                        }
                     }
                 } else {
                     // Silently dropping the transcript here is the one outcome
@@ -269,6 +382,41 @@ pub async fn begin_recording(
                     serde_json::json!({ "text": segment.text }),
                 ) {
                     error!("Failed to emit transcript event: {e}");
+                }
+
+                // Type the partial into the focused app, so words appear while
+                // they are being spoken instead of in one burst at the end.
+                //
+                // ponytail: `shown` is only ever text this process typed during
+                // this utterance, and only its own characters are ever deleted.
+                // What it cannot see is the user typing into the same field
+                // mid-utterance, which no API exposes — so the backspaces would
+                // land on their text. That is why this is opt-in per app and
+                // off by default; the ceiling is real, not a rough edge.
+                if stream_live {
+                    let inj = injector.clone();
+                    let typed = shown.clone();
+                    let next = segment.text.clone();
+                    match tokio::task::spawn_blocking(move || {
+                        crate::core::injection::rewrite(inj.as_ref(), &typed, &next)
+                    })
+                    .await
+                    {
+                        Ok(Ok(())) => shown = segment.text,
+                        // A failed rewrite leaves the field in a state we can
+                        // no longer describe, so stop streaming this utterance.
+                        // `shown` keeps its last known-good value: the final
+                        // transcript then repairs the tail from there instead
+                        // of appending a second copy of the sentence.
+                        Ok(Err(e)) => {
+                            error!("Partial injection failed; delivering the final only: {e}");
+                            stream_live = false;
+                        }
+                        Err(e) => {
+                            error!("Partial injection task panicked: {e}");
+                            stream_live = false;
+                        }
+                    }
                 }
             }
         }
@@ -416,11 +564,79 @@ pub(crate) async fn vad_gate<F>(
     let _ = vad_tx.send(Vec::new()).await;
 }
 
+/// Cap on retained audio: 30 seconds at 16 kHz mono f32, about 1.9 MB.
+///
+/// Long enough for anything said in one breath, which is what a retry is for.
+const MAX_RETAINED_SAMPLES: usize = 30 * 16_000;
+
+/// Forward the VAD's output to the ASR unchanged, keeping a copy of the most
+/// recent complete utterance so it can be re-decoded without being re-spoken.
+///
+/// A passthrough rather than a change to the provider trait: the buffer is
+/// already assembled here, and every provider — including one from a plugin —
+/// gets the behaviour without implementing anything.
+///
+/// An utterance longer than [`MAX_RETAINED_SAMPLES`] is dropped rather than
+/// truncated. Retrying the first thirty seconds of a longer sentence would
+/// silently return a shorter transcript than the one it replaced, which looks
+/// exactly like the retry itself failing.
+pub(crate) async fn retain_utterances(
+    mut rx: mpsc::Receiver<Vec<f32>>,
+    tx: mpsc::Sender<Vec<f32>>,
+    slot: Arc<std::sync::Mutex<Option<Vec<f32>>>>,
+) {
+    let mut current: Vec<f32> = Vec::new();
+    let mut overflowed = false;
+
+    while let Some(chunk) = rx.recv().await {
+        if chunk.is_empty() {
+            // Utterance boundary: publish what was collected, or clear the slot
+            // if it was too long to keep honestly.
+            let finished = std::mem::take(&mut current);
+            if !finished.is_empty() || overflowed {
+                *slot.lock().unwrap() = (!overflowed).then_some(finished);
+            }
+            overflowed = false;
+        } else if !overflowed {
+            if current.len() + chunk.len() > MAX_RETAINED_SAMPLES {
+                overflowed = true;
+                current = Vec::new();
+            } else {
+                current.extend_from_slice(&chunk);
+            }
+        }
+
+        if tx.send(chunk).await.is_err() {
+            return;
+        }
+    }
+}
+
+/// Injection failed, so put the words somewhere the user can still reach them.
+///
+/// The transcript is already in History, but nobody watching their cursor not
+/// move thinks to go and look there. The clipboard is the one place every app
+/// can paste from, and the error carries the reason the typing failed.
+fn rescue_to_clipboard(app: &AppHandle, text: &str, reason: &str) {
+    let saved = arboard::Clipboard::new().and_then(|mut c| c.set_text(text.to_owned()));
+    let message = match saved {
+        Ok(()) => format!("Couldn't type that ({reason}). It's on your clipboard — paste it."),
+        Err(e) => format!("Couldn't type that ({reason}), and the clipboard refused it too: {e}"),
+    };
+    let _ = app.emit(
+        AppEvent::ErrorOccurred { message: String::new() }.event_name(),
+        serde_json::json!({ "message": message }),
+    );
+}
+
 /// How one finished transcript should be delivered. Resolved per utterance so
 /// a per-app profile — and any settings change — takes effect immediately.
 pub(crate) struct Delivery {
     pub auto_inject: bool,
     pub use_paste: bool,
+    /// Type partial transcripts as they arrive rather than waiting for the
+    /// finished sentence. Off unless the app's profile asks for it.
+    pub stream_partials: bool,
     pub delay_ms: u64,
     /// Dictionary profile to scope replacements to, if the focused app selects one.
     pub dictionary_profile: Option<i64>,
@@ -445,6 +661,9 @@ pub(crate) fn resolve_delivery(
     let mut delivery = Delivery {
         auto_inject: get("auto_inject").map(|v| v != "false").unwrap_or(true),
         use_paste: get("injection_method").map(|v| v == "paste").unwrap_or(false),
+        // Off unless asked for: this one types into another app's text field
+        // while the user is still speaking into it.
+        stream_partials: get("stream_partials").map(|v| v == "true").unwrap_or(false),
         delay_ms: get("inject_delay_ms")
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(0),
@@ -463,6 +682,9 @@ pub(crate) fn resolve_delivery(
             }
             if let Some(method) = profile.injection_method {
                 delivery.use_paste = method == "paste";
+            }
+            if let Some(stream) = profile.stream_partials {
+                delivery.stream_partials = stream;
             }
             delivery.dictionary_profile = profile.profile_id;
         }

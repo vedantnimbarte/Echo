@@ -41,6 +41,50 @@ impl AsrManager {
         self.active().await?.transcribe(audio, language).await
     }
 
+    /// Transcribe with a *named* provider rather than the active one.
+    ///
+    /// Deliberately unwrapped by [`super::fallback::FallbackProvider`]: this
+    /// exists so a retry can be decoded by something other than whatever just
+    /// got it wrong, and silently falling back to the local engine would hand
+    /// back the same answer again.
+    pub async fn transcribe_with(
+        &self,
+        name: &str,
+        audio: Vec<f32>,
+        language: Option<&str>,
+    ) -> Result<TranscriptSegment> {
+        let provider = self
+            .providers
+            .read()
+            .await
+            .get(name)
+            .cloned()
+            .ok_or_else(|| EchoError::NotFound(format!("ASR provider '{name}' not registered")))?;
+        provider.transcribe(audio, language).await
+    }
+
+    /// Names of every registered provider, for a settings picker.
+    pub async fn registered(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.providers.read().await.keys().cloned().collect();
+        names.sort();
+        names
+    }
+
+    /// Whether the active provider produces partial results as you speak.
+    ///
+    /// Gates partial injection: under the buffered default there is one segment
+    /// per utterance and nothing to stream, so streaming would add its risk
+    /// without its benefit.
+    pub async fn supports_streaming(&self) -> bool {
+        let name = self.active_provider.read().await.clone();
+        self.providers
+            .read()
+            .await
+            .get(&name)
+            .map(|p| p.supports_streaming())
+            .unwrap_or(false)
+    }
+
     pub async fn transcribe_stream(
         &self,
         audio_rx: mpsc::Receiver<Vec<f32>>,

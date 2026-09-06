@@ -3,6 +3,7 @@ pub mod asr;
 pub mod audio;
 pub mod dictionary;
 pub mod egress;
+pub mod fixup;
 pub mod history;
 pub mod import;
 pub mod hotkey;

@@ -182,14 +182,16 @@ fn row_to_app_profile(r: &rusqlite::Row) -> rusqlite::Result<AppProfile> {
         label: r.get(2)?,
         auto_inject: r.get::<_, Option<i64>>(3)?.map(|v| v != 0),
         injection_method: r.get(4)?,
-        profile_id: r.get(5)?,
-        enabled: r.get::<_, i64>(6)? != 0,
+        stream_partials: r.get::<_, Option<i64>>(5)?.map(|v| v != 0),
+        profile_id: r.get(6)?,
+        enabled: r.get::<_, i64>(7)? != 0,
     })
 }
 
 pub fn list_app_profiles(conn: &Connection) -> Result<Vec<AppProfile>> {
     let mut stmt = conn.prepare(
-        "SELECT id, app_match, label, auto_inject, injection_method, profile_id, enabled
+        "SELECT id, app_match, label, auto_inject, injection_method, stream_partials,
+                profile_id, enabled
          FROM app_profiles ORDER BY app_match",
     )?;
     let rows = stmt
@@ -202,7 +204,8 @@ pub fn list_app_profiles(conn: &Connection) -> Result<Vec<AppProfile>> {
 /// lowercased identifier the platform layer reports.
 pub fn find_app_profile(conn: &Connection, app_match: &str) -> Result<Option<AppProfile>> {
     let mut stmt = conn.prepare(
-        "SELECT id, app_match, label, auto_inject, injection_method, profile_id, enabled
+        "SELECT id, app_match, label, auto_inject, injection_method, stream_partials,
+                profile_id, enabled
          FROM app_profiles WHERE app_match = ?1 AND enabled = 1",
     )?;
     let row = stmt
@@ -221,12 +224,14 @@ pub fn find_app_profile(conn: &Connection, app_match: &str) -> Result<Option<App
 pub fn upsert_app_profile(conn: &Connection, p: &AppProfile) -> Result<i64> {
     let id = conn.query_row(
         "INSERT INTO app_profiles
-            (app_match, label, auto_inject, injection_method, profile_id, enabled)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            (app_match, label, auto_inject, injection_method, stream_partials,
+             profile_id, enabled)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
          ON CONFLICT(app_match) DO UPDATE SET
             label = excluded.label,
             auto_inject = excluded.auto_inject,
             injection_method = excluded.injection_method,
+            stream_partials = excluded.stream_partials,
             profile_id = excluded.profile_id,
             enabled = excluded.enabled
          RETURNING id",
@@ -235,6 +240,7 @@ pub fn upsert_app_profile(conn: &Connection, p: &AppProfile) -> Result<i64> {
             p.label,
             p.auto_inject.map(|v| v as i64),
             p.injection_method,
+            p.stream_partials.map(|v| v as i64),
             p.profile_id,
             p.enabled as i64,
         ],

@@ -124,6 +124,10 @@ pub fn run() {
             // patch its output afterwards.
             let dictionary = Arc::new(RwLock::new(DictionaryEngine::new(entries)));
 
+            // Same reason: the local engine reads this per utterance to learn
+            // which app is being dictated into and what was just said.
+            let prompt_ctx = Arc::new(core::asr::prompt::PromptContext::default());
+
             // Apply the history retention policy at startup. Doing it here
             // rather than on a timer means it also runs for someone who just
             // shortened the window, instead of waiting for the next tick.
@@ -190,6 +194,7 @@ pub fn run() {
                         whisper_model.clone(),
                     )
                     .with_dictionary(dictionary.clone())
+                    .with_prompt_context(prompt_ctx.clone())
                     .with_threads(threads)
                     .with_gpu_allowed(gpu_allowed);
                     let asr = asr_manager.clone();
@@ -285,11 +290,14 @@ pub fn run() {
                 wake_models,
                 wake_active: Arc::new(std::sync::atomic::AtomicBool::new(false)),
                 dictionary,
+                prompt_ctx,
                 injector: Arc::from(platform_injector()),
                 telemetry,
                 plugins: Mutex::new(plugin_loader),
                 plugins_dir,
                 recording: Mutex::new(false),
+                last_delivery: Mutex::new(None),
+                last_utterance: Arc::new(Mutex::new(None)),
                 modtap: Mutex::new(None),
             };
 
@@ -391,6 +399,11 @@ pub fn run() {
             commands::hotkey::register_hotkey,
             commands::hotkey::hotkey_support,
             commands::hotkey::set_recording_mode,
+            commands::hotkey::set_fixup_hotkey,
+            commands::hotkey::get_fixup_hotkeys,
+            commands::fixup::undo_last_insert,
+            commands::fixup::retry_last,
+            commands::fixup::retry_targets,
             commands::providers::set_api_key,
             commands::providers::get_api_key_set,
             commands::providers::remove_api_key,

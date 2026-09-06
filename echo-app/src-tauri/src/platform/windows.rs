@@ -75,11 +75,74 @@ impl TextInjector for WindowsInjector {
     fn send_copy(&self) -> Result<()> {
         send_ctrl_chord(VK_C, "copy")
     }
+
+    fn send_undo(&self) -> Result<()> {
+        send_ctrl_chord(VK_Z, "undo")
+    }
+
+    fn send_backspace(&self, n: usize) -> Result<()> {
+        send_plain_key(VK_BACK, n, "backspace")
+    }
 }
 
 const VK_CONTROL: u16 = 0x11;
+const VK_BACK: u16 = 0x08;
 const VK_C: u16 = 0x43;
 const VK_V: u16 = 0x56;
+const VK_Z: u16 = 0x5A;
+
+/// Press and release `vk` `n` times with no modifier held.
+///
+/// Sent as one `SendInput` batch: the OS delivers them in order without another
+/// process's keystrokes interleaving, which a loop of single calls cannot
+/// promise.
+fn send_plain_key(vk: u16, n: usize, label: &str) -> Result<()> {
+    if n == 0 {
+        return Ok(());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{
+            SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VIRTUAL_KEY,
+        };
+
+        let event = |up: bool| INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: VIRTUAL_KEY(vk),
+                    wScan: 0,
+                    dwFlags: if up { KEYEVENTF_KEYUP } else { Default::default() },
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        };
+
+        let mut inputs = Vec::with_capacity(n * 2);
+        for _ in 0..n {
+            inputs.push(event(false));
+            inputs.push(event(true));
+        }
+
+        let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
+        if sent != inputs.len() as u32 {
+            return Err(EchoError::Injection(format!(
+                "SendInput did not process all {label} events"
+            )));
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (vk, label);
+        Err(EchoError::Injection(
+            "Windows injector called on non-Windows platform".into(),
+        ))
+    }
+}
 
 /// Send Ctrl+`vk` as a four-event chord (Ctrl↓ key↓ key↑ Ctrl↑).
 /// `label` only names the shortcut in the error message.
