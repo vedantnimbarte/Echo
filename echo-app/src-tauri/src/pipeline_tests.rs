@@ -20,7 +20,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 
-use crate::commands::recording::{resolve_delivery, vad_gate, VadEvent};
+use crate::commands::recording::{resolve_delivery, retain_utterances, vad_gate, VadEvent};
 use crate::core::{
     asr::{manager::AsrManager, AsrProvider, TranscriptSegment},
     dictionary::{DictionaryEngine, DictionaryEntry},
@@ -97,6 +97,12 @@ impl TextInjector for SpyInjector {
         Ok(())
     }
     fn send_copy(&self) -> Result<()> {
+        Ok(())
+    }
+    fn send_undo(&self) -> Result<()> {
+        Ok(())
+    }
+    fn send_backspace(&self, _: usize) -> Result<()> {
         Ok(())
     }
 }
@@ -241,6 +247,70 @@ async fn vad_gate_flushes_a_trailing_utterance_when_capture_stops() {
     );
 }
 
+// ── Retained audio (retry) ───────────────────────────────────────────────────
+
+/// Drive [`retain_utterances`] over a chunk sequence and report both what the
+/// ASR stage received and what was left in the retention slot.
+async fn run_retain(input: Vec<Vec<f32>>) -> (Vec<Vec<f32>>, Option<Vec<f32>>) {
+    let (tx_in, rx_in) = mpsc::channel::<Vec<f32>>(64);
+    let (tx_out, mut rx_out) = mpsc::channel::<Vec<f32>>(64);
+    let slot = Arc::new(Mutex::new(None));
+
+    let task = tokio::spawn(retain_utterances(rx_in, tx_out, slot.clone()));
+    for chunk in input {
+        tx_in.send(chunk).await.unwrap();
+    }
+    drop(tx_in);
+    task.await.unwrap();
+
+    let mut forwarded = Vec::new();
+    while let Ok(chunk) = rx_out.try_recv() {
+        forwarded.push(chunk);
+    }
+    let kept = slot.lock().unwrap().clone();
+    (forwarded, kept)
+}
+
+/// Retention must be invisible to the ASR stage: every chunk, including the
+/// boundary sentinels, still arrives unchanged and in order.
+#[tokio::test]
+async fn retaining_audio_does_not_disturb_the_stream() {
+    let input = vec![vec![0.1; 4], vec![0.2; 4], Vec::new(), vec![0.3; 4], Vec::new()];
+    let (forwarded, _) = run_retain(input.clone()).await;
+    assert_eq!(forwarded, input);
+}
+
+/// The slot holds the *last complete* utterance, so a retry re-decodes the
+/// sentence just delivered rather than the whole session.
+#[tokio::test]
+async fn only_the_most_recent_utterance_is_kept() {
+    let (_, kept) = run_retain(vec![
+        vec![0.1; 4],
+        Vec::new(),
+        vec![0.2; 3],
+        vec![0.2; 3],
+        Vec::new(),
+    ])
+    .await;
+    assert_eq!(kept, Some(vec![0.2; 6]));
+}
+
+/// An utterance too long to keep clears the slot instead of keeping a prefix.
+/// Retrying a truncated buffer would return a shorter transcript than the one
+/// it replaced, which is indistinguishable from the retry itself failing.
+#[tokio::test]
+async fn an_overlong_utterance_is_dropped_rather_than_truncated() {
+    // Prime the slot with a short utterance, then overflow the next one.
+    let (_, kept) = run_retain(vec![
+        vec![0.1; 8],
+        Vec::new(),
+        vec![0.0; 31 * 16_000],
+        Vec::new(),
+    ])
+    .await;
+    assert_eq!(kept, None, "a truncated retry is worse than no retry");
+}
+
 // ── VAD → ASR ────────────────────────────────────────────────────────────────
 
 /// The sentinel contract, end to end: each utterance boundary must produce
@@ -338,6 +408,7 @@ fn an_app_profile_overrides_only_the_fields_it_sets() {
             label: None,
             auto_inject: Some(false),
             injection_method: None,
+            stream_partials: None,
             profile_id: None,
             enabled: true,
         },
@@ -367,6 +438,7 @@ fn app_matching_is_case_insensitive_and_disabled_profiles_are_ignored() {
             label: None,
             auto_inject: Some(false),
             injection_method: None,
+            stream_partials: None,
             profile_id: None,
             enabled: true,
         },
@@ -384,6 +456,7 @@ fn app_matching_is_case_insensitive_and_disabled_profiles_are_ignored() {
             label: None,
             auto_inject: Some(false),
             injection_method: None,
+            stream_partials: None,
             profile_id: None,
             enabled: false,
         },
@@ -493,6 +566,7 @@ async fn a_per_app_profile_switches_which_dictionary_entries_apply() {
             label: None,
             auto_inject: None,
             injection_method: None,
+            stream_partials: None,
             profile_id: Some(profile_id),
             enabled: true,
         },

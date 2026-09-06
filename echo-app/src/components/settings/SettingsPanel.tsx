@@ -10,6 +10,7 @@ import { TelemetrySettings } from "./TelemetrySettings";
 import { WakeWordSettings } from "./WakeWordSettings";
 import { CommandMode } from "./CommandMode";
 import { AppProfiles } from "./AppProfiles";
+import { FixUps } from "./FixUps";
 import { EgressLog } from "./EgressLog";
 import { Performance } from "./Performance";
 import { AudioImport } from "./AudioImport";
@@ -159,6 +160,10 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
     queryKey: ["setting", "inject_delay_ms"],
     queryFn: () => commands.getSetting("inject_delay_ms"),
   });
+  const { data: streamPartials } = useQuery({
+    queryKey: ["setting", "stream_partials"],
+    queryFn: () => commands.getSetting("stream_partials"),
+  });
   const { data: clipboardSettle } = useQuery({
     queryKey: ["setting", "clipboard_settle_ms"],
     queryFn: () => commands.getSetting("clipboard_settle_ms"),
@@ -177,6 +182,10 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
   });
   const setInjectDelayMutation = useMutation({
     mutationFn: (v: string) => commands.setSetting("inject_delay_ms", v),
+  });
+  const setStreamPartialsMutation = useMutation({
+    mutationFn: (v: string) => commands.setSetting("stream_partials", v),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["setting", "stream_partials"] }),
   });
   const setInjectionMethodMutation = useMutation({
     mutationFn: (v: string) => commands.setSetting("injection_method", v),
@@ -583,6 +592,29 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
               onBlur={(e) => setInjectDelayMutation.mutate(e.target.value || "0")}
             />
           </Field>
+        </Group>
+      )}
+
+      {on("output", ["live", "stream", "partial", "as you speak", "realtime", "real time"]) && (
+        <Group
+          title={label("output", "Live text")}
+          hint="Off by default, and worth understanding before you turn it on: streaming rewrites text inside the focused app as the decoder revises itself, and it cannot see you typing into the same field at the same time. Turn it on per app under Per-app profiles. It also needs an engine that streams — the offline one transcribes a whole utterance at a time, so it will simply wait."
+        >
+          <Check
+            checked={streamPartials === "true"}
+            onChange={(v) => setStreamPartialsMutation.mutate(v ? "true" : "false")}
+          >
+            Type words as I speak them, instead of waiting for the sentence
+          </Check>
+        </Group>
+      )}
+
+      {on("output", ["undo", "scratch", "retry", "again", "mistake", "wrong", "fix", "take back"]) && (
+        <Group
+          title={label("output", "When it gets it wrong")}
+          hint="Both shortcuts are global: by the time you notice, the focus is in the app that got the text."
+        >
+          <FixUps />
         </Group>
       )}
 

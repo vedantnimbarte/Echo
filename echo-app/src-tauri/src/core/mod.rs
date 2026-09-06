@@ -13,5 +13,6 @@ pub mod plugins;
 pub mod runtime_deps;
 pub mod session;
 pub mod telemetry;
+pub mod undo;
 pub mod vad;
 pub mod wake;

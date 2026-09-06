@@ -71,6 +71,42 @@ impl TextInjector for MacosInjector {
         // Virtual keycode 8 is ANSI 'C'.
         send_command_chord(8, "copy")
     }
+
+    fn send_undo(&self) -> Result<()> {
+        // Virtual keycode 6 is ANSI 'Z'.
+        send_command_chord(6, "undo")
+    }
+
+    fn send_backspace(&self, n: usize) -> Result<()> {
+        // Virtual keycode 51 is Delete (backspace on a Mac keyboard).
+        send_plain_key(51, n, "backspace")
+    }
+}
+
+/// Post `keycode` down/up `n` times with no modifier flags set.
+fn send_plain_key(keycode: u16, n: usize, label: &str) -> Result<()> {
+    if n == 0 {
+        return Ok(());
+    }
+    if !is_accessibility_trusted() {
+        return Err(EchoError::PermissionDenied(
+            "Accessibility permission required. Grant Echo access in System Settings → \
+             Privacy & Security → Accessibility."
+                .into(),
+        ));
+    }
+
+    let source = CGEventSource::new(CGEventSourceStateID::HIDSystemState)
+        .map_err(|_| EchoError::Injection("Failed to create CGEventSource".into()))?;
+
+    for _ in 0..n {
+        for down in [true, false] {
+            let ev = CGEvent::new_keyboard_event(source.clone(), keycode, down)
+                .map_err(|_| EchoError::Injection(format!("Failed to create {label} event")))?;
+            ev.post(CGEventTapLocation::HID);
+        }
+    }
+    Ok(())
 }
 
 /// Post Cmd+`keycode` as a down/up pair. `label` only names the shortcut in the

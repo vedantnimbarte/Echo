@@ -35,6 +35,9 @@ pub struct AppProfile {
     pub label: Option<String>,
     pub auto_inject: Option<bool>,
     pub injection_method: Option<String>,
+    /// Type partial transcripts into this app as you speak. `None` inherits
+    /// the global setting.
+    pub stream_partials: Option<bool>,
     /// Dictionary profile to apply while this app is focused.
     pub profile_id: Option<i64>,
     pub enabled: bool,

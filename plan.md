@@ -20,6 +20,7 @@
 | 7 | Plugin System | ✅ Complete (echo-sdk crate + export_plugin! macro) |
 | 8 | Packaging | ✅ Config + CI (signing certs TBD) |
 | 9 | v1 Launch | ✅ Hotkey + CSP + docs (perf/signing TBD) |
+| 10 | Post-Dictation Loop | ✅ Undo, retry, prompting, streaming, injection rescue |
 
 ---
 
@@ -868,6 +869,234 @@ Currently the global shortcut plugin is registered but no hotkeys are wired.
 - Default hotkey: `CommandOrControl+Shift+Space`
 - Make it configurable in `SettingsPanel.tsx`
 - Save to `settings` table with key `hotkey`
+
+---
+
+## Phase 10 — Post-Dictation Loop ✅
+
+Everything before this phase gets words *out* of your mouth and into a text
+field. This phase is about the seconds after that: the transcript is wrong, or
+it is slow to appear, or the audio never came from a microphone at all.
+
+**Constraints agreed for this phase:**
+- **Cross-platform or not at all.** Nothing ships that only works on one OS.
+  Where a mechanism cannot be made identical on Windows/macOS/Linux, the plan
+  says so and picks the one that can.
+- **Local default, cloud opt-in** — the same shape as the ASR providers today.
+- No new runtime dependency unless the alternative is more than a few lines.
+
+**Order matters:** 10.1 adds the "remove the text I just typed" primitive that
+10.4 needs, and the retained-utterance state that 10.2 needs. Build it first
+even if the other items look more interesting.
+
+| # | Item | Status |
+|---|---|---|
+| 10.1 | Undo last insert | ✅ `core/undo.rs`, `commands/fixup.rs`, `TextInjector::send_undo` |
+| 10.2 | Retry last utterance on a stronger model | ✅ `retain_utterances`, `AsrManager::transcribe_with` |
+| 10.3 | Context-aware decoder prompting | ✅ `core/asr/prompt.rs` |
+| 10.4 | Live streaming injection | ✅ opt-in per app, migration 3 |
+| 10.5 | New input sources | ↩︎ redirected — see below |
+
+**What shipped differently from the plan, and why.** Two corrections came out of
+reading the code rather than the docs:
+
+- **10.5(a) was already built.** `commands/import.rs` transcribes wav/mp3/ogg/
+  flac through the one-shot CLI, and whisper.cpp decodes all four itself — so
+  the "WAV only, add a decoder crate later" caveat in the original plan was
+  wrong, and there was nothing to write. It is missing from the README's
+  feature list, which is why it read as a gap.
+- **10.5(b) was not a real hole.** Injection with no identifiable focused app
+  still works: the OS sends synthetic keystrokes to whatever holds keyboard
+  focus, named or not. The actual way words get lost is injection *failing* —
+  macOS Accessibility denied, `xdotool` missing — which logged an error and
+  left the user watching a cursor that never moved. That is what
+  `rescue_to_clipboard` now covers: the transcript goes to the clipboard and
+  the error says so.
+
+---
+
+### 10.1 Undo last insert
+
+**The problem:** Echo has no undo anywhere in the tree. When it types the wrong
+thing the only recovery is manual — and manual cleanup is worse than usual
+here, because the transcript arrived as one silent burst the user did not watch
+land.
+
+**Mechanism.** Two candidates, and the cross-platform rule decides between them:
+
+| | Send the app's undo chord (`Ctrl/Cmd+Z`) | Send N backspaces |
+|---|---|---|
+| Cross-platform | Yes — one new trait method, like `send_paste` | Yes |
+| Correct after the caret moved | Yes (the app's own undo stack) | **No** — eats the wrong text |
+| Granularity | The app's, not ours | Exact |
+| Paste-injected text | Usually one undo step ✅ | Exact |
+| Keystroke-injected text | May be many undo steps ⚠️ | Exact |
+
+Take the undo chord. Backspacing a character count is only correct while
+nothing else has touched the field, and a process cannot observe that — the
+failure mode is silently deleting the user's own typing, which is worse than
+the bug being fixed.
+
+**Required work:**
+- Add `fn send_undo(&self) -> Result<()>` to `TextInjector`
+  (`core/injection/mod.rs`), implemented in all three `platform/*.rs` injectors
+  next to the existing `send_paste`/`send_copy`. Linux reuses
+  `linux_chord_command` (keycode `44` = `z`, xdotool key `ctrl+z`).
+- Store the last delivery in `AppState`: `Mutex<Option<LastDelivery>>` holding
+  the delivered text, whether paste or keystrokes were used, and the target app
+  id. Set it in the injection block of `commands/recording.rs`.
+- `undo_last_insert` IPC command plus its own configurable hotkey (default
+  `CommandOrControl+Shift+Z`), registered the way 9.4 registers the main one.
+- Clear the stored delivery after an undo, so a second press does not walk back
+  into the user's own edits.
+- Spoken form: `"scratch that"` as a built-in phrase checked before injection,
+  behind a command-mode-style opt-in so it cannot fire on dictated prose that
+  happens to contain the words.
+
+**Known ceiling** (leave it as a `ponytail:` comment): keystroke-injected text
+in an app with per-character undo needs more than one press. The mitigation is a
+settings note recommending paste injection when undo matters, not more code.
+
+**Check:** unit test that `LastDelivery` is recorded on the inject path and
+cleared by undo. The chord itself is platform code and gets the same treatment
+as `send_paste` — argument-shape test for Linux, manual verification elsewhere.
+
+---
+
+### 10.2 Retry last utterance on a stronger model
+
+**The problem:** the fast local model mishears one word. Today the recovery is
+to say the whole sentence again — and the second attempt is transcribed by the
+same model that just got it wrong.
+
+**Mechanism:** keep the last utterance's PCM in memory and re-run it through a
+different provider on request. No re-speaking, no new audio path.
+
+**Required work:**
+- Retain the finished utterance. `default_transcribe_stream`
+  (`core/asr/mod.rs`) already owns the complete buffer at the moment it calls
+  `transcribe_utterance` — hand a clone to `AppState.last_utterance`
+  (`Mutex<Option<Vec<f32>>>`). 16 kHz f32 mono is ~64 KB/s, so a 30-second cap
+  is ~2 MB. Cap it; do not retain unbounded.
+- Setting `retry_provider` — which provider the retry uses, defaulting to the
+  largest *local* model installed. Cloud is selectable but never the default.
+- `retry_last` IPC command plus hotkey: undo (10.1) → re-transcribe → deliver
+  through the same `injection::deliver` path, so the dictionary and
+  smart-spacing still apply.
+- The retained buffer is audio of the user speaking. It lives in memory only,
+  never touches disk, and is dropped on `stop_recording` when retry is
+  disabled. Say exactly that in the settings UI next to the toggle.
+
+**Check:** a test that retry re-runs the retained buffer through the configured
+retry provider and not the primary one.
+
+---
+
+### 10.3 Context-aware decoder prompting
+
+Whisper's `initial_prompt` biases the decoder toward the vocabulary it should
+expect. Echo already uses it — `whisper_cli.rs:39` and `whisper_server.rs:111`
+both take a prompt built from `DictionaryEngine::prompt_terms`. Two gaps, both
+small:
+
+**(a) Per-app dictionary terms never reach the decoder.**
+`whisper_cli::initial_prompt` calls `prompt_terms(None)`, so profile-scoped
+entries — the entire point of per-app dictionaries — are filtered out at
+`core/dictionary/mod.rs:70` before the prompt is built.
+
+The tension is real and worth stating: the profile is deliberately resolved at
+*injection* time (see the `appcontext/mod.rs` header) because focus can move
+while you talk, but the prompt is needed at *decode* time, before a transcript
+exists. Resolve it by sampling `foreground_app()` once at recording start and
+using that for the prompt only. A prompt is a hint — being wrong costs a weaker
+prompt, never a wrong transcript — while delivery keeps its injection-time
+resolution. Both whisper front-ends must get the same change or they drift, per
+the `decode_opts.rs` header.
+
+**(b) Use the previous transcript as context.**
+`initial_prompt` is designed to take the *preceding text*, which is exactly what
+`transcription_history` already stores. Feeding the last transcript from the
+same app into the prompt makes continued dictation carry its own context: names
+and terminology from sentence one bias sentence two. Cost is one indexed query
+per utterance — no clipboard, no platform code, nothing new on disk. Bound it to
+the existing `MAX_PROMPT_CHARS` budget and to recent history; a transcript from
+yesterday is not context.
+
+**Deliberately not doing:** reading the focused app's selection via
+`copy_selection` as prompt context. It works, but it fires a `Ctrl+C` at another
+app and round-trips the user's clipboard on *every* utterance, and that cost is
+paid whether or not the selection is relevant. Revisit as a per-profile opt-in
+if (a) and (b) prove insufficient.
+
+**Check:** `prompt_terms` already has coverage — add a case asserting a
+profile-scoped entry appears in the prompt when that profile is active, and does
+not when it is not.
+
+---
+
+### 10.4 Live streaming injection
+
+**The problem:** text appears only after you stop talking.
+`echo://transcript-partial` is already emitted (`commands/recording.rs:268`) but
+goes only to Echo's own UI; the focused app sees nothing until the final
+segment.
+
+**Why this is the hard one.** Injecting partials means editing text inside
+someone else's app: each new partial has to remove the previous one and write a
+longer version. That is a delete-and-rewrite loop in a text field Echo does not
+own, competing with the user's own typing, with autocorrect, and with editor
+autocomplete that rewrites what was just inserted. The failure mode is not
+"looks wrong", it is deleting text the user typed.
+
+**Constraints that make it shippable:**
+- **Opt-in per app profile**, never global. Default off.
+- **Keystroke injection only.** Paste-mode partials would thrash the clipboard
+  dozens of times per sentence and lose the user's clipboard contents on any
+  interruption.
+- **Only for providers that genuinely stream.** Under the buffered
+  `default_transcribe_stream`, partials arrive one utterance at a time anyway —
+  there is nothing to stream, so the feature would carry all of the risk and
+  none of the benefit. Gate on `supports_streaming()`.
+- **Abandon on interference.** If anything about the field changes between
+  partials that Echo did not cause, stop injecting partials for the rest of the
+  utterance and fall back to delivering the final transcript. Detecting that
+  cheaply is the open design question — settle it before writing code, not
+  during.
+- Needs the backspace primitive that 10.1 rejected for undo. Here the rewrite
+  knows exactly how many characters it wrote and nothing else has legitimately
+  intervened, which is precisely the condition that makes counting safe in this
+  case and unsafe in that one.
+
+**Check:** the partial-diff logic (previous partial → the backspaces and
+keystrokes that reach the next one) is pure string work. Test it directly,
+including the case where a partial gets *shorter*.
+
+---
+
+### 10.5 Nothing is lost when injection fails
+
+**(a) File import already existed** — see the note at the top of this phase.
+No work; the README needs the feature listed, not the code.
+
+**(b) A failed injection no longer loses the words.** `rescue_to_clipboard`
+(`commands/recording.rs`) puts the transcript on the clipboard and emits the
+reason as an error the UI shows. History always had it, but nobody watching
+their cursor not move thinks to go and look there.
+
+Deliberately *not* changed: dictating into Echo's own window. It looks like a
+case worth intercepting and is not — typing a phrase into the dictionary field
+by voice is a real workflow, and routing it elsewhere would break it.
+
+---
+
+### Not planned, and why
+
+- **Backspace-count undo as the primary mechanism** — see the table in 10.1.
+- **Selection-as-prompt-context on every utterance** — see 10.3.
+- **Non-WAV file import** — see 10.5(a).
+- **Cloud LLM as anything's default** — every LLM-shaped item here (spoken
+  commands, retry, formatting) follows command mode's existing shape: local
+  first, cloud opt-in, key from the keychain.
 
 ---
 

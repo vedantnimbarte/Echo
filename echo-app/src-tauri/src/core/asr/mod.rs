@@ -9,6 +9,7 @@ pub mod fallback;
 pub mod local;
 pub mod manager;
 pub mod model_manager;
+pub mod prompt;
 
 #[cfg(test)]
 mod pack_tests;

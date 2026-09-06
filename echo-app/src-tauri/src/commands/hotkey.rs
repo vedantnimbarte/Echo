@@ -1,5 +1,5 @@
 use tauri::{AppHandle, Emitter, State};
-use tauri_plugin_global_shortcut::GlobalShortcutExt;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 use crate::{
     core::modtap::{Activation, ModTapWatcher, ModifierKey},
@@ -13,6 +13,21 @@ pub const DEFAULT_HOTKEY: &str = "CommandOrControl+Shift+Space";
 
 /// Default recording mode. Historically `"manual"`, which meant this.
 pub const DEFAULT_MODE: &str = "toggle";
+
+/// Take back the last insert. Global, because by the time you notice the
+/// mistake the focus is in the app that received the text.
+///
+/// Alt rather than Shift: `Ctrl+Shift+Z` is *redo* in most editors, and a
+/// global binding would take it away from every app on the machine.
+pub const DEFAULT_UNDO_HOTKEY: &str = "CommandOrControl+Alt+Z";
+
+/// Re-decode the last utterance on a stronger model.
+pub const DEFAULT_RETRY_HOTKEY: &str = "CommandOrControl+Alt+R";
+
+/// Stored in place of an accelerator to leave a fix-up unbound. A global
+/// shortcut is taken from every other app on the machine, so being able to give
+/// one back matters more here than for the dictation hotkey.
+pub const UNBOUND: &str = "off";
 
 /// Tap the hotkey: start if idle, stop if recording.
 const TOGGLE: &str = "echo://hotkey-toggle";
@@ -66,6 +81,11 @@ pub fn bind(app: &AppHandle, state: &AppState, accelerator: &str, mode: &str) ->
     let _ = app.global_shortcut().unregister_all();
     *state.modtap.lock().unwrap() = None;
 
+    // Rebound alongside the dictation hotkey because `unregister_all` above
+    // clears them too. They are failures worth surviving: a fix-up shortcut the
+    // system refuses must not stop dictation itself from binding.
+    bind_fixups(app, state);
+
     let Some(key) = ModifierKey::parse(accelerator) else {
         return app
             .global_shortcut()
@@ -103,11 +123,110 @@ pub fn bind(app: &AppHandle, state: &AppState, accelerator: &str, mode: &str) ->
     Ok(())
 }
 
+/// Bind the undo and retry shortcuts.
+///
+/// Each gets its own handler rather than routing through the shared one in
+/// `lib.rs`: that handler exists to translate a press into a recording
+/// transition, and these two do their work in Rust without a frontend window
+/// needing to be open at all.
+///
+/// A shortcut the system refuses is logged and skipped. Losing undo is an
+/// annoyance; refusing to start because of it would be worse.
+fn bind_fixups(app: &AppHandle, state: &AppState) {
+    let undo = setting(state, "undo_hotkey", DEFAULT_UNDO_HOTKEY);
+    let retry = setting(state, "retry_hotkey", DEFAULT_RETRY_HOTKEY);
+
+    for (accelerator, action) in [(undo, Fixup::Undo), (retry, Fixup::Retry)] {
+        if accelerator == UNBOUND {
+            continue;
+        }
+        let handle = app.clone();
+        let result = app.global_shortcut().on_shortcut(
+            accelerator.as_str(),
+            move |_app, _shortcut, event| {
+                // Act on the press only. Reacting to the release as well would
+                // run every fix-up twice.
+                if event.state != ShortcutState::Pressed {
+                    return;
+                }
+                let handle = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    match action {
+                        Fixup::Undo => match crate::commands::fixup::undo_delivery(&handle).await {
+                            Ok(true) => tracing::info!("Undo hotkey: last insert taken back"),
+                            Ok(false) => tracing::info!("Undo hotkey: nothing to undo"),
+                            Err(e) => tracing::error!("Undo hotkey failed: {e}"),
+                        },
+                        Fixup::Retry => {
+                            if let Err(e) = crate::commands::fixup::retry_last(handle.clone()).await
+                            {
+                                tracing::error!("Retry hotkey failed: {e}");
+                                let _ = handle.emit(
+                                    "echo://error",
+                                    serde_json::json!({ "message": e.to_string() }),
+                                );
+                            }
+                        }
+                    }
+                });
+            },
+        );
+        if let Err(e) = result {
+            tracing::warn!("Couldn't bind {accelerator} for {action:?}: {e}");
+        }
+    }
+}
+
+/// Which after-the-fact correction a shortcut triggers.
+#[derive(Debug, Clone, Copy)]
+enum Fixup {
+    Undo,
+    Retry,
+}
+
 /// Rebind from what is stored. Used at startup and after a mode change.
 pub fn apply(app: &AppHandle, state: &AppState) -> Result<()> {
     let accelerator = setting(state, "hotkey", DEFAULT_HOTKEY);
     let mode = setting(state, "recording_mode", DEFAULT_MODE);
     bind(app, state, &accelerator, &mode)
+}
+
+/// Change one of the fix-up shortcuts (undo or retry) and persist it.
+///
+/// Unlike the dictation hotkey this saves first and then rebinds everything:
+/// there is no "replace one shortcut" call in the plugin, so unbinding only
+/// happens by way of the `unregister_all` inside [`bind`]. A shortcut the
+/// system refuses is reported by [`bind_fixups`] and leaves the rest working.
+/// Pass [`UNBOUND`] to turn one off.
+#[tauri::command]
+pub fn set_fixup_hotkey(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    which: String,
+    shortcut: String,
+) -> Result<()> {
+    let key = match which.as_str() {
+        "undo" => "undo_hotkey",
+        "retry" => "retry_hotkey",
+        other => return Err(EchoError::Config(format!("Unknown fix-up '{other}'"))),
+    };
+    {
+        let conn = state.db.lock().unwrap();
+        repositories::set_setting(&conn, key, &shortcut)?;
+    }
+    // Rebinding everything is how a shortcut gets *un*bound: the plugin has no
+    // "replace this one" call, and `unregister_all` inside `apply` is what
+    // clears the old accelerator.
+    apply(&app, state.inner())
+}
+
+/// The fix-up shortcuts as currently configured.
+#[tauri::command]
+pub fn get_fixup_hotkeys(state: State<'_, AppState>) -> (String, String) {
+    (
+        setting(state.inner(), "undo_hotkey", DEFAULT_UNDO_HOTKEY),
+        setting(state.inner(), "retry_hotkey", DEFAULT_RETRY_HOTKEY),
+    )
 }
 
 /// Replace the registered global hotkey and persist it.

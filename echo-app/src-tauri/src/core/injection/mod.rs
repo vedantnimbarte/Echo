@@ -12,6 +12,22 @@ pub trait TextInjector: Send + Sync {
     /// Send the OS "copy" shortcut. Used by [`copy_selection`] to read whatever
     /// the focused app currently has selected.
     fn send_copy(&self) -> Result<()>;
+
+    /// Send the OS "undo" shortcut to the focused app.
+    ///
+    /// Undoing our own injection is delegated to the target app's undo stack
+    /// rather than counting backspaces, because a caret that moved after the
+    /// injection makes a character count delete the *user's* text. See
+    /// [`crate::core::undo`].
+    fn send_undo(&self) -> Result<()>;
+
+    /// Delete the `n` characters immediately before the caret.
+    ///
+    /// Only safe where the caller knows it wrote those characters itself and
+    /// nothing has intervened — which is true within one streaming utterance
+    /// (see the partial-injection path in `commands::recording`) and is not
+    /// true for undo.
+    fn send_backspace(&self, n: usize) -> Result<()>;
 }
 
 /// Returns the correct injector for the current platform.
@@ -54,6 +70,31 @@ pub fn deliver(inj: &dyn TextInjector, text: &str, use_paste: bool, settle_ms: u
     } else {
         inj.inject_text(text)
     }
+}
+
+/// Rewrite the tail of text Echo already typed so that it reads `next`.
+///
+/// Only the differing tail moves: a partial that grows types the new words and
+/// deletes nothing. `shown` must be exactly what this process last typed and
+/// nothing else — see the safety note on [`TextInjector::send_backspace`].
+pub fn rewrite(inj: &dyn TextInjector, shown: &str, next: &str) -> Result<()> {
+    let (delete, add) = partial_edit(shown, next);
+    inj.send_backspace(delete)?;
+    if !add.is_empty() {
+        inj.inject_text(&add)?;
+    }
+    Ok(())
+}
+
+/// Close out a streamed utterance: whatever partial text is on screen becomes
+/// the finished transcript, spaced like any other delivery.
+///
+/// Returns the text now standing in the target app, which is what an undo of
+/// this delivery has to account for.
+pub fn finish_streamed(inj: &dyn TextInjector, shown: &str, final_text: &str) -> Result<String> {
+    let next = smart_spacing(final_text);
+    rewrite(inj, shown, &next)?;
+    Ok(next)
 }
 
 /// Append a trailing space so the next dictation does not run into this one
@@ -134,6 +175,62 @@ pub(crate) fn linux_chord_command(
             ],
         )
     }
+}
+
+/// A bare key press with no modifier, repeated `count` times.
+///
+/// Separate from [`linux_chord_command`] because that one always wraps the key
+/// in Ctrl — sending Ctrl+Backspace would delete a whole word per press instead
+/// of a character.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+pub(crate) fn linux_key_command(
+    wayland: bool,
+    keycode: u8,
+    xdotool_key: &str,
+    count: usize,
+) -> (&'static str, Vec<String>) {
+    if wayland {
+        let mut args = vec!["key".to_string()];
+        for _ in 0..count {
+            args.push(format!("{keycode}:1"));
+            args.push(format!("{keycode}:0"));
+        }
+        ("ydotool", args)
+    } else {
+        (
+            "xdotool",
+            vec![
+                "key".into(),
+                "--clearmodifiers".into(),
+                "--repeat".into(),
+                count.to_string(),
+                xdotool_key.to_owned(),
+            ],
+        )
+    }
+}
+
+/// The edit that turns the text currently on screen into `next`: how many
+/// characters to delete from the end, and what to type in their place.
+///
+/// Used by streaming injection, where each partial transcript replaces the one
+/// before it. Only the differing tail is rewritten, so a partial that merely
+/// grows — the common case — types the new words and deletes nothing.
+///
+/// ponytail: a "character" here is a `char`, while a backspace deletes whatever
+/// the target app considers one unit. They agree for ordinary prose and differ
+/// for emoji and combining marks; a transcript is prose, and the fallback when
+/// they disagree is a visibly wrong partial that the final transcript corrects.
+pub(crate) fn partial_edit(shown: &str, next: &str) -> (usize, String) {
+    let common = shown
+        .chars()
+        .zip(next.chars())
+        .take_while(|(a, b)| a == b)
+        .count();
+    (
+        shown.chars().count() - common,
+        next.chars().skip(common).collect(),
+    )
 }
 
 /// Scripts and punctuation blocks that do not separate words with spaces.
@@ -233,13 +330,15 @@ fn poll_clipboard_change(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     #[derive(Default)]
     struct SpyInjector {
         typed: AtomicBool,
         pasted: AtomicBool,
         copied: AtomicBool,
+        undone: AtomicBool,
+        backspaces: AtomicUsize,
     }
     impl TextInjector for SpyInjector {
         fn inject_text(&self, _: &str) -> Result<()> {
@@ -252,6 +351,14 @@ mod tests {
         }
         fn send_copy(&self) -> Result<()> {
             self.copied.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+        fn send_undo(&self) -> Result<()> {
+            self.undone.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+        fn send_backspace(&self, n: usize) -> Result<()> {
+            self.backspaces.fetch_add(n, Ordering::SeqCst);
             Ok(())
         }
     }
@@ -311,5 +418,51 @@ mod tests {
         deliver(&spy, "hello", false, 1).unwrap();
         assert!(spy.typed.load(Ordering::SeqCst));
         assert!(!spy.pasted.load(Ordering::SeqCst));
+    }
+
+    /// Backspace must be a bare key. Ctrl+Backspace deletes a whole word, which
+    /// would eat text a partial rewrite never wrote.
+    #[test]
+    fn linux_backspace_holds_no_modifier() {
+        let (_, args) = linux_key_command(true, 14, "BackSpace", 2);
+        assert_eq!(args, vec!["key", "14:1", "14:0", "14:1", "14:0"]);
+        assert!(!args.iter().any(|a| a.starts_with("29:")), "ctrl was held");
+
+        let (_, args) = linux_key_command(false, 14, "BackSpace", 3);
+        assert_eq!(args, vec!["key", "--clearmodifiers", "--repeat", "3", "BackSpace"]);
+    }
+
+    /// The common case: a partial only grows, so nothing is deleted and only
+    /// the new words are typed.
+    #[test]
+    fn a_growing_partial_types_only_the_new_tail() {
+        assert_eq!(
+            partial_edit("the quick", "the quick brown"),
+            (0, " brown".to_string())
+        );
+    }
+
+    /// A re-decode can revise what it already emitted; only the differing tail
+    /// is rewritten, never the whole line.
+    #[test]
+    fn a_revised_partial_deletes_only_back_to_the_divergence() {
+        assert_eq!(
+            partial_edit("the quick brown", "the quick brawn"),
+            (3, "awn".to_string())
+        );
+        // Shorter is a legal revision too.
+        assert_eq!(partial_edit("hello there", "hello"), (6, String::new()));
+        // Nothing changed: no keystrokes at all.
+        assert_eq!(partial_edit("same", "same"), (0, String::new()));
+        // Nothing on screen yet.
+        assert_eq!(partial_edit("", "hello"), (0, "hello".to_string()));
+    }
+
+    /// Counting in `char`s, not bytes: a multi-byte character is one backspace,
+    /// and getting this wrong would delete a byte at a time through the user's
+    /// text.
+    #[test]
+    fn partial_edit_counts_characters_not_bytes() {
+        assert_eq!(partial_edit("café", "cafe"), (1, "e".to_string()));
     }
 }

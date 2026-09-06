@@ -119,5 +119,17 @@ fn migrate(conn: &Connection) -> Result<()> {
         ")?;
     }
 
+    if version < 3 {
+        conn.execute_batch("
+            -- Whether partial transcripts are typed into this app as you speak.
+            -- NULL inherits the global setting, which defaults to off: partial
+            -- injection rewrites text inside somebody else's field, and that is
+            -- a decision to make per application rather than everywhere at once.
+            ALTER TABLE app_profiles ADD COLUMN stream_partials INTEGER;
+
+            INSERT INTO schema_migrations (version) VALUES (3);
+        ")?;
+    }
+
     Ok(())
 }

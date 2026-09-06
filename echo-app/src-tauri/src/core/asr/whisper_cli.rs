@@ -13,6 +13,7 @@ use tokio::process::Command;
 use tokio::sync::RwLock;
 
 use super::decode_opts::DecodeConfig;
+use super::prompt::PromptContext;
 use crate::core::dictionary::DictionaryEngine;
 use crate::error::{EchoError, Result};
 
@@ -31,15 +32,23 @@ pub(crate) fn resolve_language<'a>(model_name: &str, requested: Option<&'a str>)
     }
 }
 
-/// The dictionary's vocabulary hint, if there is one.
+/// The decoder hint for this utterance: known vocabulary, plus whatever was
+/// said immediately before it.
 ///
-/// Global entries only: a local backend has no notion of which app is focused,
-/// so a profile-scoped hint could bias toward vocabulary that will not even be
-/// applied afterwards.
+/// The vocabulary is scoped to the dictionary profile the focused app selects,
+/// so the terms hinted are exactly the replacements that will be applied
+/// afterwards. Which app that is comes from [`super::prompt::PromptContext`] —
+/// see its module docs for why it is sampled when it is.
 pub(super) async fn initial_prompt(
     dictionary: Option<&Arc<RwLock<DictionaryEngine>>>,
+    context: Option<&Arc<PromptContext>>,
 ) -> Option<String> {
-    dictionary?.read().await.prompt_terms(None)
+    let profile = context.and_then(|c| c.profile());
+    let terms = match dictionary {
+        Some(d) => d.read().await.prompt_terms(profile),
+        None => None,
+    };
+    super::prompt::compose(terms, context.and_then(|c| c.previous()))
 }
 
 /// Run `whisper-cli` over one WAV buffer and return the transcript.

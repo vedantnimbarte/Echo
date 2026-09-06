@@ -47,6 +47,16 @@ pub struct AppState {
     pub plugins: Mutex<PluginLoader>,
     pub plugins_dir: PathBuf,
     pub recording: Mutex<bool>,
+    /// What Echo last typed into another app, so it can be taken back or
+    /// re-transcribed. Cleared once used — see [`crate::core::undo`].
+    pub last_delivery: Mutex<Option<crate::core::undo::LastDelivery>>,
+    /// PCM of the most recent utterance, retained so a retry can re-decode it
+    /// on a stronger model instead of asking the user to say it again.
+    /// Memory only, capped, and dropped when retry is disabled.
+    pub last_utterance: Arc<Mutex<Option<Vec<f32>>>>,
+    /// Live decoder-prompt context: focused app, its dictionary profile, and
+    /// the sentence just spoken. Shared with the local whisper provider.
+    pub prompt_ctx: Arc<crate::core::asr::prompt::PromptContext>,
     /// Live watcher when the hotkey is a bare modifier, which the
     /// global-shortcut plugin cannot express. Exactly one of the two
     /// mechanisms is bound at a time; dropping this one unbinds it.

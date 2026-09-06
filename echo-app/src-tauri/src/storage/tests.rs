@@ -73,6 +73,7 @@ fn app_profile(app_match: &str) -> AppProfile {
         label: None,
         auto_inject: Some(true),
         injection_method: None,
+        stream_partials: None,
         profile_id: None,
         enabled: true,
     }
@@ -96,7 +97,7 @@ fn a_fresh_database_has_every_table_the_app_uses() {
     ] {
         assert!(table_exists(&conn, table), "{table} is missing");
     }
-    assert_eq!(schema_version(&conn), 2);
+    assert_eq!(schema_version(&conn), 3);
 }
 
 /// Every launch runs `migrate`. Applying a migration twice must be harmless,
@@ -109,19 +110,19 @@ fn migrating_an_already_current_database_changes_nothing() {
     db::migrate_for_test(&conn).unwrap();
     db::migrate_for_test(&conn).unwrap();
 
-    assert_eq!(schema_version(&conn), 2);
+    assert_eq!(schema_version(&conn), 3);
     let rows: i64 = conn
         .query_row("SELECT count(*) FROM schema_migrations", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(rows, 2, "one row per version, not one per launch");
+    assert_eq!(rows, 3, "one row per version, not one per launch");
     assert_eq!(repo::get_setting(&conn, "keep").unwrap().as_deref(), Some("me"));
 }
 
 /// The upgrade path, which is the one that reaches existing users.
 ///
-/// A database created before migration 2 is simulated by dropping what
-/// migration 2 added, then re-running the migrator over data that was already
-/// there. Nothing from version 1 may be disturbed.
+/// A database created before migration 2 is simulated by dropping everything
+/// migrations 2 and 3 added, then re-running the migrator over data that was
+/// already there. Nothing from version 1 may be disturbed.
 #[test]
 fn an_old_database_upgrades_without_losing_data() {
     let conn = open();
@@ -135,16 +136,22 @@ fn an_old_database_upgrades_without_losing_data() {
     conn.execute_batch(
         "DROP TABLE app_profiles;
          DROP TABLE egress_log;
-         DELETE FROM schema_migrations WHERE version = 2;",
+         DELETE FROM schema_migrations WHERE version >= 2;",
     )
     .unwrap();
     assert_eq!(schema_version(&conn), 1);
 
     db::migrate_for_test(&conn).unwrap();
 
-    assert_eq!(schema_version(&conn), 2);
+    assert_eq!(schema_version(&conn), 3);
     assert!(table_exists(&conn, "app_profiles"));
     assert!(table_exists(&conn, "egress_log"));
+    // Migration 3's column has to survive being applied on top of a table
+    // migration 2 only just recreated.
+    assert!(
+        repo::list_app_profiles(&conn).is_ok(),
+        "stream_partials is missing after the upgrade"
+    );
 
     assert_eq!(
         repo::get_setting(&conn, "hotkey").unwrap().as_deref(),
