@@ -60,6 +60,12 @@ fn init_tracing(data_dir: &std::path::Path) {
     }
 }
 
+/// Record the process start time. Called by `main` before anything else; see
+/// [`core::procinfo`].
+pub fn mark_start() {
+    core::procinfo::mark_start();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -449,6 +455,7 @@ pub fn run() {
             commands::egress::get_egress_status,
             commands::settings::get_setting,
             commands::settings::set_setting,
+            commands::settings::spoken_punctuation_languages,
         ])
         .build(tauri::generate_context!())
         .expect("error while building echo")

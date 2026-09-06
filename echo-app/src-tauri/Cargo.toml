@@ -116,6 +116,8 @@ windows = { version = "0.58", features = [
     # boxes people actually use are drawn by browsers and Electron.
     "Win32_UI_Accessibility",
     "Win32_System_Com",
+    # Resident-memory reporting for `--benchmark` (core::procinfo).
+    "Win32_System_ProcessStatus",
 ] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

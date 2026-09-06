@@ -100,7 +100,7 @@ pub async fn transcribe_path(
         let conn = state.db.lock().unwrap();
         crate::commands::recording::resolve_delivery(&conn, None).format
     };
-    Ok(crate::core::format::apply(&text, format))
+    Ok(crate::core::format::apply(&text, format, language))
 }
 
 /// The formats this can accept, for a file-picker filter.

@@ -18,10 +18,11 @@ Built with **Rust · Tauri v2 · React 19 · TypeScript · TailwindCSS v4 · SQL
 - ↩️ **Undo the last insert** with a global hotkey, or by saying "scratch that"
 - 🔁 **Retry the last utterance** on a stronger model without saying it again
 - ⚡ **Live text** (opt-in, per app) — words appear as you speak them, offline or in the cloud
-- ✍️ **Spoken punctuation** (opt-in) — "comma", "new paragraph", "question mark"
-- 🔢 **Numbers, times and units** written properly — "twenty five" → 25, "five percent" → 5%
+- ✍️ **Spoken punctuation** (opt-in) — "comma", "new paragraph", "question mark"; English, Spanish, French, German, Italian, Portuguese, Dutch
+- 🔢 **Numbers, times and units** written properly (English) — "twenty five" → 25, "five percent" → 5%
 - 🔒 **Never types into a password field** (Windows/macOS; Linux can't detect it — see below)
 - 🖥️ **Scriptable** — `echo --transcribe recording.mp3` prints to stdout
+- 📈 **`echo --benchmark`** — measures your machine rather than promising numbers
 - 📁 **Transcribe a file** you already have — wav, mp3, ogg or flac, offline
 - 📖 **Custom dictionary** with replacements, enable/disable, JSON import/export
 - 🗂️ **Per-app profiles** — override insert behaviour and dictionary scope per application

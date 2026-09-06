@@ -12,6 +12,7 @@ pub mod gpu;
 pub mod injection;
 pub mod modtap;
 pub mod plugins;
+pub mod procinfo;
 pub mod runtime_deps;
 pub mod session;
 pub mod telemetry;

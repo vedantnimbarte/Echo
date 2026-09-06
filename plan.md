@@ -23,6 +23,7 @@
 | 10 | Post-Dictation Loop | ✅ Undo, retry, prompting, streaming, injection rescue |
 | 11 | Formatting & Field Awareness | ✅ Spoken punctuation, numbers, password guard, auto-method, CLI |
 | 12 | Local streaming | ✅ Live text works offline (rolling re-decode) |
+| 13 | Measurement & languages | ✅ 9.2 measured; punctuation in 7 languages |
 
 ---
 
@@ -847,12 +848,26 @@ strategy:
 
 ### 9.2 Performance targets (from PRD)
 
-| Metric | Target | How to measure |
-|---|---|---|
-| Startup time | < 2 seconds | Tauri `setup` → first window paint |
-| Transcription latency | < 300ms perceived | `recording_started` → first `transcript_partial` |
-| Memory at idle | < 100 MB | Task Manager / `heaptrack` |
-| Memory during transcription | < 500 MB | Includes Whisper model loaded |
+**Measured 2026-09-06** by `echo --benchmark` on a CPU-only Windows machine,
+`base.en`, 3-second clip. Re-run it rather than trusting these numbers on other
+hardware — that is what the command is for.
+
+| Metric | Target | Measured | |
+|---|---|---|---|
+| Startup time | < 2s | **0.74s** | ✅ process start → `setup` complete (Rust cannot see first paint) |
+| Transcription latency | < 300ms | **~1850ms** | ❌ on CPU. Warm resident server; cold CLI ~2190ms. See below |
+| Memory at idle | < 100 MB | **~57 MB** | ✅ this process only |
+| Memory during transcription | < 500 MB | **~57 MB** | ✅ but the model lives in a `whisper-server` child, so machine-wide is higher |
+
+**The latency target is not met on CPU, and Echo cannot fix that.** The time is
+inside whisper's encoder, which pads every clip under 30 seconds to a full
+window — so a one-second utterance costs what a twenty-second one does. What
+closes the gap is a GPU pack (Phase 8) or a smaller model, not tuning here.
+Recorded as *met only with acceleration* rather than left as an aspiration.
+
+This is also the number that sets expectations for live text (Phase 12): each
+partial is a full re-decode, so on CPU-only hardware they arrive about every two
+seconds rather than the ~0.8s the scheduler asks for.
 
 ### 9.3 Documentation
 
@@ -1230,6 +1245,88 @@ runs exactly the buffered path it always did.
 
 Also corrected here: the status table said Deepgram was HTTP-only. It has
 streamed over WebSocket since Phase 5.
+
+---
+
+## Phase 13 — Measurement, and Languages ✅
+
+Two of the four remaining gaps: the Phase 9.2 targets had never been measured,
+and the formatting pass only existed in English.
+
+### 13.1 The 9.2 numbers, finally taken
+
+`core::procinfo` reports resident memory and time-since-process-start;
+`--benchmark` prints both against the targets. See 9.2 for the measurements.
+
+**Resident, not virtual.** Virtual size counts address space the process
+reserved and may never touch — a model mapped but unread shows up there and
+misleads. Resident is what the machine is actually handing over, which is what
+"uses 400 MB" means to a person.
+
+**Two honest caveats, both stated in the output itself:**
+
+- *Startup* is process start to the end of Tauri's `setup`, not time to first
+  pixel — Rust cannot see the paint. It is everything Echo controls, which is
+  the part a change to Echo could make faster.
+- *Memory* is **this process only**. The resident model lives in a
+  `whisper-server` child, so the machine-wide figure is higher. Reporting one
+  number as if it were the whole footprint would be the more flattering lie.
+
+The first run of this reported a 26-second startup, because `since_start()` was
+read at the *end* of `measure()` — inside `setup`, so it timed the benchmark's
+own decodes. It now reads before any measurement runs. Worth recording: the
+instrumentation was wrong in the direction that makes the product look bad,
+which is the direction you notice. The opposite bug ships.
+
+### 13.2 The latency target is not met on CPU
+
+The engine numbers are the finding. On this machine (CPU only, `base.en`, 3s
+clip), a warm resident server takes **~1.85s** per utterance and the cold CLI
+~2.19s. The 9.2 target was "< 300ms perceived". That is not close, and no
+amount of tuning in Echo closes it — the time is inside whisper's encoder,
+which pads every clip under 30 seconds to a full window.
+
+What actually closes it is a GPU pack (already built, Phase 8) or a smaller
+model. So 9.2's latency row is now recorded as **met only with acceleration**,
+with the CPU figure beside it, rather than left as an unmeasured aspiration.
+
+**This bears directly on Phase 12.** Live text asks for a partial every ~0.8s
+of speech, and each one costs a full re-decode. On CPU-only hardware that is
+~1.85s, so the "one decode in flight" rule does the work it was written for:
+partials arrive whenever the last one finished — roughly every two seconds
+instead of every 0.8. It degrades rather than breaking, which is the behaviour
+that rule exists to produce, but the experience on CPU-only is materially worse
+than on a GPU and Settings now says so.
+
+### 13.3 Spoken punctuation in seven languages
+
+`punctuation.rs` is now a set of per-language tables — English, Spanish, French,
+German, Italian, Portuguese, Dutch — selected by the language the *decoder*
+reports, falling back to the configured one. Auto-detect therefore works.
+
+**A language with no table does nothing**, rather than falling back to English.
+Applying English rules to a French sentence is how "point" fires in the middle
+of ordinary prose. `supported_languages()` reports which languages have tables,
+and Settings prints the list — a speaker of one that is missing would otherwise
+dictate "coma", get nothing, and reasonably conclude the feature is broken.
+
+The missing languages — Russian, Ukrainian, Turkish, Arabic, Hindi, Chinese,
+Japanese, Korean — are missing because writing their tables without a speaker to
+check them would be guessing. Note the asymmetry that makes this safe to ship
+incrementally: **an unidiomatic phrase never matches, so it costs nothing; a
+missing determiner is a false positive on every utterance.** That is why the
+determiner lists are the longest part of each table.
+
+French gets one structural exception: it sets `? ! ; :` off with a space, so
+`tidy` must not strip it. Everything else in that stage is language-neutral.
+
+### 13.4 Numbers stay English
+
+Number words are grammar, not a word list — "quatre-vingt-dix-sept",
+"einundzwanzig". Another language is a parser of its own, not another table, so
+`numbers::covers()` claims English only and the stage is skipped elsewhere. A
+half-right conversion is worse than none, because the reader cannot tell it was
+Echo that changed the figure.
 
 ---
 

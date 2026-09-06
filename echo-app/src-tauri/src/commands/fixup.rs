@@ -102,7 +102,10 @@ pub async fn retry_last(app: AppHandle) -> Result<Option<String>> {
         let state = app.state::<AppState>();
         let conn = state.db.lock().unwrap();
         let format = super::recording::resolve_delivery(&conn, None).format;
-        crate::core::format::apply(&text, format)
+        let language = crate::storage::repositories::get_setting(&conn, "language")
+            .unwrap_or(None)
+            .filter(|s| !s.is_empty() && s != "auto");
+        crate::core::format::apply(&text, format, language.as_deref())
     };
 
     // Settings are read after the dictionary pass: the guard must not be held

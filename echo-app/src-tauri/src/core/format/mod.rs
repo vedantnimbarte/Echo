@@ -47,19 +47,23 @@ impl FormatOptions {
 /// Order matters and is not arbitrary: punctuation runs first because it is the
 /// stage that *introduces* marks, numbers runs on the resulting word stream,
 /// and tidy runs last because it exists to clean up after the other two.
-pub fn apply(text: &str, opts: FormatOptions) -> String {
+pub fn apply(text: &str, opts: FormatOptions, language: Option<&str>) -> String {
     if opts.is_noop() {
         return text.to_string();
     }
     let mut out = text.to_string();
     if opts.spoken_punctuation {
-        out = punctuation::apply(&out);
+        out = punctuation::apply(&out, language);
     }
-    if opts.numbers {
+    // Number words are grammar, not a lookup table: every language builds them
+    // differently, and a half-right conversion is worse than none because the
+    // reader cannot tell it was Echo that changed the figure. English only,
+    // until someone writes and checks another.
+    if opts.numbers && numbers::covers(language) {
         out = numbers::apply(&out);
     }
     if opts.tidy {
-        out = tidy::apply(&out);
+        out = tidy::apply(&out, language);
     }
     out
 }
@@ -93,7 +97,7 @@ mod tests {
     fn every_stage_off_returns_the_transcript_untouched() {
         let opts = FormatOptions::default();
         assert!(opts.is_noop());
-        assert_eq!(apply("as spoken, exactly", opts), "as spoken, exactly");
+        assert_eq!(apply("as spoken, exactly", opts, None), "as spoken, exactly");
     }
 
     /// The stages compose in one pass: a spoken mark introduced by stage 1 is
@@ -106,9 +110,24 @@ mod tests {
             tidy: true,
         };
         assert_eq!(
-            apply("we shipped twenty five of them period next question", opts),
+            apply("we shipped twenty five of them period next question", opts, Some("en")),
             "We shipped 25 of them. Next question"
         );
+    }
+
+    /// A language with no rules must come back untouched rather than half
+    /// formatted by whichever stage happens to be language-agnostic.
+    #[test]
+    fn an_uncovered_language_keeps_its_words() {
+        let opts = FormatOptions {
+            spoken_punctuation: true,
+            numbers: true,
+            tidy: true,
+        };
+        // Tidy still runs — spacing and sentence capitals are not
+        // language-specific — but no word is replaced and no number rewritten.
+        let out = apply("twenty five comma period", opts, Some("ja"));
+        assert_eq!(out, "Twenty five comma period", "only the capital may change");
     }
 
     #[test]

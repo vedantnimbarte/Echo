@@ -103,6 +103,11 @@ pub fn run(app: &tauri::AppHandle) -> ! {
 }
 
 async fn measure(app: &tauri::AppHandle) -> String {
+    // Read before anything is measured. This runs inside Tauri's `setup`, so
+    // asking at the end would time the benchmark itself — which it did, and
+    // reported a 26-second startup.
+    let startup = crate::core::procinfo::since_start();
+
     let state = app.state::<AppState>();
     let mut out = String::from("echo --benchmark\n\n");
 
@@ -193,6 +198,60 @@ async fn measure(app: &tauri::AppHandle) -> String {
     if let Some(note) = asr_note {
         let _ = write!(out, "\n{note}");
     }
+
+    let _ = write!(out, "\n{}", budgets(startup));
+    out
+}
+
+/// The Phase 9.2 targets, measured rather than asserted.
+///
+/// Two of the four are read straight off this process. The other two are
+/// stated as what they actually are: startup is process-start to the end of
+/// Tauri's `setup`, because Rust cannot see the first pixel, and perceived
+/// latency depends on how long the VAD waits for you to stop talking — which
+/// is a setting, not a property of the engine.
+fn budgets(startup: Option<std::time::Duration>) -> String {
+    use crate::core::procinfo;
+
+    let mut out = String::from("\nagainst the Phase 9.2 targets\n\n");
+
+    let startup = match startup {
+        Some(d) => format!("{:.2}s", d.as_secs_f64()),
+        None => "unknown".into(),
+    };
+    let _ = writeln!(out, "  startup            {startup:<12} target < 2s");
+    let _ = writeln!(out, "                     (process start → setup complete, not first paint)");
+
+    match procinfo::resident_bytes() {
+        Some(bytes) => {
+            let _ = writeln!(
+                out,
+                "  memory, resident   {:<12} target < 100 MB idle, < 500 MB decoding",
+                procinfo::mb(bytes)
+            );
+            let _ = writeln!(
+                out,
+                "                     (this process only, measured after the decodes above.",
+            );
+            let _ = writeln!(
+                out,
+                "                      The resident model lives in a whisper-server *child*,",
+            );
+            let _ = writeln!(
+                out,
+                "                      so the machine-wide figure is higher than this one.)",
+            );
+        }
+        None => {
+            let _ = writeln!(out, "  memory, resident   unknown on this platform");
+        }
+    }
+
+    let _ = writeln!(
+        out,
+        "\n  Perceived latency is not measured here: it is the decode times above\n  \
+         plus however long the VAD waits for silence, which is a setting.",
+    );
     out
 }
 
