@@ -205,6 +205,9 @@ pub async fn begin_recording(
     let dictionary = state.dictionary.clone();
     let injector = state.injector.clone();
     let prompt_ctx = state.prompt_ctx.clone();
+    // The configured language, as a fallback for formatting when the decoder
+    // does not report one.
+    let lang_for_format = language.clone();
     let scratch_enabled = {
         let conn = state.db.lock().unwrap();
         crate::storage::repositories::get_setting(&conn, "scratch_that_enabled")
@@ -289,7 +292,15 @@ pub async fn begin_recording(
                     .read()
                     .await
                     .process_for(&segment.text, delivery.dictionary_profile);
-                let processed = crate::core::format::apply(&processed, delivery.format);
+                // The decoder's own answer wins over the configured language:
+                // with auto-detect on, it is the only one that knows what was
+                // actually spoken.
+                let spoken = segment
+                    .language
+                    .as_deref()
+                    .or(lang_for_format.as_deref());
+                let processed =
+                    crate::core::format::apply(&processed, delivery.format, spoken);
 
                 // "Scratch that" is a correction, not dictation: take back the
                 // last delivery instead of typing the words. Checked before

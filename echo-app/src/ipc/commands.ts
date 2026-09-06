@@ -344,4 +344,11 @@ export const commands = {
    * False on Linux, where no protection is actually in force.
    */
   secureFieldDetection: () => invoke<boolean>("secure_field_detection"),
+
+  /**
+   * Language codes that spoken punctuation has rules for. Anything else is
+   * left alone rather than being given the English words.
+   */
+  spokenPunctuationLanguages: () =>
+    invoke<string[]>("spoken_punctuation_languages"),
 };

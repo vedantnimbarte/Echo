@@ -23,15 +23,23 @@ const OPENS: &[char] = &['(', '[', '{', '\u{201c}', '$', '@', '#'];
 /// Marks that end a sentence, so the next letter is capitalised.
 const ENDERS: &[char] = &['.', '?', '!'];
 
+/// Marks that French sets off with a space in front, unlike every other
+/// language here. Stripping it would be a typography error a French reader
+/// notices immediately.
+const FR_SPACED_MARKS: &[char] = &['?', '!', ';', ':'];
+
 /// Fix spacing around punctuation and capitalise sentence starts.
-pub fn apply(text: &str) -> String {
-    capitalise_sentences(&fix_spacing(text))
+pub fn apply(text: &str, language: Option<&str>) -> String {
+    let french = language
+        .map(|l| l.to_lowercase())
+        .is_some_and(|l| l.split(['-', '_']).next() == Some("fr"));
+    capitalise_sentences(&fix_spacing(text, french))
 }
 
 /// Remove spaces that punctuation should not have around it, and collapse
 /// runs of spaces. Newlines are preserved exactly: they are structure, not
 /// spacing, and the punctuation stage may have just put them there.
-fn fix_spacing(text: &str) -> String {
+fn fix_spacing(text: &str, french: bool) -> String {
     let chars: Vec<char> = text.chars().collect();
     let mut out = String::with_capacity(text.len());
 
@@ -41,7 +49,9 @@ fn fix_spacing(text: &str) -> String {
             if chars[i + 1..]
                 .iter()
                 .find(|c| **c != ' ')
-                .is_some_and(|next| CLOSES.contains(next))
+                .is_some_and(|next| {
+                    CLOSES.contains(next) && !(french && FR_SPACED_MARKS.contains(next))
+                })
             {
                 continue;
             }
@@ -99,44 +109,49 @@ fn capitalise_sentences(text: &str) -> String {
 mod tests {
     use super::*;
 
+    /// Most of these are language-neutral; English is the representative case.
+    fn en(text: &str) -> String {
+        apply(text, Some("en"))
+    }
+
     #[test]
     fn spaces_before_closing_marks_are_removed() {
-        assert_eq!(apply("hello , world ."), "Hello, world.");
-        assert_eq!(apply("really ? yes !"), "Really? Yes!");
-        assert_eq!(apply("an aside ) after"), "An aside) after");
+        assert_eq!(en("hello , world ."), "Hello, world.");
+        assert_eq!(en("really ? yes !"), "Really? Yes!");
+        assert_eq!(en("an aside ) after"), "An aside) after");
     }
 
     #[test]
     fn spaces_after_opening_marks_are_removed() {
         // The capital is the sentence-start rule, not the bracket rule.
-        assert_eq!(apply("( an aside )"), "(An aside)");
-        assert_eq!(apply("see ( an aside )"), "See (an aside)");
-        assert_eq!(apply("costs $ 40"), "Costs $40");
+        assert_eq!(en("( an aside )"), "(An aside)");
+        assert_eq!(en("see ( an aside )"), "See (an aside)");
+        assert_eq!(en("costs $ 40"), "Costs $40");
     }
 
     #[test]
     fn runs_of_spaces_collapse() {
-        assert_eq!(apply("too   many    spaces"), "Too many spaces");
+        assert_eq!(en("too   many    spaces"), "Too many spaces");
     }
 
     /// Newlines are structure. Collapsing them into spaces would undo the
     /// "new paragraph" the user just asked for.
     #[test]
     fn newlines_survive_and_shed_their_trailing_spaces() {
-        assert_eq!(apply("one \n two"), "One\nTwo");
-        assert_eq!(apply("one \n\n two"), "One\n\nTwo");
+        assert_eq!(en("one \n two"), "One\nTwo");
+        assert_eq!(en("one \n\n two"), "One\n\nTwo");
     }
 
     #[test]
     fn sentences_start_with_a_capital() {
-        assert_eq!(apply("first one. second one"), "First one. Second one");
-        assert_eq!(apply("what? no! really"), "What? No! Really");
+        assert_eq!(en("first one. second one"), "First one. Second one");
+        assert_eq!(en("what? no! really"), "What? No! Really");
     }
 
     /// A capital inside a sentence is the speaker's, not ours to change.
     #[test]
     fn existing_capitals_are_left_alone() {
-        assert_eq!(apply("we deployed Kubernetes today"), "We deployed Kubernetes today");
+        assert_eq!(en("we deployed Kubernetes today"), "We deployed Kubernetes today");
     }
 
     /// A decimal point is not a sentence ender in practice — but it does set
@@ -144,11 +159,24 @@ mod tests {
     /// wrongly capitalised. Pinned because it is the obvious thing to break.
     #[test]
     fn a_decimal_point_does_not_capitalise_anything() {
-        assert_eq!(apply("it costs 3.50 today"), "It costs 3.50 today");
+        assert_eq!(en("it costs 3.50 today"), "It costs 3.50 today");
+    }
+
+    /// French sets its high punctuation off with a space. Stripping it is a
+    /// typography error a French reader notices immediately, so the rule that
+    /// removes spaces before punctuation has to know the language.
+    #[test]
+    fn french_keeps_the_space_before_high_punctuation() {
+        assert_eq!(apply("vraiment ?", Some("fr")), "Vraiment ?");
+        assert_eq!(apply("alors : voici", Some("fr")), "Alors : voici");
+        // A comma and a full stop take no space in French either.
+        assert_eq!(apply("bonjour , monde .", Some("fr")), "Bonjour, monde.");
+        // And the exception is French-only.
+        assert_eq!(en("really ?"), "Really?");
     }
 
     #[test]
     fn empty_input_is_empty_output() {
-        assert_eq!(apply(""), "");
+        assert_eq!(en(""), "");
     }
 }

@@ -184,6 +184,10 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
     queryKey: ["secure-field-detection"],
     queryFn: commands.secureFieldDetection,
   });
+  const { data: punctuationLanguages = [] } = useQuery({
+    queryKey: ["spoken-punctuation-languages"],
+    queryFn: commands.spokenPunctuationLanguages,
+  });
   const { data: clipboardSettle } = useQuery({
     queryKey: ["setting", "clipboard_settle_ms"],
     queryFn: () => commands.getSetting("clipboard_settle_ms"),
@@ -647,12 +651,26 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
             Let me say punctuation — “comma”, “new paragraph”, “question mark”
           </Check>
           {spokenPunctuation === "true" && (
-            <p className="max-w-[56ch] text-[10.5px] leading-relaxed text-[var(--ink-faint)]">
-              The cost of this one is real: “period” and “colon” stop being
-              usable as ordinary words. Echo keeps them when the sentence makes
-              it obvious — “a period of time”, “the colon” — but it is a rule of
-              thumb, not grammar. Off by default for that reason.
-            </p>
+            <>
+              <p className="max-w-[56ch] text-[10.5px] leading-relaxed text-[var(--ink-faint)]">
+                The cost of this one is real: “period” and “colon” stop being
+                usable as ordinary words. Echo keeps them when the sentence makes
+                it obvious — “a period of time”, “the colon” — but it is a rule of
+                thumb, not grammar. Off by default for that reason.
+              </p>
+              {/* Which languages have rules is a fact worth stating: a speaker
+                  of one that doesn't would otherwise dictate "coma", get
+                  nothing, and reasonably conclude the feature is broken. */}
+              <p className="max-w-[56ch] text-[10.5px] leading-relaxed text-[var(--ink-faint)]">
+                Works in{" "}
+                {punctuationLanguages
+                  .map((c) => LANGUAGES.find((l) => l.code === c)?.label ?? c)
+                  .join(", ")}
+                . Other languages are left exactly as spoken — the words would
+                have to be written and checked by someone who speaks it, and a
+                wrong guess would corrupt every sentence.
+              </p>
+            </>
           )}
 
           <Check
@@ -662,6 +680,9 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
             }
           >
             Write numbers, times and units as digits — “twenty five” → 25
+            <span className="block text-[10.5px] text-[var(--ink-faint)]">
+              English only: number words are grammar, not a word list.
+            </span>
           </Check>
 
           <Check
@@ -701,7 +722,7 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
       {on("output", ["live", "stream", "partial", "as you speak", "realtime", "real time"]) && (
         <Group
           title={label("output", "Live text")}
-          hint="Off by default, and worth understanding before you turn it on: streaming rewrites text inside the focused app as the decoder revises itself, and it cannot see you typing into the same field at the same time. Turn it on per app under Per-app profiles. It also needs an engine that streams — the offline one transcribes a whole utterance at a time, so it will simply wait."
+          hint="Off by default, and worth understanding before you turn it on: streaming rewrites text inside the focused app as the decoder revises itself, and it cannot see you typing into the same field at the same time. Turn it on per app under Per-app profiles. Each update re-decodes everything you have said so far, so without GPU acceleration the words arrive roughly every two seconds rather than keeping pace with your voice — run `echo --benchmark` to see where your machine lands."
         >
           <Check
             checked={streamPartials === "true"}

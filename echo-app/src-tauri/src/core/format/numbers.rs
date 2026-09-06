@@ -64,6 +64,17 @@ const CURRENCIES: &[(&str, &str)] = &[
     ("pounds", "\u{a3}"),
 ];
 
+/// Whether number conversion exists for `language`.
+///
+/// English only. Number words are grammar rather than a lookup — "quatre-vingt
+/// dix-sept", "einundzwanzig" — so another language is a parser of its own, not
+/// another table. Reported honestly so the settings screen can say which
+/// languages this stage applies to.
+pub fn covers(language: Option<&str>) -> bool {
+    let raw = language.unwrap_or("en").to_lowercase();
+    raw.split(['-', '_']).next() == Some("en")
+}
+
 /// Convert spelled-out numbers, times, years and units to their written forms.
 pub fn apply(text: &str) -> String {
     let words = words(text);
@@ -326,6 +337,16 @@ mod tests {
     fn ordinary_words_are_left_alone() {
         for said in ["I have won the race", "no one knows", "for once"] {
             assert_eq!(apply(said), said);
+        }
+    }
+
+    #[test]
+    fn only_english_is_claimed() {
+        assert!(covers(None));
+        assert!(covers(Some("en")));
+        assert!(covers(Some("en-GB")));
+        for other in ["fr", "de", "es", "ja"] {
+            assert!(!covers(Some(other)), "{other} has no number rules");
         }
     }
 
