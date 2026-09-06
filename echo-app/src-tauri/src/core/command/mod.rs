@@ -94,6 +94,38 @@ fn prompt(instruction: &str, selection: Option<&str>) -> (String, String) {
     }
 }
 
+/// The instruction behind the optional auto-edit pass.
+///
+/// Deliberately narrow. The job is the half [`crate::core::format::cleanup`]
+/// cannot do with rules — chiefly self-correction, where deciding how far back
+/// to delete is a judgement about meaning. Everything else is forbidden in as
+/// many words, because a model given room to "improve" a transcript will
+/// rewrite it, and a dictation tool that paraphrases you is worse than one that
+/// leaves an "um" in.
+const AUTO_EDIT: &str = "Remove hesitations, repeated words and abandoned false starts.      If the speaker corrected themselves, keep only what they corrected to.      Change NOTHING else: do not rephrase, do not reorder, do not add or remove      information, do not change wording, tone, punctuation or capitalisation.      If nothing needs removing, reply with the text exactly as given.";
+
+/// Clean up a transcript with the configured model.
+///
+/// Returns the original on any failure rather than an error: this runs on every
+/// utterance when enabled, and a model that is slow, missing or having a bad day
+/// must cost the user a tidier sentence, never the sentence itself.
+pub async fn auto_edit(cfg: &CommandConfig, api_key: Option<&str>, text: &str) -> String {
+    if text.trim().is_empty() {
+        return text.to_string();
+    }
+    match run(cfg, api_key, AUTO_EDIT, Some(text)).await {
+        Ok(edited) if !edited.trim().is_empty() => edited,
+        Ok(_) => {
+            tracing::warn!("Auto-edit returned nothing; keeping the transcript");
+            text.to_string()
+        }
+        Err(e) => {
+            tracing::warn!("Auto-edit failed, keeping the transcript: {e}");
+            text.to_string()
+        }
+    }
+}
+
 /// Run an instruction through the configured LLM and return the text to inject.
 pub async fn run(
     cfg: &CommandConfig,

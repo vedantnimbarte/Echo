@@ -420,3 +420,37 @@ fn trimming_egress_keeps_the_most_recent_entries() {
         .collect();
     assert_eq!(hosts, vec!["host9.example", "host8.example", "host7.example"]);
 }
+
+// ── Dictation stats ──────────────────────────────────────────────────────────
+
+/// The stats card's numbers come out of History, so they must count what is
+/// actually there — including being zero when there is nothing.
+#[test]
+fn dictation_stats_count_what_history_holds() {
+    let conn = open();
+    let empty = repo::dictation_stats(&conn).unwrap();
+    assert_eq!(empty.transcripts, 0);
+    assert_eq!(empty.words, 0);
+    assert!(empty.since.is_none(), "nothing stored means no start date");
+
+    repo::insert_history(&conn, &transcript("one two three")).unwrap();
+    repo::insert_history(&conn, &transcript("four five")).unwrap();
+
+    let stats = repo::dictation_stats(&conn).unwrap();
+    assert_eq!(stats.transcripts, 2);
+    assert_eq!(stats.words, 5);
+    assert_eq!(stats.days, 1, "both were written today");
+    assert_eq!(stats.words_last_7_days, 5);
+    assert!(stats.since.is_some());
+}
+
+/// A blank transcript must count as no words rather than one — the naive
+/// spaces-plus-one formula says 1 for an empty string.
+#[test]
+fn a_blank_transcript_contributes_no_words() {
+    let conn = open();
+    repo::insert_history(&conn, &transcript("   ")).unwrap();
+    let stats = repo::dictation_stats(&conn).unwrap();
+    assert_eq!(stats.transcripts, 1);
+    assert_eq!(stats.words, 0);
+}

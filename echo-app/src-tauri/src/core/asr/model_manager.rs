@@ -92,6 +92,29 @@ impl ModelManager {
     }
 
     /// List the catalog with each model's local download status.
+    /// The smallest downloaded model that is smaller than `than`, for decoding
+    /// streaming partials.
+    ///
+    /// Matched within the same family: an English-only model must not be
+    /// paired with a multilingual one, or the partials would come out in a
+    /// different language from the final and the on-screen text would thrash
+    /// between the two.
+    ///
+    /// `None` when nothing smaller is installed, in which case partials use the
+    /// main model exactly as before.
+    pub fn smaller_downloaded(&self, than: &str) -> Option<ModelInfo> {
+        let target = Self::spec(than).ok()?;
+        let english_only = than.ends_with(".en");
+        self.list()
+            .into_iter()
+            .filter(|m| {
+                m.downloaded
+                    && m.size_mb < target.size_mb
+                    && m.name.ends_with(".en") == english_only
+            })
+            .min_by_key(|m| m.size_mb)
+    }
+
     pub fn list(&self) -> Vec<ModelInfo> {
         MODEL_CATALOG
             .iter()
@@ -148,6 +171,54 @@ pub fn models_dir_of(base: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
+
+    /// The point of the pairing: a smaller model for partials, so live text
+    /// keeps up on a machine without a GPU.
+    #[test]
+    fn the_smallest_installed_model_is_chosen_for_partials() {
+        let dir = scratch();
+        let m = ModelManager::new(dir.clone());
+        for name in ["tiny.en", "base.en", "small.en"] {
+            std::fs::write(m.model_path(name), b"x").unwrap();
+        }
+
+        let picked = m.smaller_downloaded("small.en").expect("something smaller exists");
+        assert_eq!(picked.name, "tiny.en", "the smallest installed should win");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Families must not cross. Pairing an English-only partial model with a
+    /// multilingual final would make the on-screen text flip language mid
+    /// sentence as partials were replaced.
+    #[test]
+    fn partial_and_final_models_stay_in_the_same_family() {
+        let dir = scratch();
+        let m = ModelManager::new(dir.clone());
+        std::fs::write(m.model_path("tiny.en"), b"x").unwrap();
+
+        assert!(
+            m.smaller_downloaded("small").is_none(),
+            "an English-only model must not be paired with a multilingual one"
+        );
+
+        std::fs::write(m.model_path("tiny"), b"x").unwrap();
+        assert_eq!(m.smaller_downloaded("small").unwrap().name, "tiny");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Nothing smaller installed means partials use the main model, exactly as
+    /// they did before.
+    #[test]
+    fn no_smaller_model_means_no_pairing() {
+        let dir = scratch();
+        let m = ModelManager::new(dir.clone());
+        std::fs::write(m.model_path("tiny.en"), b"x").unwrap();
+        assert!(m.smaller_downloaded("tiny.en").is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     use super::*;
 
     fn scratch() -> PathBuf {

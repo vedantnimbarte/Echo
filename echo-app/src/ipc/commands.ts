@@ -113,6 +113,17 @@ export interface AppProfile {
   enabled: boolean;
 }
 
+/** What dictation has added up to. Derived from History, so empty when it is off. */
+export interface DictationStats {
+  transcripts: number;
+  words: number;
+  /** Distinct days with at least one transcript. */
+  days: number;
+  words_last_7_days: number;
+  /** Earliest transcript still stored; retention trims old rows. */
+  since: string | null;
+}
+
 export interface EgressRecord {
   id: number | null;
   host: string;
@@ -351,4 +362,6 @@ export const commands = {
    */
   spokenPunctuationLanguages: () =>
     invoke<string[]>("spoken_punctuation_languages"),
+
+  getDictationStats: () => invoke<DictationStats>("get_dictation_stats"),
 };
