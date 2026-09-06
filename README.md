@@ -17,10 +17,10 @@ Built with **Rust · Tauri v2 · React 19 · TypeScript · TailwindCSS v4 · SQL
 - ⌨️ **Text injection** into the focused app — type keystrokes *or* clipboard-paste
 - ↩️ **Undo the last insert** with a global hotkey, or by saying "scratch that"
 - 🔁 **Retry the last utterance** on a stronger model without saying it again
-- ⚡ **Live text** (opt-in, per app) — words appear as you speak them
+- ⚡ **Live text** (opt-in, per app) — words appear as you speak them, offline or in the cloud
 - ✍️ **Spoken punctuation** (opt-in) — "comma", "new paragraph", "question mark"
 - 🔢 **Numbers, times and units** written properly — "twenty five" → 25, "five percent" → 5%
-- 🔒 **Never types into a password field** (Windows/macOS; Linux can't detect it)
+- 🔒 **Never types into a password field** (Windows/macOS; Linux can't detect it — see below)
 - 🖥️ **Scriptable** — `echo --transcribe recording.mp3` prints to stdout
 - 📁 **Transcribe a file** you already have — wav, mp3, ogg or flac, offline
 - 📖 **Custom dictionary** with replacements, enable/disable, JSON import/export
@@ -72,6 +72,15 @@ This is expected, and here is exactly what you'll see:
 
 If that trade isn't one you want to make, [build from source](#running-locally)
 instead: the result is identical and you compiled it yourself.
+
+### The password-field guard is unverified on real hardware
+
+Echo asks Windows UI Automation, or the macOS Accessibility API, whether the
+focused control is masked, and refuses to type into it. That code compiles on
+both platforms in CI but **has never been exercised against a real password
+box**, so treat it as a seatbelt of unknown strength rather than a guarantee.
+On Linux it does nothing at all: the question needs AT-SPI over D-Bus, and
+under Wayland usually not even that answers. Settings says so plainly.
 
 ### Per-OS notes
 

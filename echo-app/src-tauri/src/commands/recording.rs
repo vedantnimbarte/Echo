@@ -190,6 +190,11 @@ pub async fn begin_recording(
                 .map(|kind| kind.is_secure())
                 .unwrap_or(false));
 
+    // Producing partials from a local model means re-decoding the utterance as
+    // it grows, so the provider is told whether anybody is actually reading
+    // them before the session starts. With live text off, nothing changes.
+    asr.set_partials_wanted(stream_partials).await;
+
     tokio::spawn(async move {
         if let Err(e) = asr.transcribe_stream(asr_rx, transcript_tx, lang.as_deref()).await {
             error!("ASR stream error: {e}");

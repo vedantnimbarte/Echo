@@ -61,6 +61,18 @@ pub trait AsrProvider: Send + Sync {
     fn supports_streaming(&self) -> bool {
         false
     }
+
+    /// Tell the provider whether partial results will actually be used before
+    /// a streaming session starts.
+    ///
+    /// Producing partials from a local model means re-decoding the utterance
+    /// as it grows, which costs real CPU or GPU. A provider that streams for
+    /// free (a cloud WebSocket) can ignore this; one that pays for it should
+    /// not pay when nobody is reading.
+    ///
+    /// Additive with a default so an existing plugin keeps compiling: the
+    /// contract is "an unimplemented provider behaves as it always did".
+    fn set_partials_wanted(&self, _wanted: bool) {}
 }
 
 /// The buffered streaming loop: accumulate speech, transcribe one utterance at

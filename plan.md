@@ -15,13 +15,14 @@
 | 2 | Local ASR (Whisper) | ✅ Code complete (build needs libclang) |
 | 3 | Text Injection | ✅ All platforms (macOS/Linux unverified on Win host) |
 | 4 | Dictionaries | ✅ Complete |
-| 5 | Cloud ASR Providers | ✅ Complete (Deepgram via HTTP, not WS yet) |
+| 5 | Cloud ASR Providers | ✅ Complete (Deepgram streams over WebSocket) |
 | 6 | Telemetry | ✅ Complete |
 | 7 | Plugin System | ✅ Complete (echo-sdk crate + export_plugin! macro) |
 | 8 | Packaging | ✅ Config + CI (signing certs TBD) |
 | 9 | v1 Launch | ✅ Hotkey + CSP + docs (perf/signing TBD) |
 | 10 | Post-Dictation Loop | ✅ Undo, retry, prompting, streaming, injection rescue |
 | 11 | Formatting & Field Awareness | ✅ Spoken punctuation, numbers, password guard, auto-method, CLI |
+| 12 | Local streaming | ✅ Live text works offline (rolling re-decode) |
 
 ---
 
@@ -1192,6 +1193,43 @@ input never did.
 exits; errors go to stderr with a non-zero status, so `$(...)` is the transcript
 and never a log line. It runs inside `setup` for the same reason `--selftest`
 does: the database, model and engine only exist once setup has run.
+
+---
+
+## Phase 12 — Streaming the Local Engine ✅
+
+Live text shipped in Phase 10 gated on `supports_streaming()`, and only Deepgram
+answered true. So the feature could not reach the offline engine — the default,
+and the reason people install Echo. This closes that.
+
+**whisper has no incremental mode.** It decodes a buffer and returns a
+transcript, so a "partial" is the whole utterance-so-far decoded again. That is
+what whisper.cpp's own streaming example does, and the waste is real. Three
+rules bound it, each guarding a specific failure (`should_decode_partial`):
+
+- **Enough new speech.** ~0.8s, roughly a spoken phrase. Below it the decode
+  costs more than the words are worth; far above it the text lags the voice.
+- **One decode in flight.** A queue of them would fall further behind the
+  speaker with every one it started.
+- **A ceiling of 20 seconds.** Each partial re-decodes everything said so far,
+  so cost grows with the square of the utterance. Someone still going at twenty
+  seconds is monologuing, not dictating — partials stop, the final still
+  arrives whole.
+
+**The decode is polled, never awaited, inside the receive loop.** Awaiting it
+would stop reading audio for the length of a decode and the capture layer would
+start dropping chunks — losing the user's words to make the display prettier,
+which is the wrong trade in every case. The job is spawned with owned copies of
+what it needs (all `Arc` or small) rather than borrowing the provider inside a
+`select!`, which works and is much harder to read.
+
+**Nobody pays for this unless they use it.** `AsrProvider::set_partials_wanted`
+is new, additive, and defaulted, so an existing plugin keeps compiling; the
+pipeline calls it before each session. With live text off, the local provider
+runs exactly the buffered path it always did.
+
+Also corrected here: the status table said Deepgram was HTTP-only. It has
+streamed over WebSocket since Phase 5.
 
 ---
 
