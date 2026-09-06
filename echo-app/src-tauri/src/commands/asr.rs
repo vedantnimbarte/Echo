@@ -69,17 +69,58 @@ pub async fn register_local_provider(state: &AppState) -> Result<()> {
         let conn = state.db.lock().unwrap();
         local_decode_settings(&conn)
     };
-    let provider = LocalWhisperProvider::new(
+    let provider = build_local_provider(
         state.binaries.clone(),
         state.whisper_server.clone(),
-        state.models.model_path(&model),
-        model,
-    )
-    .with_dictionary(state.dictionary.clone())
-    .with_threads(threads)
-    .with_gpu_allowed(gpu_allowed);
+        state.models.clone(),
+        &model,
+        state.dictionary.clone(),
+        state.prompt_ctx.clone(),
+        threads,
+        gpu_allowed,
+    );
     state.asr.register(Arc::new(provider)).await;
     Ok(())
+}
+
+/// Assemble the local provider with everything it should be holding.
+///
+/// One function because there are two callers — startup, before `AppState`
+/// exists, and every later re-registration — and they had already drifted: the
+/// re-registration path never attached the prompt context, so choosing a
+/// different model silently switched off per-app decoder prompting until the
+/// next restart. Nothing about that failure is visible, which is exactly why it
+/// survived.
+#[allow(clippy::too_many_arguments)]
+pub fn build_local_provider(
+    binaries: Arc<crate::core::asr::binary_manager::BinaryManager>,
+    server: Arc<crate::core::asr::whisper_server::WhisperServer>,
+    models: Arc<crate::core::asr::model_manager::ModelManager>,
+    model: &str,
+    dictionary: Arc<tokio::sync::RwLock<crate::core::dictionary::DictionaryEngine>>,
+    prompt_ctx: Arc<crate::core::asr::prompt::PromptContext>,
+    threads: usize,
+    gpu_allowed: bool,
+) -> LocalWhisperProvider {
+    let mut provider = LocalWhisperProvider::new(
+        binaries,
+        server,
+        models.model_path(model),
+        model.to_string(),
+    )
+    .with_dictionary(dictionary)
+    .with_prompt_context(prompt_ctx)
+    .with_threads(threads)
+    .with_gpu_allowed(gpu_allowed);
+
+    // Streaming partials are discarded within a second, so they only have to be
+    // roughly right. Decoding them on a smaller model is what lets the text
+    // keep up with the speaker on a machine without a GPU.
+    if let Some(small) = models.smaller_downloaded(model) {
+        tracing::info!(partial_model = %small.name, "Using a smaller model for live partials");
+        provider = provider.with_partial_model(models.model_path(&small.name), small.name);
+    }
+    provider
 }
 
 /// The selected local model name, defaulting to [`DEFAULT_MODEL`].

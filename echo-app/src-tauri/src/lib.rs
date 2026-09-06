@@ -194,16 +194,16 @@ pub fn run() {
                 if model_manager.is_downloaded(&whisper_model) {
                     let _ = binary; // presence check only; the provider resolves per call
                     let (threads, gpu_allowed) = commands::asr::local_decode_settings(&conn);
-                    let provider = core::asr::local::LocalWhisperProvider::new(
+                    let provider = commands::asr::build_local_provider(
                         binary_manager.clone(),
                         whisper_server.clone(),
-                        model_manager.model_path(&whisper_model),
-                        whisper_model.clone(),
-                    )
-                    .with_dictionary(dictionary.clone())
-                    .with_prompt_context(prompt_ctx.clone())
-                    .with_threads(threads)
-                    .with_gpu_allowed(gpu_allowed);
+                        model_manager.clone(),
+                        &whisper_model,
+                        dictionary.clone(),
+                        prompt_ctx.clone(),
+                        threads,
+                        gpu_allowed,
+                    );
                     let asr = asr_manager.clone();
                     tauri::async_runtime::block_on(async move {
                         asr.register(Arc::new(provider)).await;
@@ -434,6 +434,7 @@ pub fn run() {
             commands::dictionary::learn_from_correction,
             commands::history::get_history,
             commands::history::clear_history,
+            commands::history::get_dictation_stats,
             commands::injection::check_accessibility_permission,
             commands::injection::inject_text,
             commands::injection::secure_field_detection,

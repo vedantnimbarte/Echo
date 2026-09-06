@@ -25,6 +25,7 @@
 | 12 | Local streaming | ✅ Live text works offline (rolling re-decode) |
 | 13 | Measurement & languages | ✅ 9.2 measured; punctuation in 7 languages |
 | 14 | Plugin integrity | ✅ Fingerprinted at install, refused if changed (not a sandbox) |
+| 15 | Accuracy & auto-editing | ✅ Filler removal, fast partial model, stats, language warning |
 
 ---
 
@@ -1390,6 +1391,109 @@ tables, so re-running migration 5 hit `duplicate column name`. The test now
 recreates `plugins` in its version-1 shape, which makes it a genuine rewind
 rather than a half-migrated hybrid — and the failure is exactly the kind that
 test exists to catch.
+
+---
+
+## Phase 15 — Accuracy, and the Things Commercial Dictation Does ✅
+
+Prompted by comparing Echo against Wispr Flow. The conclusion was not to chase
+it: Echo's position is offline and private, and matching a cloud product feature
+for feature makes it a worse-funded version of the same thing. What was worth
+taking was the gap people *feel* in the first minute — a transcript full of
+"um" — plus three accuracy items.
+
+**The tension worth naming.** Auto-editing and "faithful transcript" pull in
+opposite directions. Every other stage in `core::format` works to reproduce what
+was said; this one throws some of it away. It is resolved by rung: rules only
+remove things that are not words, and the pass that can change your *words* is
+off by default and runs after History.
+
+### 15.1 Auto-editing — rules for the safe half
+
+`core::format::cleanup` removes hesitations and stutters. Two rules, each drawn
+where the alternative reading is not English anyone writes:
+
+- **Fillers** come from a fixed list of non-words: um, uh, erm, hmm and
+  relatives. "Um" is never a word somebody meant. **"Like", "actually",
+  "basically" and "literally" are deliberately absent** — they are filler
+  constantly and they are also ordinary words, and no rule can tell which
+  without understanding the sentence.
+- **Doubled words** collapse only for *function* words, and only those that
+  cannot legitimately double. "The the" is a stutter; "had had", "that that"
+  and "what it is is" are grammar, excluded by name. Repeating a content word
+  ("very very good") is emphasis the speaker chose.
+
+An utterance that is nothing but filler is returned unchanged rather than
+emptied: "um" on its own still happened, and an empty transcript is
+indistinguishable from a broken microphone.
+
+**What rules cannot do is self-correction.** "Send it Tuesday, no, Wednesday"
+needs to lose a clause, and deciding how far back to delete is a judgement about
+meaning. A rule aggressive enough would eat clauses people meant.
+
+### 15.2 Auto-editing — the model for the other half
+
+`command::auto_edit` reuses the command-mode LLM with a deliberately cramped
+instruction: remove hesitations and false starts, keep only what a
+self-correction corrected to, and *change nothing else* — spelled out, because a
+model given room to improve a transcript will rewrite it, and a dictation tool
+that paraphrases you is worse than one that leaves an "um" in.
+
+Three decisions worth keeping:
+
+- **Off by default.** It is the only setting in Echo that changes the words you
+  said.
+- **It runs after History.** The deterministic stages only drop sounds nobody
+  meant to write, so what they produce is still what was said and History
+  records it. This one can change meaning, so History keeps the faithful
+  version and only the injected text is edited.
+- **Failure returns the original**, never an error. It runs on every utterance;
+  a model that is slow, missing or having a bad day must cost a tidier
+  sentence, never the sentence.
+
+### 15.3 A small model for partials
+
+Phase 13 measured ~1.85s per decode on CPU, and Phase 12's live text asks for
+one every 0.8s — so partials trailed. But a partial is discarded and rewritten
+within a second: it only has to be roughly right.
+
+So the local provider now decodes partials on the smallest *downloaded* model
+smaller than the main one, and the final on the real model.
+`ModelManager::smaller_downloaded` picks it, matched **within the same family** —
+pairing `tiny.en` with multilingual `small` would make the on-screen text flip
+language as partials were replaced. With nothing smaller installed, behaviour is
+exactly as before.
+
+**A bug found while wiring it.** `register_local_provider` never attached the
+prompt context, so choosing a different model silently switched off the per-app
+decoder prompting from Phase 10 until the next restart — invisible, which is why
+it survived. Both construction sites now go through one
+`build_local_provider`, so they cannot drift again.
+
+### 15.4 An English-only model ignores your language
+
+Picking French while `base.en` is selected produced English transcripts and no
+explanation: `resolve_language` forces `en` for a `.en` model, correctly, but
+nothing said so. It read as the model being bad at French.
+
+Settings now says it where the choice is made, naming the model and what to pick
+instead. No backend change — the facts were already on screen, just never
+compared.
+
+### 15.5 Dictation stats
+
+Words dictated, times spoken, words this week, days used, and an estimate of the
+time against typing.
+
+**Derived from History rather than counted separately.** History already is the
+record; a second tally is one more thing to keep in step with it. The cost is
+that stats empty when History is off, which the panel states rather than showing
+zeroes that look like a bug.
+
+The time estimate is labelled an estimate and its assumptions are printed (45
+words a minute typed against 130 spoken), along with the admission that it
+counts none of the time spent correcting a transcript. A number like this is
+marketing unless it says what it assumed.
 
 ---
 

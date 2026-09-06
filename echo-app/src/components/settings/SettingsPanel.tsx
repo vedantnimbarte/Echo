@@ -11,6 +11,7 @@ import { WakeWordSettings } from "./WakeWordSettings";
 import { CommandMode } from "./CommandMode";
 import { AppProfiles } from "./AppProfiles";
 import { FixUps } from "./FixUps";
+import { DictationStats } from "./DictationStats";
 import { EgressLog } from "./EgressLog";
 import { Performance } from "./Performance";
 import { AudioImport } from "./AudioImport";
@@ -163,6 +164,20 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
   const { data: streamPartials } = useQuery({
     queryKey: ["setting", "stream_partials"],
     queryFn: () => commands.getSetting("stream_partials"),
+  });
+  const { data: autoEdit } = useQuery({
+    queryKey: ["setting", "auto_edit"],
+    queryFn: () => commands.getSetting("auto_edit"),
+  });
+  const { data: autoEditLlm } = useQuery({
+    queryKey: ["setting", "auto_edit_llm"],
+    queryFn: () => commands.getSetting("auto_edit_llm"),
+  });
+  // Read here rather than inside ModelSelector: the language picker needs it to
+  // spot a combination that silently produces English whatever you choose.
+  const { data: whisperModel } = useQuery({
+    queryKey: ["setting", "whisper_model"],
+    queryFn: () => commands.getSetting("whisper_model"),
   });
   const { data: spokenPunctuation } = useQuery({
     queryKey: ["setting", "spoken_punctuation"],
@@ -543,6 +558,21 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
               </option>
             ))}
           </select>
+          {/* This combination produces English no matter what is picked here,
+              and nothing used to say so — the transcript just came back in the
+              wrong language and looked like the model being bad at yours. */}
+          {whisperModel?.endsWith(".en") &&
+            language !== undefined &&
+            language !== null &&
+            language !== "auto" &&
+            language !== "en" && (
+              <Problem>
+                The <code>{whisperModel}</code> model is English-only, so it will
+                transcribe as English whatever you choose here. Pick a
+                multilingual model under Local models — the ones without{" "}
+                <code>.en</code> in the name.
+              </Problem>
+            )}
         </Group>
       )}
 
@@ -642,6 +672,36 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
           title={label("output", "Formatting")}
           hint="Runs after your dictionary, on the finished sentence. Turn the whole group off for a particular app under Per-app profiles — a terminal usually wants the words exactly as spoken."
         >
+          <Check
+            checked={autoEdit !== "false"}
+            onChange={(v) =>
+              setFormatSetting.mutate({ key: "auto_edit", value: v ? "true" : "false" })
+            }
+          >
+            Drop “um”, “uh” and stuttered words
+            <span className="block text-[10.5px] text-[var(--ink-faint)]">
+              Only sounds nobody means to write. Words that are sometimes filler
+              — “like”, “actually”, “basically” — are left alone, because no rule
+              can tell when you meant them. English only.
+            </span>
+          </Check>
+
+          <Check
+            checked={autoEditLlm === "true"}
+            onChange={(v) =>
+              setFormatSetting.mutate({ key: "auto_edit_llm", value: v ? "true" : "false" })
+            }
+          >
+            Also let the model fix self-corrections
+            <span className="block text-[10.5px] text-[var(--ink-faint)]">
+              “Send it Tuesday, no, Wednesday” becomes “Send it Wednesday”. Uses
+              the Command mode model on every utterance, so it costs latency —
+              and it is the one setting here that changes the words you said.
+              Off by default for that reason. Your History keeps what you
+              actually said either way.
+            </span>
+          </Check>
+
           <Check
             checked={spokenPunctuation === "true"}
             onChange={(v) =>
@@ -794,6 +854,15 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
       )}
 
       {on("privacy", ["history", "transcripts", "save", "store"]) && (
+        <Group
+          title={label("privacy", "Your dictation")}
+          hint="Worked out from History, so it empties when History does."
+        >
+          <DictationStats />
+        </Group>
+      )}
+
+      {on("privacy", ["history", "transcript", "retention", "delete", "export"]) && (
         <Group title={label("privacy", "History")}>
           <Check
             checked={historyEnabled !== "false"}

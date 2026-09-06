@@ -18,6 +18,8 @@ Built with **Rust · Tauri v2 · React 19 · TypeScript · TailwindCSS v4 · SQL
 - ↩️ **Undo the last insert** with a global hotkey, or by saying "scratch that"
 - 🔁 **Retry the last utterance** on a stronger model without saying it again
 - ⚡ **Live text** (opt-in, per app) — words appear as you speak them, offline or in the cloud
+- 🧹 **Drops “um” and stuttered words** — and, optionally, fixes self-corrections with a local model
+- 📊 **Dictation stats** — words, days, and an honest estimate of time against typing
 - ✍️ **Spoken punctuation** (opt-in) — "comma", "new paragraph", "question mark"; English, Spanish, French, German, Italian, Portuguese, Dutch
 - 🔢 **Numbers, times and units** written properly (English) — "twenty five" → 25, "five percent" → 5%
 - 🔒 **Never types into a password field** (Windows/macOS; Linux can't detect it — see below)

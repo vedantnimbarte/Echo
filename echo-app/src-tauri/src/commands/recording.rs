@@ -220,7 +220,16 @@ pub async fn begin_recording(
     // for the LLM rather than text to type. Read once per session so a settings
     // change applies to the next recording without a restart.
     let command_cfg = command_config(state);
-    let command_key = if command_cfg.enabled && command_cfg.provider == "openai" {
+    // The LLM cleanup pass is separate from command mode and off by default:
+    // it changes the words you said, which every other stage is careful not to.
+    let auto_edit_llm = {
+        let conn = state.db.lock().unwrap();
+        crate::storage::repositories::get_setting(&conn, "auto_edit_llm")
+            .unwrap_or(None)
+            .map(|v| v == "true")
+            .unwrap_or(false)
+    };
+    let command_key = if (command_cfg.enabled || auto_edit_llm) && command_cfg.provider == "openai" {
         crate::storage::keychain::get_api_key("openai").unwrap_or(None)
     } else {
         None
@@ -352,6 +361,21 @@ pub async fn begin_recording(
                 ) {
                     error!("Failed to emit transcript event: {e}");
                 }
+
+                // The LLM cleanup pass runs *after* history on purpose. The
+                // deterministic stages only drop sounds nobody meant to write,
+                // so what they produce is still what was said; this one can
+                // change words, and History should keep the faithful version.
+                let processed = if auto_edit_llm {
+                    crate::core::command::auto_edit(
+                        &command_cfg,
+                        command_key.as_deref(),
+                        &processed,
+                    )
+                    .await
+                } else {
+                    processed
+                };
 
                 // Command mode intercepts before injection: the text to deliver
                 // becomes the model's reply, not the transcript itself.
@@ -755,6 +779,10 @@ pub(crate) fn resolve_delivery(
         // user's trade to opt into. Tidy and numbers only reshape what is
         // already there, so they default on.
         format: crate::core::format::FormatOptions {
+            // On by default: the words it removes ("um", a stuttered "the")
+            // are ones nobody meant to write, so it costs no fidelity. The
+            // LLM rewrite, which does change your words, is separate and off.
+            cleanup: get("auto_edit").map(|v| v != "false").unwrap_or(true),
             spoken_punctuation: get("spoken_punctuation").map(|v| v == "true").unwrap_or(false),
             numbers: get("format_numbers").map(|v| v != "false").unwrap_or(true),
             tidy: get("format_tidy").map(|v| v != "false").unwrap_or(true),

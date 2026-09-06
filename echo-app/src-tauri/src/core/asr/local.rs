@@ -48,6 +48,14 @@ pub struct LocalWhisperProvider {
     /// Whether anything is reading partial results. Set per session by the
     /// pipeline; when false this provider behaves exactly as it always has.
     partials_wanted: AtomicBool,
+    /// A smaller model to decode partials with, if one is installed.
+    ///
+    /// A partial is discarded and rewritten within a second, so it only has to
+    /// be roughly right — and on CPU the difference between `tiny.en` and
+    /// `base.en` is the difference between words that keep up with the speaker
+    /// and words that trail two seconds behind. The final transcript is always
+    /// decoded with the real model.
+    partial_model: Option<(PathBuf, String)>,
 }
 
 impl LocalWhisperProvider {
@@ -67,11 +75,18 @@ impl LocalWhisperProvider {
             threads: super::decode_opts::auto_threads(),
             gpu_allowed: true,
             partials_wanted: AtomicBool::new(false),
+            partial_model: None,
         }
     }
 
     pub fn with_dictionary(mut self, dictionary: Arc<RwLock<DictionaryEngine>>) -> Self {
         self.dictionary = Some(dictionary);
+        self
+    }
+
+    /// Decode partials with a smaller model than the finals.
+    pub fn with_partial_model(mut self, path: PathBuf, name: impl Into<String>) -> Self {
+        self.partial_model = Some((path, name.into()));
         self
     }
 
@@ -327,7 +342,7 @@ impl LocalWhisperProvider {
 
             if should_decode_partial(buffer.len(), decoded_at, in_flight.is_some()) {
                 decoded_at = buffer.len();
-                let job = self.decode_job(language).await;
+                let job = self.partial_job(language).await;
                 let audio = buffer.clone();
                 in_flight = Some(tokio::spawn(job.run(audio)));
             }
@@ -344,16 +359,21 @@ impl LocalWhisperProvider {
         Ok(())
     }
 
-    /// Snapshot everything a decode needs, resolved now rather than cached —
-    /// a GPU failure latched a moment ago must already route this to CPU.
-    async fn decode_job(&self, language: Option<&str>) -> DecodeJob {
+    /// Snapshot everything a partial decode needs, resolved now rather than
+    /// cached — a GPU failure latched a moment ago must already route this to
+    /// CPU — and pointed at the small model when one is configured.
+    async fn partial_job(&self, language: Option<&str>) -> DecodeJob {
+        let (model_path, model_name) = match &self.partial_model {
+            Some((path, name)) => (path.clone(), name.as_str()),
+            None => (self.model_path.clone(), self.model_name.as_str()),
+        };
         DecodeJob {
             binaries: self.binaries.clone(),
             server: self.server.clone(),
-            model_path: self.model_path.clone(),
+            model_path,
             decode: self.decode_config(),
             prompt: initial_prompt(self.dictionary.as_ref(), self.context.as_ref()).await,
-            language: resolve_language(&self.model_name, language).to_string(),
+            language: resolve_language(model_name, language).to_string(),
         }
     }
 }

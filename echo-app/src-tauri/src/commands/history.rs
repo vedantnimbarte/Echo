@@ -12,6 +12,19 @@ pub fn get_history(state: State<'_, AppState>, limit: Option<i64>) -> Result<Vec
     repositories::list_history(&conn, limit.unwrap_or(100))
 }
 
+/// What dictation has added up to, for the stats card.
+///
+/// Derived from History, so it is empty when History is off — which is the
+/// honest outcome: there is nothing to count, rather than a number invented
+/// from somewhere else.
+#[tauri::command]
+pub fn get_dictation_stats(
+    state: State<'_, AppState>,
+) -> Result<crate::storage::repositories::DictationStats> {
+    let conn = state.db.lock().unwrap();
+    crate::storage::repositories::dictation_stats(&conn)
+}
+
 #[tauri::command]
 pub fn clear_history(state: State<'_, AppState>) -> Result<()> {
     let conn = state.db.lock().unwrap();

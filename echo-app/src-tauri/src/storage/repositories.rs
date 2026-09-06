@@ -257,6 +257,50 @@ pub fn delete_app_profile(conn: &Connection, id: i64) -> Result<()> {
     Ok(())
 }
 
+/// What dictation has added up to, derived from History.
+///
+/// Derived rather than counted separately: History already is the record, and a
+/// second tally would be one more thing to keep in step with it. The cost is
+/// that turning History off turns these off too, which the UI says.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct DictationStats {
+    pub transcripts: i64,
+    pub words: i64,
+    /// Distinct days with at least one transcript.
+    pub days: i64,
+    pub words_last_7_days: i64,
+    /// Earliest transcript still stored, ISO-8601. History retention trims old
+    /// rows, so this is "since when the record goes back", not "since install".
+    pub since: Option<String>,
+}
+
+/// Word counts are computed in SQL rather than by reading every transcript into
+/// memory: the point of a summary is not to load the thing it summarises.
+///
+/// The count is spaces-plus-one, which is an approximation — it over-counts
+/// double spaces and under-counts hyphenates. Good enough for "you have
+/// dictated about 40,000 words", which is the only claim being made.
+const WORDS: &str =
+    "CASE WHEN trim(text) = '' THEN 0      ELSE length(trim(text)) - length(replace(trim(text), ' ', '')) + 1 END";
+
+pub fn dictation_stats(conn: &Connection) -> Result<DictationStats> {
+    let totals = format!(
+        "SELECT count(*), COALESCE(sum({WORDS}), 0), count(DISTINCT date(created_at)), min(created_at)
+         FROM transcription_history"
+    );
+    let (transcripts, words, days, since) = conn.query_row(&totals, [], |r| {
+        Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+    })?;
+
+    let recent = format!(
+        "SELECT COALESCE(sum({WORDS}), 0) FROM transcription_history
+         WHERE created_at >= datetime('now', '-7 days')"
+    );
+    let words_last_7_days = conn.query_row(&recent, [], |r| r.get(0))?;
+
+    Ok(DictationStats { transcripts, words, days, words_last_7_days, since })
+}
+
 // ── Egress log ───────────────────────────────────────────────────────────────
 
 pub fn insert_egress(conn: &Connection, host: &str, purpose: &str) -> Result<()> {

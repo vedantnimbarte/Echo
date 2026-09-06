@@ -18,6 +18,7 @@
 //! whole thing off: a terminal wants the words exactly as spoken, an email
 //! wants sentences.
 
+pub mod cleanup;
 pub mod numbers;
 pub mod punctuation;
 pub mod tidy;
@@ -26,6 +27,9 @@ pub mod tidy;
 /// app's profile, the same way delivery is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct FormatOptions {
+    /// Remove hesitations and stutters — what you said but did not mean to
+    /// write. See [`cleanup`]; this is the one stage that discards words.
+    pub cleanup: bool,
     /// Replace spoken marks ("comma", "new line") with the marks themselves.
     pub spoken_punctuation: bool,
     /// Convert spelled-out numbers, times and units to digits.
@@ -38,7 +42,7 @@ impl FormatOptions {
     /// True when every stage is off, so callers can skip the pass entirely
     /// rather than walking the string three times to change nothing.
     pub fn is_noop(&self) -> bool {
-        !self.spoken_punctuation && !self.numbers && !self.tidy
+        !self.cleanup && !self.spoken_punctuation && !self.numbers && !self.tidy
     }
 }
 
@@ -52,6 +56,12 @@ pub fn apply(text: &str, opts: FormatOptions, language: Option<&str>) -> String 
         return text.to_string();
     }
     let mut out = text.to_string();
+    // Cleanup runs first, on the rawest text: a filler sitting between a word
+    // and a spoken mark ("hello um comma") would otherwise stop the mark
+    // attaching to the word it belongs to.
+    if opts.cleanup && cleanup::covers(language) {
+        out = cleanup::apply(&out);
+    }
     if opts.spoken_punctuation {
         out = punctuation::apply(&out, language);
     }
@@ -105,12 +115,13 @@ mod tests {
     #[test]
     fn stages_compose_in_order() {
         let opts = FormatOptions {
+            cleanup: true,
             spoken_punctuation: true,
             numbers: true,
             tidy: true,
         };
         assert_eq!(
-            apply("we shipped twenty five of them period next question", opts, Some("en")),
+            apply("we shipped um twenty five of them period next question", opts, Some("en")),
             "We shipped 25 of them. Next question"
         );
     }
@@ -120,6 +131,7 @@ mod tests {
     #[test]
     fn an_uncovered_language_keeps_its_words() {
         let opts = FormatOptions {
+            cleanup: true,
             spoken_punctuation: true,
             numbers: true,
             tidy: true,
