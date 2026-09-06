@@ -38,6 +38,8 @@ pub struct AppProfile {
     /// Type partial transcripts into this app as you speak. `None` inherits
     /// the global setting.
     pub stream_partials: Option<bool>,
+    /// Run the formatting pass in this app. `None` inherits the global setting.
+    pub formatting: Option<bool>,
     /// Dictionary profile to apply while this app is focused.
     pub profile_id: Option<i64>,
     pub enabled: bool,

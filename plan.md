@@ -21,6 +21,7 @@
 | 8 | Packaging | ✅ Config + CI (signing certs TBD) |
 | 9 | v1 Launch | ✅ Hotkey + CSP + docs (perf/signing TBD) |
 | 10 | Post-Dictation Loop | ✅ Undo, retry, prompting, streaming, injection rescue |
+| 11 | Formatting & Field Awareness | ✅ Spoken punctuation, numbers, password guard, auto-method, CLI |
 
 ---
 
@@ -1097,6 +1098,100 @@ by voice is a real workflow, and routing it elsewhere would break it.
 - **Cloud LLM as anything's default** — every LLM-shaped item here (spoken
   commands, retry, formatting) follows command mode's existing shape: local
   first, cloud opt-in, key from the keychain.
+
+---
+
+## Phase 11 — Formatting and Field Awareness ✅
+
+Phase 10 fixed a transcript after it landed. This one improves the transcript
+itself, and stops it landing where it must not.
+
+| # | Item | Where |
+|---|---|---|
+| 1 | Spoken punctuation | `core/format/punctuation.rs` |
+| 2 | Never type into a password field | `core/field.rs` |
+| 3 | Auto-pick the injection method | `injection::use_paste_for` |
+| 4 | Field-aware behaviour | `core/field.rs` + per-app `formatting` column |
+| 5 | CLI / stdin mode | `cli.rs` |
+| 6 | Numbers, times, dates, units | `core/format/numbers.rs` |
+| 7 | Snippets | multi-line injection + a textarea |
+
+### 11.1 The formatting pass (items 1, 6, and the tidy-up)
+
+`core::format` runs after the dictionary and before injection, in three
+switchable stages. Order is not arbitrary: punctuation introduces marks,
+numbers works on the resulting word stream, tidy exists to clean up after both.
+
+**The hard problem is ambiguity, not mapping.** "Period" is a span of time,
+"colon" is an organ. A naive replacement turns "a period of time" into "a . of
+time" on every utterance, forever. Two rules carry it:
+
+- a determiner in front means it is a noun — "a period", "the colon"
+- "of" behind means the same — "period of time"
+
+Multi-word phrases ("new paragraph", "question mark") skip the check, because
+nobody says them meaning anything else. This is a heuristic and is documented as
+one; the upgrade path is the standard prefix word ("press period"), which costs
+a word on every mark, which is why it is not the default. **Spoken punctuation
+ships off by default** — it takes words out of the language, and that is the
+user's trade to accept.
+
+Numbers follow one rule that keeps them safe: **never convert a lone small
+word.** "One of the best" must survive. So digits appear when the speaker gave
+more than one word of the number ("twenty five"), or when a unit settles it
+("five percent"). Times, spoken years and currency get their own shapes —
+"twenty twenty six" is 2026, not 2026 added up wrongly.
+
+Per-app profiles switch the whole pass, not individual stages: "leave my
+terminal alone" is one decision, and migration 4 adds `app_profiles.formatting`
+for it.
+
+### 11.2 Password fields (items 2 and 4)
+
+`core::field` asks the accessibility layer one question: is the focused control
+masked? Windows UI Automation exposes `IsPassword`, macOS exposes the
+`AXSecureTextField` subrole. Both cover browsers and Electron, which is where
+password fields actually are — Win32 window styles would not.
+
+The check runs **before the dictionary, before History and before injection**,
+so a password spoken into a masked box is neither typed there nor written to
+disk on the way past. It also gates partial injection at recording start.
+
+**Linux cannot answer, and the UI says so rather than showing a switch that does
+nothing.** AT-SPI needs a D-Bus dependency and a toolkit that publishes its
+tree; under Wayland, often neither holds. `detection_available()` reports the
+truth per platform. A protection you wrongly believe in is worse than none.
+
+`Unknown` is deliberately treated as "not secure": refusing to type whenever the
+OS stays quiet would break dictation on all of Linux and in every app with no
+accessibility tree — a far larger blast radius than the case being guarded.
+
+**What item 4 turned out to be.** The accessibility APIs answer "is this
+masked", not "is this code". Everything else app-shaped — no auto-punctuation in
+an editor, prose capitals in an email — comes from the per-app profile, which
+already knows the app. So field awareness is the password guard, and the rest of
+item 4 is the `formatting` override in 11.1.
+
+### 11.3 Injection method (item 3) and snippets (item 7)
+
+`injection_method` gains `"auto"`: paste anything with a line break or longer
+than ~160 characters, type the rest. **Unset still means "type"** — auto is an
+explicit choice, not a silent change of behaviour for existing users.
+
+Line breaks are why this matters, and they are also item 7. A newline is not a
+character you can type: on Windows a Unicode scan code for it is silently
+dropped, and on macOS it is accepted by some text views and not others. Both
+injectors now send Return as a real key press between runs of text, so a
+multi-line snippet arrives as a snippet. The dictionary's replacement field
+became a textarea to match — the replacement engine always allowed a block, the
+input never did.
+
+### 11.4 CLI (item 5)
+
+`echo --transcribe <file> [--language xx]` prints the transcript to stdout and
+exits; errors go to stderr with a non-zero status, so `$(...)` is the transcript
+and never a log line. It runs inside `setup` for the same reason `--selftest`
+does: the database, model and engine only exist once setup has run.
 
 ---
 

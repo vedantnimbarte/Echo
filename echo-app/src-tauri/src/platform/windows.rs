@@ -9,8 +9,9 @@ impl WindowsInjector {
     }
 }
 
-impl TextInjector for WindowsInjector {
-    fn inject_text(&self, text: &str) -> Result<()> {
+impl WindowsInjector {
+    /// Type one run of text containing no newlines, as Unicode key events.
+    fn type_run(&self, text: &str) -> Result<()> {
         #[cfg(target_os = "windows")]
         {
             use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -63,9 +64,36 @@ impl TextInjector for WindowsInjector {
         }
 
         #[cfg(not(target_os = "windows"))]
-        Err(EchoError::Injection(
-            "Windows injector called on non-Windows platform".into(),
-        ))
+        {
+            let _ = text;
+            Err(EchoError::Injection(
+                "Windows injector called on non-Windows platform".into(),
+            ))
+        }
+    }
+}
+
+impl TextInjector for WindowsInjector {
+    /// Type `text`, sending line breaks as Return key presses.
+    ///
+    /// A newline is not a character you can type: sent as a Unicode scan code
+    /// it is silently dropped by most controls, so a multi-line snippet would
+    /// arrive as one run-on line. Return is a *key*, so the breaks go in
+    /// between the runs of text rather than inside them.
+    fn inject_text(&self, text: &str) -> Result<()> {
+        if !text.contains('\n') {
+            return self.type_run(text);
+        }
+        let normalized = text.replace("\r\n", "\n");
+        for (i, line) in normalized.split('\n').enumerate() {
+            if i > 0 {
+                send_plain_key(VK_RETURN, 1, "return")?;
+            }
+            if !line.is_empty() {
+                self.type_run(line)?;
+            }
+        }
+        Ok(())
     }
 
     fn send_paste(&self) -> Result<()> {
@@ -87,6 +115,7 @@ impl TextInjector for WindowsInjector {
 
 const VK_CONTROL: u16 = 0x11;
 const VK_BACK: u16 = 0x08;
+const VK_RETURN: u16 = 0x0D;
 const VK_C: u16 = 0x43;
 const VK_V: u16 = 0x56;
 const VK_Z: u16 = 0x5A;

@@ -352,7 +352,9 @@ fn check_delivery(state: &AppState, report: &mut Report) {
         "delivery",
         format!(
             "{} injection, auto-inject {}, settle {}ms (not exercised)",
-            if delivery.use_paste { "paste" } else { "keystroke" },
+            // Reported for a representative short transcript, since "auto"
+            // has no single answer without one.
+            if delivery.use_paste("a sample transcript") { "paste" } else { "keystroke" },
             if delivery.auto_inject { "on" } else { "off" },
             delivery.settle_ms
         ),

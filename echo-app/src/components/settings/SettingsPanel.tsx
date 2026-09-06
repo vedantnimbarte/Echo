@@ -164,6 +164,26 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
     queryKey: ["setting", "stream_partials"],
     queryFn: () => commands.getSetting("stream_partials"),
   });
+  const { data: spokenPunctuation } = useQuery({
+    queryKey: ["setting", "spoken_punctuation"],
+    queryFn: () => commands.getSetting("spoken_punctuation"),
+  });
+  const { data: formatNumbers } = useQuery({
+    queryKey: ["setting", "format_numbers"],
+    queryFn: () => commands.getSetting("format_numbers"),
+  });
+  const { data: formatTidy } = useQuery({
+    queryKey: ["setting", "format_tidy"],
+    queryFn: () => commands.getSetting("format_tidy"),
+  });
+  const { data: blockSecure } = useQuery({
+    queryKey: ["setting", "block_secure_fields"],
+    queryFn: () => commands.getSetting("block_secure_fields"),
+  });
+  const { data: secureDetection } = useQuery({
+    queryKey: ["secure-field-detection"],
+    queryFn: commands.secureFieldDetection,
+  });
   const { data: clipboardSettle } = useQuery({
     queryKey: ["setting", "clipboard_settle_ms"],
     queryFn: () => commands.getSetting("clipboard_settle_ms"),
@@ -186,6 +206,14 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
   const setStreamPartialsMutation = useMutation({
     mutationFn: (v: string) => commands.setSetting("stream_partials", v),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["setting", "stream_partials"] }),
+  });
+  // One mutation for the whole formatting group: the three stages differ only
+  // in which key they write, and three near-identical hooks would say nothing
+  // extra.
+  const setFormatSetting = useMutation({
+    mutationFn: ({ key, value }: { key: string; value: string }) =>
+      commands.setSetting(key, value),
+    onSuccess: (_r, { key }) => qc.invalidateQueries({ queryKey: ["setting", key] }),
   });
   const setInjectionMethodMutation = useMutation({
     mutationFn: (v: string) => commands.setSetting("injection_method", v),
@@ -560,8 +588,18 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
             >
               <option value="type">Type keystrokes (universal)</option>
               <option value="paste">Paste (fast, best for long text)</option>
+              <option value="auto">Auto — type short text, paste long</option>
             </select>
           </Field>
+
+          {injectionMethod === "auto" && (
+            <p className="max-w-[56ch] text-[10.5px] leading-relaxed text-[var(--ink-faint)]">
+              Anything with a line break, or longer than about 160 characters,
+              is pasted; everything else is typed. Line breaks are the reason
+              this matters — typed as keystrokes they become Return, which
+              submits a chat box instead of breaking the line.
+            </p>
+          )}
 
           {injectionMethod === "paste" && (
             <>
@@ -592,6 +630,71 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
               onBlur={(e) => setInjectDelayMutation.mutate(e.target.value || "0")}
             />
           </Field>
+        </Group>
+      )}
+
+      {on("output", ["punctuation", "comma", "period", "format", "capital", "numbers", "spacing", "tidy"]) && (
+        <Group
+          title={label("output", "Formatting")}
+          hint="Runs after your dictionary, on the finished sentence. Turn the whole group off for a particular app under Per-app profiles — a terminal usually wants the words exactly as spoken."
+        >
+          <Check
+            checked={spokenPunctuation === "true"}
+            onChange={(v) =>
+              setFormatSetting.mutate({ key: "spoken_punctuation", value: v ? "true" : "false" })
+            }
+          >
+            Let me say punctuation — “comma”, “new paragraph”, “question mark”
+          </Check>
+          {spokenPunctuation === "true" && (
+            <p className="max-w-[56ch] text-[10.5px] leading-relaxed text-[var(--ink-faint)]">
+              The cost of this one is real: “period” and “colon” stop being
+              usable as ordinary words. Echo keeps them when the sentence makes
+              it obvious — “a period of time”, “the colon” — but it is a rule of
+              thumb, not grammar. Off by default for that reason.
+            </p>
+          )}
+
+          <Check
+            checked={formatNumbers !== "false"}
+            onChange={(v) =>
+              setFormatSetting.mutate({ key: "format_numbers", value: v ? "true" : "false" })
+            }
+          >
+            Write numbers, times and units as digits — “twenty five” → 25
+          </Check>
+
+          <Check
+            checked={formatTidy !== "false"}
+            onChange={(v) =>
+              setFormatSetting.mutate({ key: "format_tidy", value: v ? "true" : "false" })
+            }
+          >
+            Fix spacing around punctuation and capitalise sentences
+          </Check>
+        </Group>
+      )}
+
+      {on("output", ["password", "secure", "safety", "mask", "credential", "login"]) && (
+        <Group
+          title={label("output", "Password fields")}
+          hint={
+            secureDetection
+              ? "Echo asks the accessibility API whether the focused control is masked. Where it can't tell, it types as normal — refusing whenever the system stays quiet would break dictation in every app that publishes no accessibility tree."
+              : "This system can't answer the question, so the guard never fires here. On Linux it would need AT-SPI over D-Bus, and under Wayland usually not even then. Nothing is protecting you — that's why it says so rather than showing a switch that does nothing."
+          }
+        >
+          <Check
+            checked={blockSecure !== "false"}
+            onChange={(v) =>
+              setFormatSetting.mutate({ key: "block_secure_fields", value: v ? "true" : "false" })
+            }
+          >
+            Never type into a password field — and never save it to History
+          </Check>
+          {!secureDetection && (
+            <Problem>Not available on this system: the guard can't detect anything here.</Problem>
+          )}
         </Group>
       )}
 

@@ -72,6 +72,35 @@ pub fn deliver(inj: &dyn TextInjector, text: &str, use_paste: bool, settle_ms: u
     }
 }
 
+/// Above this many characters, synthesized keystrokes stop being the better
+/// choice: they take visibly longer, and the longer they run the more chance
+/// something steals focus partway through and the rest lands elsewhere.
+///
+/// ponytail: one threshold rather than a measurement. Typing speed varies by
+/// platform and target app, but the failure it guards against is qualitative —
+/// nobody wants to watch 400 characters appear one key at a time.
+const AUTO_PASTE_CHARS: usize = 160;
+
+/// Whether to paste rather than type, for a user who has not pinned either.
+///
+/// Newlines decide it on their own: a multi-line transcript typed as
+/// keystrokes sends Return into the target app, which submits chat boxes,
+/// search fields and forms rather than inserting a line.
+pub fn should_paste(text: &str) -> bool {
+    text.contains('\n') || text.chars().count() > AUTO_PASTE_CHARS
+}
+
+/// Resolve the configured `injection_method` against the text about to be
+/// delivered. `"auto"` — and anything unrecognised — defers to
+/// [`should_paste`]; an explicit choice is always honoured.
+pub fn use_paste_for(setting: Option<&str>, text: &str) -> bool {
+    match setting {
+        Some("paste") => true,
+        Some("type") => false,
+        _ => should_paste(text),
+    }
+}
+
 /// Rewrite the tail of text Echo already typed so that it reads `next`.
 ///
 /// Only the differing tail moves: a partial that grows types the new words and
@@ -412,6 +441,31 @@ mod tests {
         let (_, args) = linux_chord_command(false, 47, "ctrl+v");
         assert_eq!(args, vec!["key", "--clearmodifiers", "ctrl+v"]);
     }
+    /// A newline is the decisive case: typed as keystrokes it becomes Return,
+    /// which submits the chat box instead of breaking the line.
+    #[test]
+    fn auto_pastes_multi_line_text_however_short() {
+        assert!(should_paste("one\ntwo"));
+        assert!(!should_paste("one two"));
+    }
+
+    #[test]
+    fn auto_types_short_text_and_pastes_long_text() {
+        assert!(!should_paste(&"a".repeat(AUTO_PASTE_CHARS)));
+        assert!(should_paste(&"a".repeat(AUTO_PASTE_CHARS + 1)));
+    }
+
+    /// An explicit choice is never second-guessed, whatever the text looks
+    /// like — that is the difference between a setting and a suggestion.
+    #[test]
+    fn an_explicit_method_always_wins() {
+        let long = "a".repeat(AUTO_PASTE_CHARS + 1);
+        assert!(!use_paste_for(Some("type"), &long));
+        assert!(use_paste_for(Some("paste"), "hi"));
+        assert!(use_paste_for(Some("auto"), &long));
+        assert!(!use_paste_for(Some("auto"), "hi"));
+    }
+
     #[test]
     fn deliver_type_routes_to_keystrokes() {
         let spy = SpyInjector::default();

@@ -111,6 +111,11 @@ windows = { version = "0.58", features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_Threading",
     "Win32_Foundation",
+    # UI Automation: is the focused control a password field (core::field)?
+    # Win32 window styles only describe native edit controls, and the password
+    # boxes people actually use are drawn by browsers and Electron.
+    "Win32_UI_Accessibility",
+    "Win32_System_Com",
 ] }
 
 [target.'cfg(target_os = "linux")'.dependencies]

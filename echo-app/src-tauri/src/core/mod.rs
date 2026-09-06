@@ -6,6 +6,8 @@ pub mod dictionary;
 pub mod download;
 pub mod egress;
 pub mod events;
+pub mod field;
+pub mod format;
 pub mod gpu;
 pub mod injection;
 pub mod modtap;

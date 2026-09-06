@@ -45,7 +45,23 @@ impl TextInjector for MacosInjector {
         // Emit one keyboard event per character, attaching the character as a
         // Unicode string (virtual keycode 0). This handles arbitrary text
         // including characters with no dedicated key.
+        //
+        // A newline is the exception: it is a key, not a character. Posted as
+        // a string it is accepted by some text views and dropped by others, so
+        // a multi-line snippet lands inconsistently. Return (keycode 36) is
+        // posted as a real key press instead.
         for ch in text.chars() {
+            if ch == '\n' {
+                for down in [true, false] {
+                    let ev = CGEvent::new_keyboard_event(source.clone(), 36, down)
+                        .map_err(|_| EchoError::Injection("Failed to create return event".into()))?;
+                    ev.post(CGEventTapLocation::HID);
+                }
+                continue;
+            }
+            if ch == '\r' {
+                continue;
+            }
             let buf = ch.to_string();
 
             let down = CGEvent::new_keyboard_event(source.clone(), 0, true)
