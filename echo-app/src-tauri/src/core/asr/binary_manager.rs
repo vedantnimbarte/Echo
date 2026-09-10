@@ -54,6 +54,25 @@ impl Pack {
     }
 
     /// Release asset providing this pack on Windows.
+    /// SHA-256 the downloaded archive must have, lowercase hex.
+    ///
+    /// Recorded from the GitHub release API's own `digest` field for
+    /// `WHISPER_RELEASE_TAG`, and checked before the zip is extracted — because
+    /// what comes out of it is an executable Echo then runs. Bumping the tag
+    /// means re-recording these:
+    ///
+    /// ```text
+    /// curl -s https://api.github.com/repos/ggml-org/whisper.cpp/releases/tags/<tag> \
+    ///   | grep -E '"(name|digest)"'
+    /// ```
+    pub fn sha256(self) -> &'static str {
+        match self {
+            Pack::Cpu => "0d2eca299c248f965bd0341bcb219db4b433c7f0c0ce2200d4df85765e8156a9",
+            Pack::Cuda11 => "d42f531781627f8cdceffc18fa03414ae90d1748a5c3f103ada64c991dd7f828",
+            Pack::Cuda12 => "3fc4d3ebd9a678313de50c04d9e59c43117ae190f0cb7bff602d4aeefc4efe3d",
+        }
+    }
+
     pub fn asset(self) -> &'static str {
         match self {
             Pack::Cpu => "whisper-bin-x64.zip",
@@ -342,6 +361,11 @@ impl BinaryManager {
                 .await
                 .map_err(|e| EchoError::Config(e.to_string()))?;
             drop(file);
+
+            // Before extraction, because what comes out of this archive is an
+            // executable Echo shells out to. A truncated or substituted pack is
+            // refused and deleted here rather than being unzipped and run.
+            crate::core::download::verify(&tmp_zip, pack.sha256()).await?;
 
             // Extract on the blocking pool — zip reads are synchronous.
             let extract_dir = dest.clone();

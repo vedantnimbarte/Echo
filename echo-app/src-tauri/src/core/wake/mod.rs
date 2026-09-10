@@ -73,6 +73,43 @@ const PHRASE_CATALOG: &[PhraseSpec] = &[
     },
 ];
 
+/// SHA-256 of every file this module downloads, keyed by its name.
+///
+/// One table rather than a field on [`PhraseSpec`], because the two shared
+/// feature models are not phrases and would otherwise need their own pair of
+/// constants beside it — and the call sites already have the filename in hand.
+///
+/// GitHub's release API reports no digest for this release (it only computes them
+/// for newer uploads), so these were taken by downloading each file and hashing
+/// it. Three of the six were then cross-checked against copies fetched on a
+/// different day by Echo itself, which agreed. Re-record after bumping
+/// [`RELEASE`]:
+///
+/// ```text
+/// curl -sL -O <RELEASE>/<file> && sha256sum <file>
+/// ```
+const DIGESTS: &[(&str, &str)] = &[
+    ("melspectrogram.onnx", "ba2b0e0f8b7b875369a2c89cb13360ff53bac436f2895cced9f479fa65eb176f"),
+    ("embedding_model.onnx", "70d164290c1d095d1d4ee149bc5e00543250a7316b59f31d056cff7bd3075c1f"),
+    ("hey_jarvis_v0.1.onnx", "94a13cfe60075b132f6a472e7e462e8123ee70861bc3fb58434a73712ee0d2cb"),
+    ("alexa_v0.1.onnx", "6ff566a01d12670e8d9e3c59da32651db1575d17272a601b7f8a39283dfbae3e"),
+    ("hey_mycroft_v0.1.onnx", "c2a311e8fa1338de89c31b3b46dc4dffd4af2f9a8d6ddead48893c2d301b1f18"),
+    ("hey_rhasspy_v0.1.onnx", "5a9b3ed3be2910e35780e097905aa9f35a9c10038df47914cf2b3ec4d670f6ea"),
+];
+
+/// The pinned digest for a downloadable file.
+///
+/// An unpinned filename is an error rather than a skipped check: the only way to
+/// reach it is a catalog entry added without its digest, and failing the download
+/// is how that gets noticed before it ships.
+fn sha256_for(file: &str) -> Result<&'static str> {
+    DIGESTS
+        .iter()
+        .find(|(f, _)| *f == file)
+        .map(|(_, d)| *d)
+        .ok_or_else(|| EchoError::Config(format!("no checksum is pinned for {file}")))
+}
+
 /// A wake phrase and its local availability, for the settings UI.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WakePhraseInfo {
@@ -183,7 +220,7 @@ impl WakeModelManager {
             });
 
             let url = format!("{RELEASE}/{file}");
-            let result = download_file(&url, &dest, sub_tx).await;
+            let result = download_file(&url, &dest, sha256_for(file)?, sub_tx).await;
             let _ = relay.await;
             result?;
         }
@@ -225,7 +262,9 @@ impl WakeModelManager {
                     let _ = outer.send(((index as f32 + p) / 2.0).clamp(0.0, 1.0)).await;
                 }
             });
-            let result = download_file(&format!("{RELEASE}/{file}"), &dest, sub_tx).await;
+            let result =
+                download_file(&format!("{RELEASE}/{file}"), &dest, sha256_for(file)?, sub_tx)
+                    .await;
             let _ = relay.await;
             result?;
         }
@@ -251,5 +290,36 @@ impl WakeModelManager {
             &self.dir.join(EMBEDDING_FILE),
             &phrase,
         )?))
+    }
+}
+
+#[cfg(test)]
+mod digest_tests {
+    use super::*;
+
+    /// The failure this catches is adding a phrase to the catalog and forgetting
+    /// its digest — which would otherwise surface as a download that fails for a
+    /// user rather than a test that fails here.
+    #[test]
+    fn every_downloadable_file_has_a_pinned_digest() {
+        for file in [MELSPEC_FILE, EMBEDDING_FILE] {
+            sha256_for(file).unwrap_or_else(|e| panic!("{file}: {e}"));
+        }
+        for spec in PHRASE_CATALOG {
+            sha256_for(spec.file).unwrap_or_else(|e| panic!("{}: {e}", spec.file));
+        }
+    }
+
+    /// A digest that is not 64 lowercase hex characters can never match what the
+    /// hasher produces, so it would refuse every download instead of checking it.
+    #[test]
+    fn the_digests_are_lowercase_hex() {
+        for (file, digest) in DIGESTS {
+            assert_eq!(digest.len(), 64, "{file} has a malformed digest");
+            assert!(
+                digest.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
+                "{file} must be lowercase hex"
+            );
+        }
     }
 }
