@@ -9,6 +9,20 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [react(), tailwindcss()],
 
+  // Frontend tests run in happy-dom with a fake Tauri backend
+  // (src/test/setup.ts). happy-dom rather than jsdom: the jsdom in the tree
+  // pulls an encoding sniffer that `require()`s an ES module and dies on
+  // collection, and nothing here needs jsdom's extra fidelity.
+  // `src-tauri` is excluded because Rust has its own suite and vitest would
+  // otherwise try to collect from the target directory.
+  test: {
+    environment: "happy-dom",
+    globals: true,
+    setupFiles: ["./src/test/setup.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
+    exclude: ["src-tauri/**", "node_modules/**"],
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors
