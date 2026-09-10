@@ -129,6 +129,29 @@ pub fn trim_history_older_than(conn: &Connection, days: i64) -> Result<usize> {
     Ok(removed)
 }
 
+/// Apply the configured retention window, reading it from settings.
+///
+/// One function rather than the policy being assembled at each call site, so the
+/// two callers cannot drift apart: startup — which also catches a window the
+/// user just shortened — and every history write, which is what makes the
+/// setting true at all for an app designed to stay open for weeks.
+///
+/// An unset or unparseable value means keep everything, matching
+/// [`trim_history_older_than`]: retention is opt-in, and a typo in a setting
+/// must not delete anybody's transcripts.
+///
+/// ponytail: this runs a dated `DELETE` after every utterance rather than on a
+/// timer. The table holds one row per dictation and the statement is a scan of
+/// it, which is nothing at the sizes this reaches; a timer would be more code
+/// and one more thing to get wrong at shutdown. Index `created_at` if a very
+/// long-lived history ever makes it show up.
+pub fn apply_retention(conn: &Connection) -> Result<usize> {
+    let days = get_setting(conn, "history_retention_days")?
+        .and_then(|v| v.parse::<i64>().ok())
+        .unwrap_or(0);
+    trim_history_older_than(conn, days)
+}
+
 // ── Dictionary profiles ──────────────────────────────────────────────────────
 //
 // `profiles` has existed since migration 1 but had no queries; per-app profiles

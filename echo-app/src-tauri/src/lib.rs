@@ -31,6 +31,24 @@ use core::{
 use state::AppState;
 use storage::db;
 
+/// Send panics to `echo.log` as well as to stderr.
+///
+/// A panic inside a background task is otherwise invisible in a packaged build:
+/// the task dies, the user sees dictation stop working, and the only record goes
+/// to a console nobody is watching. Echo has no crash reporter by design, so the
+/// log file is the whole story — this is the difference between "Echo broke" and
+/// a report somebody can act on.
+///
+/// Chained rather than replacing the default hook, so the usual message and any
+/// `RUST_BACKTRACE` output still appear.
+fn log_panics() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        tracing::error!("panic: {info}");
+        default(info);
+    }));
+}
+
 /// Log to stdout *and* to `echo.log` beside the database.
 ///
 /// Everything downstream of capture — VAD, ASR, injection — reports failure by
@@ -117,6 +135,7 @@ pub fn run() {
 
             std::fs::create_dir_all(&data_dir)?;
             init_tracing(&data_dir);
+            log_panics();
             let db_path = data_dir.join("echo.db");
 
             info!("Opening database at {}", db_path.display());
@@ -143,21 +162,15 @@ pub fn run() {
             // which app is being dictated into and what was just said.
             let prompt_ctx = Arc::new(core::asr::prompt::PromptContext::default());
 
-            // Apply the history retention policy at startup. Doing it here
-            // rather than on a timer means it also runs for someone who just
-            // shortened the window, instead of waiting for the next tick.
-            match storage::repositories::get_setting(&conn, "history_retention_days")
-                .unwrap_or(None)
-                .and_then(|v| v.parse::<i64>().ok())
-            {
-                Some(days) if days > 0 => {
-                    match storage::repositories::trim_history_older_than(&conn, days) {
-                        Ok(0) => {}
-                        Ok(n) => info!("Removed {n} transcript(s) older than {days} days"),
-                        Err(e) => tracing::warn!("History retention pass failed: {e}"),
-                    }
-                }
-                _ => {}
+            // Apply the history retention policy at startup, so it also runs
+            // for someone who just shortened the window. It runs again after
+            // every transcript is written — see `commands::recording` — because
+            // Echo is built to stay open for weeks, and a policy that only
+            // applies on restart is not a policy.
+            match storage::repositories::apply_retention(&conn) {
+                Ok(0) => {}
+                Ok(n) => info!("Removed {n} transcript(s) past the retention window"),
+                Err(e) => tracing::warn!("History retention pass failed: {e}"),
             }
 
             // Default to the local (offline) Whisper engine on first run.

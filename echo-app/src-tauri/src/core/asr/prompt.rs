@@ -21,6 +21,8 @@
 
 use std::sync::Mutex;
 
+use crate::core::lock::LockLive;
+
 /// Room reserved for the preceding transcript inside whisper's prompt budget.
 ///
 /// Small on purpose. The vocabulary hint is the more valuable half — it is the
@@ -53,7 +55,7 @@ impl PromptContext {
     /// not context for an email, and biasing one with the other is worse than
     /// no context at all.
     pub fn set_app(&self, app: Option<String>, profile: Option<i64>) {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_live();
         if inner.app != app {
             inner.previous = None;
             inner.app = app;
@@ -64,7 +66,7 @@ impl PromptContext {
     /// Record the transcript just produced, as context for the next one.
     pub fn set_previous(&self, text: &str) {
         let text = text.trim();
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock_live();
         inner.previous = (!text.is_empty()).then(|| tail(text, MAX_PREVIOUS_CHARS));
     }
 
@@ -73,15 +75,15 @@ impl PromptContext {
     /// Used when the last delivery is taken back: a transcript the user just
     /// rejected is the last thing that should bias the retry.
     pub fn clear_previous(&self) {
-        self.inner.lock().unwrap().previous = None;
+        self.inner.lock_live().previous = None;
     }
 
     pub fn profile(&self) -> Option<i64> {
-        self.inner.lock().unwrap().profile
+        self.inner.lock_live().profile
     }
 
     pub fn previous(&self) -> Option<String> {
-        self.inner.lock().unwrap().previous.clone()
+        self.inner.lock_live().previous.clone()
     }
 }
 

@@ -4,6 +4,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::mpsc;
 use tracing::{error, info};
 
+use crate::core::lock::LockLive;
 use crate::{
     core::{
         asr::TranscriptSegment,
@@ -37,7 +38,7 @@ pub async fn begin_recording(
     language: Option<String>,
 ) -> Result<()> {
     {
-        let mut recording = state.recording.lock().unwrap();
+        let mut recording = state.recording.lock_live();
         if *recording {
             return Ok(());
         }
@@ -50,7 +51,7 @@ pub async fn begin_recording(
 
     let provider = state.asr.active_provider_name().await;
     {
-        let conn = state.db.lock().unwrap();
+        let conn = state.db.lock_live();
         state.telemetry.record(
             &conn,
             "recording_started",
@@ -61,7 +62,7 @@ pub async fn begin_recording(
     // Fall back to the device configured in Settings when the caller doesn't
     // pin one (the floating pill triggers recording without knowing the device).
     let device_name = device_name.filter(|s| !s.is_empty()).or_else(|| {
-        let conn = state.db.lock().unwrap();
+        let conn = state.db.lock_live();
         crate::storage::repositories::get_setting(&conn, "audio_device")
             .unwrap_or(None)
             .filter(|s| !s.is_empty())
@@ -71,7 +72,7 @@ pub async fn begin_recording(
     // without knowing the configured language. "auto" means let the model
     // detect it, which is what the providers already do for None.
     let language = language.filter(|s| !s.is_empty()).or_else(|| {
-        let conn = state.db.lock().unwrap();
+        let conn = state.db.lock_live();
         crate::storage::repositories::get_setting(&conn, "language")
             .unwrap_or(None)
             .filter(|s| !s.is_empty() && s != "auto")
@@ -88,7 +89,7 @@ pub async fn begin_recording(
     // model loaded, else the energy fallback. `vad_engine` setting can force it.
     let silero_model = state.silero.clone();
     let vad_engine = {
-        let conn = state.db.lock().unwrap();
+        let conn = state.db.lock_live();
         crate::storage::repositories::get_setting(&conn, "vad_engine")
             .unwrap_or(None)
             .unwrap_or_else(|| "silero".into())
@@ -126,7 +127,7 @@ pub async fn begin_recording(
         .ok()
         .flatten();
     let start_delivery = {
-        let conn = state.db.lock().unwrap();
+        let conn = state.db.lock_live();
         resolve_delivery(&conn, focused_at_start.as_deref())
     };
     state
@@ -136,7 +137,7 @@ pub async fn begin_recording(
     // Keep each finished utterance so a retry can re-decode it on a stronger
     // model rather than asking the user to say it again.
     let retain = {
-        let conn = state.db.lock().unwrap();
+        let conn = state.db.lock_live();
         crate::storage::repositories::get_setting(&conn, "retry_enabled")
             .unwrap_or(None)
             .map(|v| v != "false")
@@ -148,7 +149,7 @@ pub async fn begin_recording(
         tokio::spawn(retain_utterances(vad_rx, keep_tx, slot));
         keep_rx
     } else {
-        *state.last_utterance.lock().unwrap() = None;
+        *state.last_utterance.lock_live() = None;
         vad_rx
     };
 
@@ -156,7 +157,7 @@ pub async fn begin_recording(
     // again per transcript below, because focus can move while you talk; this
     // one exists to keep partials out of a field that is already secure.
     let secure_guard = {
-        let conn = state.db.lock().unwrap();
+        let conn = state.db.lock_live();
         crate::storage::repositories::get_setting(&conn, "block_secure_fields")
             .unwrap_or(None)
             .map(|v| v != "false")
@@ -209,7 +210,7 @@ pub async fn begin_recording(
     // does not report one.
     let lang_for_format = language.clone();
     let scratch_enabled = {
-        let conn = state.db.lock().unwrap();
+        let conn = state.db.lock_live();
         crate::storage::repositories::get_setting(&conn, "scratch_that_enabled")
             .unwrap_or(None)
             .map(|v| v == "true")
@@ -223,7 +224,7 @@ pub async fn begin_recording(
     // The LLM cleanup pass is separate from command mode and off by default:
     // it changes the words you said, which every other stage is careful not to.
     let auto_edit_llm = {
-        let conn = state.db.lock().unwrap();
+        let conn = state.db.lock_live();
         crate::storage::repositories::get_setting(&conn, "auto_edit_llm")
             .unwrap_or(None)
             .map(|v| v == "true")
@@ -259,7 +260,7 @@ pub async fn begin_recording(
 
                 let delivery = {
                     let state = app_clone.state::<AppState>();
-                    let conn = state.db.lock().unwrap();
+                    let conn = state.db.lock_live();
                     resolve_delivery(&conn, focused.as_deref())
                 };
 
@@ -314,7 +315,7 @@ pub async fn begin_recording(
                 // "Scratch that" is a correction, not dictation: take back the
                 // last delivery instead of typing the words. Checked before
                 // history so the log stays a record of what was said and kept.
-                if scratch_enabled && crate::core::undo::is_scratch_phrase(&processed) {
+                if scratch_enabled && crate::core::undo::is_scratch_phrase(&processed, spoken) {
                     // The phrase itself may already be on screen from streaming;
                     // remove it before undoing what came before it.
                     if !shown.is_empty() {
@@ -341,7 +342,7 @@ pub async fn begin_recording(
                 // log of what you said, not of what the model replied.
                 if delivery.record_history && !processed.is_empty() {
                     let state = app_clone.state::<AppState>();
-                    let conn = state.db.lock().unwrap();
+                    let conn = state.db.lock_live();
                     let record = crate::storage::models::TranscriptionRecord {
                         id: None,
                         text: processed.clone(),
@@ -351,6 +352,13 @@ pub async fn begin_recording(
                     };
                     if let Err(e) = crate::storage::repositories::insert_history(&conn, &record) {
                         error!("Failed to record history: {e}");
+                    }
+                    // Trim here as well as at startup. The window is a promise
+                    // about what Echo is still holding, and checking it only on
+                    // launch quietly breaks that for anyone who leaves the app
+                    // running — which is how it is meant to be used.
+                    if let Err(e) = crate::storage::repositories::apply_retention(&conn) {
+                        error!("History retention pass failed: {e}");
                     }
                 }
                 // Emit the transcript fields directly (not the tagged AppEvent
@@ -455,7 +463,7 @@ pub async fn begin_recording(
                         Ok(Ok(())) => {
                             info!("Transcript injected");
                             let state = app_clone.state::<AppState>();
-                            *state.last_delivery.lock().unwrap() =
+                            *state.last_delivery.lock_live() =
                                 Some(crate::core::undo::LastDelivery {
                                     text: to_inject,
                                     used_paste: use_paste,
@@ -532,7 +540,7 @@ pub async fn stop_recording(
 /// microphone back to the listener so the next phrase is heard.
 pub async fn end_recording(app: AppHandle, state: &AppState) -> Result<()> {
     {
-        let mut recording = state.recording.lock().unwrap();
+        let mut recording = state.recording.lock_live();
         if !*recording {
             return Ok(());
         }
@@ -547,7 +555,7 @@ pub async fn end_recording(app: AppHandle, state: &AppState) -> Result<()> {
     // It is opt-out because an open microphone lights the OS "in use"
     // indicator, and that is the user's call to make, not ours.
     let warm = {
-        let conn = state.db.lock().unwrap();
+        let conn = state.db.lock_live();
         crate::storage::repositories::get_setting(&conn, "warm_mic")
             .unwrap_or(None)
             .map(|v| v != "false")
@@ -555,7 +563,7 @@ pub async fn end_recording(app: AppHandle, state: &AppState) -> Result<()> {
     };
     if warm {
         let device = {
-            let conn = state.db.lock().unwrap();
+            let conn = state.db.lock_live();
             crate::storage::repositories::get_setting(&conn, "audio_device")
                 .unwrap_or(None)
                 .filter(|s| !s.is_empty())
@@ -576,7 +584,7 @@ pub async fn end_recording(app: AppHandle, state: &AppState) -> Result<()> {
 
 #[tauri::command]
 pub fn is_recording(state: State<'_, AppState>) -> bool {
-    *state.recording.lock().unwrap()
+    *state.recording.lock_live()
 }
 
 /// Open the microphone before it is needed, so the recording that follows
@@ -589,12 +597,12 @@ pub fn is_recording(state: State<'_, AppState>) -> bool {
 #[tauri::command]
 pub fn warm_microphone(state: State<'_, AppState>) {
     let (enabled, device) = {
-        let conn = state.db.lock().unwrap();
+        let conn = state.db.lock_live();
         let get = |k: &str| crate::storage::repositories::get_setting(&conn, k).unwrap_or(None);
         let enabled = get("warm_mic").map(|v| v != "false").unwrap_or(true);
         (enabled, get("audio_device").filter(|s| !s.is_empty()))
     };
-    if !enabled || *state.recording.lock().unwrap() {
+    if !enabled || *state.recording.lock_live() {
         return;
     }
     state.audio.warm(device.as_deref());
@@ -689,7 +697,7 @@ pub(crate) async fn retain_utterances(
             // if it was too long to keep honestly.
             let finished = std::mem::take(&mut current);
             if !finished.is_empty() || overflowed {
-                *slot.lock().unwrap() = (!overflowed).then_some(finished);
+                *slot.lock_live() = (!overflowed).then_some(finished);
             }
             overflowed = false;
         } else if !overflowed {
@@ -824,7 +832,7 @@ pub(crate) fn resolve_delivery(
 /// Read command-mode settings, falling back to the local-first defaults.
 fn command_config(state: &AppState) -> CommandConfig {
     let defaults = CommandConfig::default();
-    let conn = state.db.lock().unwrap();
+    let conn = state.db.lock_live();
     let get = |key: &str| {
         crate::storage::repositories::get_setting(&conn, key)
             .unwrap_or(None)
