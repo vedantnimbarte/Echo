@@ -22,6 +22,35 @@ export interface TranscriptionRecord {
   created_at: string;
 }
 
+/** The non-secret fields a cloud provider can carry beside its API key. */
+export type ProviderField = "model" | "endpoint" | "region";
+
+/**
+ * One row of the backend's provider catalog (`core/asr/catalog.rs`), which is
+ * the single source of truth for which providers exist. The UI renders whatever
+ * this returns rather than keeping its own list — that duplication is exactly
+ * what let providers half-exist before.
+ */
+export interface CloudProvider {
+  id: string;
+  label: string;
+  kind: string;
+  default_endpoint: string;
+  /** Suggested models; may be empty when the provider takes free text. */
+  models: string[];
+  needs_endpoint: boolean;
+  needs_region: boolean;
+  docs_url: string;
+  /** Latency, limits, and other things people otherwise learn the hard way. */
+  note: string;
+  key_set: boolean;
+  model: string;
+  endpoint: string;
+  region: string | null;
+  /** False while a catalog row exists but its provider isn't built yet. */
+  available: boolean;
+}
+
 export interface GpuStatus {
   /** Human-readable detected backend, e.g. "NVIDIA CUDA 12.x". */
   detected: string;
@@ -228,6 +257,15 @@ export const commands = {
 
   removeApiKey: (provider: string) =>
     invoke<void>("remove_api_key", { provider }),
+
+  listCloudProviders: () =>
+    invoke<CloudProvider[]>("list_cloud_providers"),
+
+  setProviderSetting: (provider: string, field: ProviderField, value: string) =>
+    invoke<void>("set_provider_setting", { provider, field, value }),
+
+  testApiKey: (provider: string) =>
+    invoke<string>("test_api_key", { provider }),
 
   getTelemetrySummary: () =>
     invoke<TelemetrySummaryItem[]>("get_telemetry_summary"),

@@ -4,8 +4,10 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
 pub mod binary_manager;
+pub mod catalog;
 pub mod decode_opts;
 pub mod fallback;
+pub mod http;
 pub mod local;
 pub mod manager;
 pub mod model_manager;
@@ -17,8 +19,14 @@ pub mod wav;
 pub mod whisper_cli;
 pub mod whisper_server;
 
+pub mod assemblyai;
+pub mod azure;
 pub mod deepgram;
+pub mod elevenlabs;
+pub mod google;
+pub mod locale;
 pub mod openai;
+pub mod speechmatics;
 
 #[cfg(feature = "whisper")]
 pub mod whisper;

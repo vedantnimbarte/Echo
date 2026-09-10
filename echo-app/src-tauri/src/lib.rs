@@ -250,13 +250,31 @@ pub fn run() {
             };
 
             // Register any cloud ASR providers whose API keys are in the keychain.
-            for provider_name in ["openai", "groq", "deepgram"] {
-                if let Ok(Some(key)) = storage::keychain::get_api_key(provider_name) {
-                    if let Ok(provider) = commands::providers::build_provider(provider_name, key) {
+            // Driven by the catalog so a new provider is one row there, not an
+            // edit here that someone will forget.
+            for spec in core::asr::catalog::PROVIDERS {
+                let Ok(Some(key)) = storage::keychain::get_api_key(spec.id) else {
+                    continue;
+                };
+                match commands::providers::build_provider_with(
+                    &conn,
+                    dictionary.clone(),
+                    prompt_ctx.clone(),
+                    spec.id,
+                    key,
+                ) {
+                    Ok(provider) => {
                         let asr = asr_manager.clone();
                         tauri::async_runtime::block_on(async move {
                             asr.register(provider).await;
                         });
+                    }
+                    // A stored key whose provider will not build — an endpoint
+                    // that was never filled in, a region cleared since — must
+                    // not be silent. Startup continues; the user gets a reason
+                    // in the log instead of a provider that just isn't there.
+                    Err(e) => {
+                        tracing::warn!(provider = spec.id, "Cloud provider not registered: {e}")
                     }
                 }
             }
@@ -482,6 +500,9 @@ pub fn run() {
             commands::providers::set_api_key,
             commands::providers::get_api_key_set,
             commands::providers::remove_api_key,
+            commands::providers::list_cloud_providers,
+            commands::providers::set_provider_setting,
+            commands::providers::test_api_key,
             commands::telemetry::get_telemetry_summary,
             commands::telemetry::clear_telemetry,
             commands::telemetry::set_telemetry_enabled,

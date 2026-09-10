@@ -148,6 +148,10 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
   const activePill: PillSize = pillSize === "small" ? "small" : "large";
 
   /* ---- engine ----------------------------------------------------------- */
+  const { data: cloudProviders } = useQuery({
+    queryKey: ["cloud-providers"],
+    queryFn: commands.listCloudProviders,
+  });
   const { data: provider } = useQuery({
     queryKey: ["setting", "asr_provider"],
     queryFn: () => commands.getSetting("asr_provider"),
@@ -562,10 +566,24 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
           >
             <option value="local">Local Whisper (offline)</option>
             <option value="none">None (no transcription)</option>
-            <option value="openai">OpenAI Whisper API</option>
-            <option value="groq">Groq</option>
-            <option value="deepgram">Deepgram (streaming)</option>
+            {/* Cloud engines come from the backend catalog, not a list kept
+                here — the two used to drift, leaving providers you could give
+                a key to but never select. Only ones with a key stored are
+                offered: picking a keyless provider just fails at the moment
+                you speak. */}
+            {(cloudProviders ?? [])
+              .filter((p) => p.available && p.key_set)
+              .map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
           </select>
+          {(cloudProviders ?? []).every((p) => !p.key_set) && (
+            <p className="text-[11px] text-[var(--ink-muted)]">
+              Add an API key under Cloud API keys below to use a cloud engine.
+            </p>
+          )}
           {setProviderMutation.isError && <Problem>{String(setProviderMutation.error)}</Problem>}
         </Group>
       )}

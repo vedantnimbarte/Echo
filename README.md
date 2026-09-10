@@ -2,8 +2,9 @@
 
 Echo is a privacy-first, cross-platform **voice keyboard**: press a hotkey, speak,
 and Echo transcribes your speech and types it into whatever app is focused.
-Transcription runs **locally** (Whisper) or via **cloud providers** (OpenAI,
-Groq, Deepgram) — your choice.
+Transcription runs **locally** (Whisper) or via **cloud providers** — OpenAI,
+Groq, Deepgram, Mistral, ElevenLabs, AssemblyAI, Speechmatics, Azure, Google, or
+any OpenAI-compatible endpoint you host yourself. Your choice, your keys.
 
 Built with **Rust · Tauri v2 · React 19 · TypeScript · TailwindCSS v4 · SQLite**.
 
@@ -13,7 +14,7 @@ Built with **Rust · Tauri v2 · React 19 · TypeScript · TailwindCSS v4 · SQL
 
 - 🎙️ **Live capture** with device selection and voice-activity detection (VAD)
 - 🧠 **Local transcription** via Whisper (whisper.cpp) — fully offline
-- ☁️ **Cloud transcription** via OpenAI Whisper, Groq, or Deepgram
+- ☁️ **Cloud transcription (BYOK)** via OpenAI, Groq, Deepgram, Mistral, ElevenLabs, AssemblyAI, Speechmatics, Azure or Google — or point Echo at your own OpenAI-compatible endpoint
 - ⌨️ **Text injection** into the focused app — type keystrokes *or* clipboard-paste
 - ↩️ **Undo the last insert** with a global hotkey, or by saying "scratch that"
 - 🔁 **Retry the last utterance** on a stronger model without saying it again
@@ -269,14 +270,53 @@ the app data directory (see [Where things live](#where-things-live)).
 > npm run tauri dev -- --features whisper
 > ```
 
-### Cloud provider (no native build needed)
+### Cloud providers (no native build needed)
 
-In **Settings → Cloud provider API keys**, paste a key and click **Save** (stored
-in your OS keychain), then choose the provider under **ASR Provider**:
+In **Settings → Cloud API keys**, paste a key and click **Save** (stored in your
+OS keychain), then **Test** to check it before you rely on it. The provider then
+appears in the **Speech engine** list.
 
-- OpenAI: https://platform.openai.com/api-keys
-- Groq: https://console.groq.com/keys
-- Deepgram: https://console.deepgram.com/ *(currently HTTP; streaming WS planned)*
+| Provider | Get a key | Notes |
+|---|---|---|
+| **Groq** | [console.groq.com](https://console.groq.com/keys) | Usually the fastest. `whisper-large-v3-turbo` is cheaper still. |
+| **OpenAI** | [platform.openai.com](https://platform.openai.com/api-keys) | `gpt-4o-mini-transcribe` beats `whisper-1` on both price and accuracy. 25 MB per request. |
+| **Deepgram** | [console.deepgram.com](https://console.deepgram.com/) | The only one with **live streaming** — words appear as you speak. |
+| **Mistral** | [console.mistral.ai](https://console.mistral.ai/api-keys) | Voxtral, around $0.18 per hour of audio. |
+| **ElevenLabs** | [elevenlabs.io](https://elevenlabs.io/app/settings/api-keys) | Scribe; strong accuracy across 99 languages. |
+| **AssemblyAI** | [assemblyai.com](https://www.assemblyai.com/app/account) | Uploads and queues — expect a few seconds even for a short phrase. |
+| **Speechmatics** | [portal.speechmatics.com](https://portal.speechmatics.com/) | Strong multilingual. Also queues and polls. |
+| **Azure AI Speech** | [portal.azure.com](https://portal.azure.com/) | Needs your resource **region** (e.g. `westeurope`) as well as a key. |
+| **Google STT** | [console.cloud.google.com](https://console.cloud.google.com/apis/credentials) | Max 60 seconds. Google requires the key in the URL, so it can appear in proxy logs. |
+| **Custom** | — | Any OpenAI-compatible endpoint — see below. |
+
+Each provider has a **Model** field, pre-filled with a sensible default and
+offering suggestions. It's free text, so a model released after your copy of Echo
+still works — type its name.
+
+Your **custom dictionary biases cloud transcription too**, not just the offline
+engine, for the OpenAI-compatible providers.
+
+If a cloud request fails — expired key, dropped wifi, rate limit — Echo retries
+once, then falls back to the offline engine so you don't lose the dictation.
+**Fallback only ever moves toward more privacy:** local never falls back to cloud,
+however it fails.
+
+#### Using a self-hosted or proxied endpoint
+
+Pick **Custom (OpenAI-compatible)**, then fill in the endpoint and model. Anything
+speaking OpenAI's `/audio/transcriptions` API works:
+
+| What | Endpoint |
+|---|---|
+| [Speaches](https://github.com/speaches-ai/speaches) / faster-whisper | `http://localhost:8000/v1` |
+| [LiteLLM](https://github.com/BerriAI/litellm) proxy | `http://localhost:4000/v1` |
+| vLLM | `http://localhost:8000/v1` |
+| OpenRouter | `https://openrouter.ai/api/v1` |
+| Azure OpenAI | `https://<resource>.openai.azure.com/openai/deployments/<deployment>` |
+
+A local endpoint keeps your audio on your own machine or network while still
+skipping the native Whisper build. **Settings → Request log** shows every host
+Echo contacted, so you can confirm where the audio actually went.
 
 ---
 
@@ -489,7 +529,7 @@ See [`plan.md`](plan.md) for the full phase breakdown. Summary:
 | 2 | Local ASR (Whisper) | ✅ (`whisper-cli` default; `--features whisper` optional) |
 | 3 | Text injection (Win/macOS/Linux) | ✅ (type + paste) |
 | 4 | Dictionaries | ✅ |
-| 5 | Cloud ASR (OpenAI/Groq/Deepgram) | ✅ (Deepgram HTTP; WS planned) |
+| 5 | Cloud ASR (9 providers + custom endpoint) | ✅ (Deepgram also streams over WS) |
 | 6 | Telemetry | ✅ |
 | 7 | Plugin system | ✅ |
 | 8 | Packaging | ✅ (offline engine bundled in CI; OS code-signing TBD) |
