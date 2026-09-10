@@ -7,22 +7,35 @@ use crate::error::{EchoError, Result};
 
 /// Catalog of downloadable Whisper models (ggml format, from Hugging Face).
 /// `size_mb` is approximate and used only for display in the UI.
+///
+/// `sha256` is checked before a download is accepted — see
+/// [`crate::core::download::verify`] for what that does and does not prove. The
+/// digests came from Hugging Face's LFS object ids, which are the SHA-256 of the
+/// file content; `ggml-base.en.bin` was additionally hashed on disk to confirm
+/// that the two agree. Re-record them with:
+///
+/// ```text
+/// curl -sIL <url> | grep -i x-linked-etag
+/// ```
 const MODEL_CATALOG: &[ModelSpec] = &[
     // English-only models — smaller and more accurate for English speech.
     ModelSpec {
         name: "tiny.en",
+        sha256: "921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f",
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin",
         size_mb: 75,
         english_only: true,
     },
     ModelSpec {
         name: "base.en",
+        sha256: "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
         size_mb: 142,
         english_only: true,
     },
     ModelSpec {
         name: "small.en",
+        sha256: "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d",
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin",
         size_mb: 466,
         english_only: true,
@@ -30,24 +43,28 @@ const MODEL_CATALOG: &[ModelSpec] = &[
     // Multilingual models.
     ModelSpec {
         name: "tiny",
+        sha256: "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21",
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
         size_mb: 75,
         english_only: false,
     },
     ModelSpec {
         name: "base",
+        sha256: "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
         size_mb: 142,
         english_only: false,
     },
     ModelSpec {
         name: "small",
+        sha256: "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
         size_mb: 466,
         english_only: false,
     },
     ModelSpec {
         name: "medium",
+        sha256: "6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208",
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
         size_mb: 1500,
         english_only: false,
@@ -60,6 +77,8 @@ pub const DEFAULT_MODEL: &str = "base.en";
 struct ModelSpec {
     name: &'static str,
     url: &'static str,
+    /// SHA-256 the downloaded weights must have, lowercase hex.
+    sha256: &'static str,
     size_mb: u32,
     english_only: bool,
 }
@@ -154,7 +173,8 @@ impl ModelManager {
     pub async fn download(&self, name: &str, progress_tx: mpsc::Sender<f32>) -> Result<PathBuf> {
         let spec = Self::spec(name)?;
         let final_path = self.model_path(name);
-        crate::core::download::download_file(spec.url, &final_path, progress_tx).await?;
+        crate::core::download::download_file(spec.url, &final_path, spec.sha256, progress_tx)
+            .await?;
         Ok(final_path)
     }
 }

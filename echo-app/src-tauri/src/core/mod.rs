@@ -10,6 +10,7 @@ pub mod field;
 pub mod format;
 pub mod gpu;
 pub mod injection;
+pub mod lock;
 pub mod modtap;
 pub mod plugins;
 pub mod procinfo;

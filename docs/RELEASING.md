@@ -124,7 +124,31 @@ URL from `Echo_#{version}_universal.dmg`.
 
 The updater keypair proves *"this update came from us."* It does **not** make the
 OS trust the installer — that needs an Apple Developer cert (macOS notarization)
-and an Authenticode cert (Windows). Those are not configured yet, so users see
-the first-run warnings documented in the README's **Installing** section. Wiring
-them is optional for an open-source launch; see
-<https://tauri.app/distribute/sign/>.
+and an Authenticode cert (Windows).
+
+**The workflow already reads the secrets.** `release.yml` passes every variable
+`tauri-action` needs for both platforms, and skips signing when they are unset —
+so adding a certificate is a matter of creating repository secrets, with no
+workflow change and no risk of a half-configured build failing.
+
+| Secret | Platform | What it is |
+|---|---|---|
+| `APPLE_CERTIFICATE` | macOS | base64 of the Developer ID `.p12` |
+| `APPLE_CERTIFICATE_PASSWORD` | macOS | its export password |
+| `APPLE_SIGNING_IDENTITY` | macOS | e.g. `Developer ID Application: Name (TEAMID)` |
+| `APPLE_ID` | macOS | the Apple ID, for notarytool |
+| `APPLE_PASSWORD` | macOS | an **app-specific** password, not the account one |
+| `APPLE_TEAM_ID` | macOS | the 10-character team id |
+| `WINDOWS_CERTIFICATE` | Windows | base64 of the Authenticode `.pfx` |
+| `WINDOWS_CERTIFICATE_PASSWORD` | Windows | its export password |
+
+**Do macOS first.** The two platforms fail differently and the difference
+matters. SmartScreen *warns* and still offers "More info → Run anyway", which an
+open-source project can live with. Gatekeeper *refuses*, offering only "Move to
+Trash" — so on macOS signing is a precondition for being installable at all, and
+it additionally gates a Homebrew cask and a Flathub submission. An Apple
+Developer account is $99/yr; an OV Authenticode certificate is roughly
+$200-600/yr and earns SmartScreen reputation on wall-clock time, which is an
+argument for buying it early rather than urgently.
+
+See <https://tauri.app/distribute/sign/>.

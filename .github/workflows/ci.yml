@@ -120,11 +120,16 @@ jobs:
           cache-dependency-path: |
             echo-app/package-lock.json
             website/package-lock.json
-      - name: App - install & typecheck
+      # Until these existed, 6,000 lines of frontend had no automated check of
+      # any kind while the Rust side had 240 tests — so a panel that threw on
+      # mount was found by whoever installed the release. These are smoke tests:
+      # every Settings page and panel renders against a fake Tauri backend.
+      - name: App - install, typecheck & test
         working-directory: echo-app
         run: |
           npm ci
           npx tsc --noEmit
+          npm test
       - name: Website - install, lint & build
         working-directory: website
         run: |

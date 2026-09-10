@@ -7,6 +7,7 @@ mod platform;
 mod selftest;
 mod state;
 mod storage;
+mod tray;
 
 #[cfg(test)]
 mod pipeline_tests;
@@ -29,6 +30,24 @@ use core::{
 };
 use state::AppState;
 use storage::db;
+
+/// Send panics to `echo.log` as well as to stderr.
+///
+/// A panic inside a background task is otherwise invisible in a packaged build:
+/// the task dies, the user sees dictation stop working, and the only record goes
+/// to a console nobody is watching. Echo has no crash reporter by design, so the
+/// log file is the whole story — this is the difference between "Echo broke" and
+/// a report somebody can act on.
+///
+/// Chained rather than replacing the default hook, so the usual message and any
+/// `RUST_BACKTRACE` output still appear.
+fn log_panics() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        tracing::error!("panic: {info}");
+        default(info);
+    }));
+}
 
 /// Log to stdout *and* to `echo.log` beside the database.
 ///
@@ -101,6 +120,13 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        // No extra argv on an autostart launch: `--selftest`, `--transcribe`
+        // and `--benchmark` all exit without ever showing a window, so passing
+        // one through here would produce a login that silently does nothing.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![]),
+        ))
         .setup(|app| {
             let data_dir = app
                 .path()
@@ -109,6 +135,7 @@ pub fn run() {
 
             std::fs::create_dir_all(&data_dir)?;
             init_tracing(&data_dir);
+            log_panics();
             let db_path = data_dir.join("echo.db");
 
             info!("Opening database at {}", db_path.display());
@@ -135,21 +162,15 @@ pub fn run() {
             // which app is being dictated into and what was just said.
             let prompt_ctx = Arc::new(core::asr::prompt::PromptContext::default());
 
-            // Apply the history retention policy at startup. Doing it here
-            // rather than on a timer means it also runs for someone who just
-            // shortened the window, instead of waiting for the next tick.
-            match storage::repositories::get_setting(&conn, "history_retention_days")
-                .unwrap_or(None)
-                .and_then(|v| v.parse::<i64>().ok())
-            {
-                Some(days) if days > 0 => {
-                    match storage::repositories::trim_history_older_than(&conn, days) {
-                        Ok(0) => {}
-                        Ok(n) => info!("Removed {n} transcript(s) older than {days} days"),
-                        Err(e) => tracing::warn!("History retention pass failed: {e}"),
-                    }
-                }
-                _ => {}
+            // Apply the history retention policy at startup, so it also runs
+            // for someone who just shortened the window. It runs again after
+            // every transcript is written — see `commands::recording` — because
+            // Echo is built to stay open for weeks, and a policy that only
+            // applies on restart is not a policy.
+            match storage::repositories::apply_retention(&conn) {
+                Ok(0) => {}
+                Ok(n) => info!("Removed {n} transcript(s) past the retention window"),
+                Err(e) => tracing::warn!("History retention pass failed: {e}"),
             }
 
             // Default to the local (offline) Whisper engine on first run.
@@ -394,6 +415,15 @@ pub fn run() {
                 benchmark::run(app.handle());
             }
 
+            // The tray is the only persistent route back to Settings and to
+            // Quit, because the pill has no chrome and stays out of the
+            // taskbar. Degraded rather than fatal: a desktop with no status
+            // area can still dictate, and refusing to start would be the
+            // worse trade.
+            if let Err(e) = tray::init(app.handle()) {
+                tracing::warn!("Tray icon unavailable, Echo is reachable only via the pill: {e}");
+            }
+
             // Surface the settings window on first launch so onboarding can run.
             if !onboarding_done {
                 if let Some(win) = app.get_webview_window("main") {
@@ -406,6 +436,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::app::quit,
+            commands::app::get_autostart,
+            commands::app::set_autostart,
             commands::audio::get_audio_devices,
             commands::asr::list_models,
             commands::asr::download_model,

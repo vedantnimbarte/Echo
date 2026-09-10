@@ -81,6 +81,21 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
   const label = (owner: SettingsPage, title: string) =>
     searching ? `${pageMeta(owner).title} · ${title}` : title;
 
+  /* ---- launch at login ---------------------------------------------------- */
+  // The OS owns this registration, so it is read back from the OS rather than
+  // stored in echo.db — a user who removes the login item with their own tools
+  // must not be shown a toggle that still says "on".
+  const { data: autostart = false } = useQuery({
+    queryKey: ["autostart"],
+    queryFn: commands.getAutostart,
+  });
+  const setAutostartMutation = useMutation({
+    mutationFn: commands.setAutostart,
+    // Refetch either way: on failure the OS state is whatever it already was,
+    // and the checkbox has to snap back to it rather than show the click.
+    onSettled: () => qc.invalidateQueries({ queryKey: ["autostart"] }),
+  });
+
   /* ---- recording mode + device ------------------------------------------ */
   const { data: savedMode } = useQuery({
     queryKey: ["setting", "recording_mode"],
@@ -429,6 +444,26 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
               );
             })}
           </div>
+        </Group>
+      )}
+
+      {on("dictation", ["launch", "login", "startup", "start", "boot", "autostart", "auto-start", "background", "tray", "quick access", "notification area", "menu bar"]) && (
+        <Group
+          title={label("dictation", "Starting Echo")}
+          hint="Echo lives in the tray — the notification area on Windows, the menu bar on macOS, the status area on Linux. Click it to reach these settings or to quit. A hotkey can only answer if Echo is already running, so starting it at login is what makes it feel like part of the keyboard rather than an app you remember to open."
+        >
+          <Check
+            checked={autostart}
+            onChange={(v) => setAutostartMutation.mutate(v)}
+          >
+            Start Echo when I log in
+          </Check>
+          {setAutostartMutation.isError && (
+            <Problem>
+              {(setAutostartMutation.error as Error).message} — on a managed or
+              locked-down machine this is set by whoever administers it.
+            </Problem>
+          )}
         </Group>
       )}
 

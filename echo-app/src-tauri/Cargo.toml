@@ -29,7 +29,9 @@ whisper = ["dep:whisper-rs"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# `tray-icon` gates `tauri::tray`: the status-area icon is the only persistent
+# way back into Echo (see src/tray.rs).
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-notification = "2"
@@ -40,6 +42,10 @@ tauri-plugin-dialog = "2"
 # see docs/RELEASING.md.
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+# Launch at login. The OS keeps the registration (a registry Run key, a macOS
+# LaunchAgent, an XDG .desktop file), so the plugin is queried for state rather
+# than a setting being mirrored into `echo.db` where the two could disagree.
+tauri-plugin-autostart = "2"
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -30,6 +30,8 @@ Built with **Rust · Tauri v2 · React 19 · TypeScript · TailwindCSS v4 · SQL
 - 🗂️ **Per-app profiles** — override insert behaviour and dictionary scope per application
 - 🌍 **Language selection** — pin a dictation language or let Whisper auto-detect
 - ⚡ **Global hotkey** to toggle recording from anywhere
+- 📌 **Lives in the tray** — notification area on Windows, menu bar on macOS, status area on Linux; click it for Settings or to quit
+- 🚀 **Starts at login** (opt-in) — a hotkey can only answer if Echo is already running
 - 🗣️ **Wake word** (opt-in) — say a phrase to start dictating hands-free, matched on-device
 - 🤖 **Command mode** (opt-in) — say a trigger word to rewrite the selection via a local LLM
 - 🔄 **Auto-update** from GitHub Releases (signed)
@@ -85,6 +87,23 @@ box**, so treat it as a seatbelt of unknown strength rather than a guarantee.
 On Linux it does nothing at all: the question needs AT-SPI over D-Bus, and
 under Wayland usually not even that answers. Settings says so plainly.
 
+### Support tiers — what has actually been run
+
+Echo's CI compiles and tests every platform, and the Rust suite plus a real
+startup self-test run on Linux and macOS runners. That is not the same as
+somebody dictating into twenty applications, so here is the honest state:
+
+| Platform | Tier | What that means |
+|---|---|---|
+| **Windows x64** | Tested | Developed and used here. Text injection, the password-field guard, the tray, offline Whisper and the GPU pack have all been exercised by hand. |
+| **macOS arm64** | Community | Compiles, unit-tests and self-tests in CI on a macOS runner, but has not been driven by hand. Accessibility and Automation permissions, and the password-field guard, are unverified against real applications. Bug reports welcome and expected. |
+| **macOS x86_64** | Unsupported | No build exists. `ort` ships no prebuilt ONNX Runtime for Intel macOS, so Silero VAD and the wake word cannot link. See [docs/RELEASING.md](docs/RELEASING.md). |
+| **Linux X11** | Community | Needs `xdotool`. No password-field detection on any Linux — the question needs AT-SPI over D-Bus. |
+| **Linux Wayland** | Degraded | Needs `ydotool` plus the `ydotoold` daemon, and some compositors refuse synthetic input outright. Per-app profiles do not work: no Wayland protocol reports which window is focused. |
+
+If you use Echo on a Community-tier platform and it works, saying so is a
+genuinely useful contribution — the gap is verification, not code.
+
 ### Per-OS notes
 
 - **Windows** — needs the WebView2 runtime (preinstalled on Win11; on Win10 grab
@@ -94,6 +113,11 @@ under Wayland usually not even that answers. Settings says so plainly.
   Intel Mac would have to compile ONNX Runtime from source. Grant **Microphone**
   and **Accessibility** permissions on first run, or Echo can hear you but can't
   type.
+- **Tray icon** — Windows puts it in the notification area (possibly behind the
+  overflow arrow, where you can drag it out), macOS in the menu bar, Linux in
+  whatever status area the desktop provides. A few minimal Linux desktops have
+  none at all; Echo logs a warning and runs without it, reachable through the
+  pill and the global hotkey.
 - **Linux** — the AppImage needs FUSE (`sudo apt install libfuse2` on
   Debian/Ubuntu), and text injection needs `xdotool` (X11) or `ydotool`
   (Wayland). A `.deb` is also attached to each release.
@@ -205,8 +229,10 @@ npm run tauri dev
 
 This launches the desktop app in development mode. **The first Rust build
 compiles all dependencies and can take several minutes**; subsequent runs are
-incremental and fast. Two windows exist: a floating **pill** (always-on-top
-recorder) and the **Settings** window.
+incremental and fast. Three surfaces exist: a floating **pill** (always-on-top
+recorder), the **Settings** window, and a **tray icon**. The pill has no window
+chrome and stays out of the taskbar, so the tray is how you reach Settings or
+quit once the pill is dismissed.
 
 ### 4. First-run configuration
 
@@ -307,6 +333,22 @@ Default is **`Ctrl/Cmd + Shift + Space`** to toggle recording. Change it in
 `CommandOrControl+Alt+E`). If the hotkey doesn't fire, another app may already
 own that combination — pick a different one.
 
+## Tray icon, and starting at login
+
+Echo runs in the background, so it needs somewhere to live. The tray icon —
+notification area on Windows, menu bar on macOS, status area on Linux — opens a
+menu with **Settings…** and **Quit Echo**. That is the only persistent way back
+in: the pill has no window chrome and stays out of the taskbar, and Settings
+hides itself once onboarding is done.
+
+A hotkey can only answer if Echo is already running, so **Settings → Dictation →
+Starting Echo** has *Start Echo when I log in*. The login item is registered
+with your OS rather than recorded in `echo.db` — a registry `Run` key on
+Windows, a LaunchAgent on macOS, an XDG autostart entry on Linux — and the
+checkbox reads that back every time, so removing the entry with your own tools
+switches the toggle off too. On a machine where policy forbids login items,
+Settings shows the error it got rather than pretending it worked.
+
 ---
 
 ## Debugging & troubleshooting
@@ -370,6 +412,8 @@ cargo clippy
 | **Text doesn't appear in other apps** | macOS: grant Accessibility. Linux: install `xdotool` (X11) or run `ydotoold` (Wayland). Try switching **Insert method** between Type and Paste. |
 | **Paste inserts into the wrong app / not at all** | The focused app may use a non-standard paste shortcut, or focus changed during the insert delay. Switch to **Type keystrokes**, or raise **Insert delay (ms)**. |
 | **Hotkey doesn't toggle recording** | Another app owns the shortcut. Change it in Settings → Global hotkey. |
+| **Can't find Echo / no way to quit** | Use the tray icon — on Windows it may be hidden behind the notification-area overflow arrow. If your Linux desktop has no status area, check `echo.log` for a tray warning; the global hotkey still works. |
+| **Launch at login won't stick** | On a managed machine the login item can be blocked by policy — Settings reports the error it got. Echo reads the state back from the OS, so removing the entry with your own tools turns the toggle off, as it should. |
 | **Model download stalls** | Network/proxy issue; delete the partial file in `models/` and retry. |
 | **`libclang` / cmake errors at build** | Only the optional `--features whisper` path needs those — omit the feature to use the default `whisper-cli` engine. |
 

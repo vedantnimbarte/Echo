@@ -1,3 +1,5 @@
+use std::sync::{Mutex, MutexGuard};
+
 use crate::error::{EchoError, Result};
 
 /// Platform-agnostic text injection trait.
@@ -277,31 +279,150 @@ fn is_unspaced_script(c: char) -> bool {
     )
 }
 
-/// Clipboard-paste injection: save the current clipboard, set it to `text`,
-/// send the paste shortcut, then restore the original clipboard.
+/// The richest form of the clipboard's prior contents that we managed to read.
+///
+/// An enum rather than a struct of `Option`s because putting it back is a single
+/// `set` operation — each of arboard's setters replaces the clipboard wholesale —
+/// so exactly one of these can be restored, and saying so in the type stops the
+/// restore from pretending otherwise.
+enum Saved {
+    /// HTML with its plain-text alternative, so formatting survives the trip.
+    Html { html: String, text: String },
+    Text(String),
+    Image(arboard::ImageData<'static>),
+    Files(Vec<std::path::PathBuf>),
+    /// Either genuinely empty, or holding a format arboard cannot represent.
+    Unknown,
+}
+
+/// The clipboard, borrowed — whatever was on it goes back when this is dropped.
+///
+/// Echo uses the clipboard as a transport: paste injection puts a transcript on
+/// it, and reading a selection puts a sentinel on it. Both borrow something that
+/// belongs to the user, and before this existed both could fail to give it back.
+///
+/// 1. **Only text was saved.** `get_text` fails on an image, a screenshot or a
+///    copied file, so the restore was skipped and the user's content was simply
+///    replaced by a transcript — no error, nothing pointing at Echo. An empty
+///    clipboard took the same path, which left the transcript sitting there for
+///    whatever they pasted into next.
+/// 2. **The restore was a statement, not a guarantee.** It came after a `?` on
+///    the shortcut send, so a failed paste returned early with Echo's data still
+///    on the clipboard. That failure is routine rather than exotic: Wayland
+///    without `ydotoold`, macOS before Accessibility is granted. For
+///    `copy_selection` what was left behind was the internal sentinel.
+///
+/// `Drop` answers both at once, and on a panic too, which is why the restore
+/// lives here rather than at the end of each function.
+struct Borrowed {
+    /// Held for the whole borrow, so no other thread can open the clipboard
+    /// between the snapshot and the restore. See [`CLIPBOARD`].
+    _lock: MutexGuard<'static, ()>,
+    clipboard: arboard::Clipboard,
+    saved: Saved,
+}
+
+/// Serialises clipboard access across threads.
+///
+/// Not defensive programming. Two threads opening the clipboard at once is a
+/// **heap corruption** crash on Windows — `STATUS_HEAP_CORRUPTION`, reproduced
+/// by letting this module's clipboard tests run in parallel. The Win32 clipboard
+/// is a single global object with no concurrency story, and `clipboard-win`
+/// opens a process-wide handle to it.
+///
+/// Echo can arrive here from two directions — delivering a transcript, and
+/// reading a selection for command mode — and a second utterance can begin while
+/// the first is still being delivered. So the lock sits here, at the one
+/// chokepoint both paths now route through, rather than being repeated at each
+/// call site where the next one added would forget it.
+static CLIPBOARD: Mutex<()> = Mutex::new(());
+
+impl Borrowed {
+    /// Take the clipboard lock, open the clipboard, and snapshot it.
+    fn take() -> Result<Self> {
+        // Poisoning is recovered from rather than propagated: the guarded value
+        // is `()`, so a thread that panicked holding this broke no invariant,
+        // and refusing every later paste because of it would turn one failed
+        // dictation into a permanently broken clipboard.
+        let lock = CLIPBOARD.lock().unwrap_or_else(|e| e.into_inner());
+        let mut clipboard = arboard::Clipboard::new()
+            .map_err(|e| EchoError::Injection(format!("clipboard unavailable: {e}")))?;
+        let saved = snapshot(&mut clipboard);
+        Ok(Self { _lock: lock, clipboard, saved })
+    }
+}
+
+/// Read the clipboard into the richest form we can put back.
+///
+/// Ordered by cost as much as by priority. Text is both the common case and the
+/// cheap one; an image is read only when there is no text to find, because a
+/// screenshot can be tens of megabytes and paying that on every dictation — to
+/// discover that a sentence was on the clipboard — would be a poor trade.
+fn snapshot(clipboard: &mut arboard::Clipboard) -> Saved {
+    if let Ok(text) = clipboard.get_text() {
+        // HTML rides along with text wherever it exists. Restoring the plain
+        // text alone is exactly how formatting copied out of Word or a browser
+        // quietly disappears.
+        return match clipboard.get().html() {
+            Ok(html) => Saved::Html { html, text },
+            Err(_) => Saved::Text(text),
+        };
+    }
+    if let Ok(image) = clipboard.get_image() {
+        return Saved::Image(image);
+    }
+    match clipboard.get().file_list() {
+        Ok(files) if !files.is_empty() => Saved::Files(files),
+        _ => Saved::Unknown,
+    }
+}
+
+impl Drop for Borrowed {
+    fn drop(&mut self) {
+        // Best effort throughout: a clipboard that refuses the restore is not
+        // something a finished dictation can be failed over, and `Drop` has
+        // nowhere to report it to anyway.
+        let _ = match &self.saved {
+            Saved::Html { html, text } => {
+                self.clipboard.set().html(html.as_str(), Some(text.as_str()))
+            }
+            Saved::Text(text) => self.clipboard.set_text(text.clone()),
+            Saved::Image(image) => self.clipboard.set_image(image.clone()),
+            Saved::Files(files) => self.clipboard.set().file_list(files),
+            // Nothing readable was there, so leave nothing of ours behind.
+            // Clearing beats leaving the transcript: the alternative is a user
+            // pasting their own dictation into the next document without
+            // knowing where it came from.
+            //
+            // ponytail: this also clears a format arboard cannot represent — an
+            // Excel cell range carrying no text fallback, say. Such formats
+            // nearly always ship text or HTML alongside, so the case is rare;
+            // telling "empty" apart from "unreadable" needs per-platform format
+            // enumeration, which is a lot of code for that margin.
+            Saved::Unknown => self.clipboard.clear(),
+        };
+    }
+}
+
+/// Clipboard-paste injection: borrow the clipboard, set it to `text`, send the
+/// paste shortcut, and let [`Borrowed`] put the user's content back.
 fn paste_text(inj: &dyn TextInjector, text: &str, settle_ms: u64) -> Result<()> {
     if text.is_empty() {
         return Ok(());
     }
 
-    let mut clipboard = arboard::Clipboard::new()
-        .map_err(|e| EchoError::Injection(format!("clipboard unavailable: {e}")))?;
+    let mut borrowed = Borrowed::take()?;
 
-    // Best-effort save of the prior clipboard so we can put it back afterwards.
-    let prior = clipboard.get_text().ok();
-
-    clipboard
+    borrowed
+        .clipboard
         .set_text(text.to_owned())
         .map_err(|e| EchoError::Injection(format!("failed to set clipboard: {e}")))?;
 
     inj.send_paste()?;
 
     std::thread::sleep(std::time::Duration::from_millis(settle_ms.max(1)));
-
-    if let Some(prev) = prior {
-        let _ = clipboard.set_text(prev);
-    }
     Ok(())
+    // `borrowed` restores here — and on either `?` above.
 }
 
 /// Read the focused app's current selection via the clipboard, restoring the
@@ -313,23 +434,18 @@ fn paste_text(inj: &dyn TextInjector, text: &str, settle_ms: u64) -> Result<()> 
 pub fn copy_selection(inj: &dyn TextInjector) -> Result<Option<String>> {
     const SENTINEL: &str = "\u{0}echo-no-selection\u{0}";
 
-    let mut clipboard = arboard::Clipboard::new()
-        .map_err(|e| EchoError::Injection(format!("clipboard unavailable: {e}")))?;
-
-    let prior = clipboard.get_text().ok();
-    let _ = clipboard.set_text(SENTINEL);
+    let mut borrowed = Borrowed::take()?;
+    let _ = borrowed.clipboard.set_text(SENTINEL);
 
     inj.send_copy()?;
 
     // Poll rather than sleep: a fast app answers in ~20ms and a slow one gets
     // the full budget, instead of everyone paying the same fixed wait and slow
     // apps still losing the race.
-    let copied = poll_clipboard_change(&mut clipboard, SENTINEL);
+    let copied = poll_clipboard_change(&mut borrowed.clipboard, SENTINEL);
 
-    if let Some(prev) = prior {
-        let _ = clipboard.set_text(prev);
-    }
-
+    // `borrowed` restores on the way out, including via the `?` above — the path
+    // that used to leave SENTINEL sitting on the user's clipboard.
     Ok(match copied {
         Some(text) if text != SENTINEL && !text.is_empty() => Some(text),
         _ => None,
@@ -392,8 +508,68 @@ mod tests {
         }
     }
 
+    /// An injector whose paste shortcut always fails — Wayland without
+    /// `ydotoold`, or macOS before Accessibility is granted.
+    struct FailingPaste;
+    impl TextInjector for FailingPaste {
+        fn inject_text(&self, _: &str) -> Result<()> {
+            Ok(())
+        }
+        fn send_paste(&self) -> Result<()> {
+            Err(EchoError::Injection("no paste here".into()))
+        }
+        fn send_copy(&self) -> Result<()> {
+            Err(EchoError::Injection("no copy here".into()))
+        }
+        fn send_undo(&self) -> Result<()> {
+            Ok(())
+        }
+        fn send_backspace(&self, _: usize) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    /// The defect this guards against: the restore used to sit *after* a `?` on
+    /// the shortcut send, so a failed shortcut returned early and left Echo's own
+    /// data on the user's clipboard — the transcript for a paste, and the internal
+    /// `SENTINEL` for a selection read.
+    ///
+    /// One test for both paths on purpose. The clipboard is a single global OS
+    /// object, and the setup and assertions here run outside [`CLIPBOARD`], so
+    /// splitting this in two would let the halves race each other.
+    ///
+    /// Needs a real clipboard, which a headless CI container does not have, so it
+    /// returns rather than fails there instead of reporting a problem that has
+    /// nothing to do with this code.
+    #[test]
+    fn a_failed_shortcut_still_gives_the_clipboard_back() {
+        const MINE: &str = "something the user copied themselves";
+
+        let Ok(mut cb) = arboard::Clipboard::new() else { return };
+        if cb.set_text(MINE.to_owned()).is_err() {
+            return;
+        }
+        drop(cb);
+
+        let pasted = paste_text(&FailingPaste, "a dictated sentence", 1);
+        assert!(pasted.is_err(), "a paste that could not be sent must be reported");
+        assert_eq!(current_text().as_deref(), Some(MINE), "a failed paste kept what it borrowed");
+
+        let copied = copy_selection(&FailingPaste);
+        assert!(copied.is_err(), "a copy that could not be sent must be reported");
+        let now = current_text().unwrap_or_default();
+        assert!(
+            !now.contains("echo-no-selection"),
+            "the internal sentinel escaped onto the clipboard: {now:?}"
+        );
+        assert_eq!(now, MINE, "a failed copy did not restore the user's text");
+    }
+
+    fn current_text() -> Option<String> {
+        arboard::Clipboard::new().ok()?.get_text().ok()
+    }
+
     // `deliver(_, _, false)` types keystrokes and never sends a paste shortcut.
-    // (The paste branch touches the real clipboard, so it needs device testing.)
 
     /// A transcript beginning with a dash must be typed, not parsed as options.
     /// This is the reason `--` is in the argument list at all.

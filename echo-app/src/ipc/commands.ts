@@ -262,6 +262,12 @@ export const commands = {
 
   quit: () => invoke<void>("quit"),
 
+  /** Read from the OS each time, not from echo.db — the registration is not ours. */
+  getAutostart: () => invoke<boolean>("get_autostart"),
+
+  setAutostart: (enabled: boolean) =>
+    invoke<void>("set_autostart", { enabled }),
+
   listWakeWords: () => invoke<WakePhraseInfo[]>("list_wake_words"),
 
   downloadWakeModel: (name: string) =>

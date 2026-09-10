@@ -21,6 +21,42 @@ use super::models::{AppProfile, DictionaryEntry, TranscriptionRecord};
 use super::repositories as repo;
 use rusqlite::Connection;
 
+/// The defect this covers: retention ran only in the startup hook, so an app
+/// left open for six weeks kept six weeks of transcripts under a 30-day policy.
+/// `apply_retention` is now what both callers use, and it has to read the
+/// setting itself — including the case where nobody ever set one.
+#[test]
+fn retention_reads_its_window_from_settings() {
+    let conn = open();
+    let old = TranscriptionRecord {
+        id: None,
+        text: "said a long time ago".into(),
+        language: None,
+        provider: "test".into(),
+        created_at: String::new(),
+    };
+    repo::insert_history(&conn, &old).expect("insert");
+    conn.execute(
+        "UPDATE transcription_history SET created_at = datetime('now', '-40 days')",
+        [],
+    )
+    .expect("backdate");
+
+    // No setting at all means keep everything: retention is opt-in, and a fresh
+    // install must not start deleting transcripts nobody asked it to.
+    assert_eq!(repo::apply_retention(&conn).expect("no setting"), 0);
+    assert_eq!(repo::list_history(&conn, 10).expect("list").len(), 1);
+
+    // Nor may a nonsense value wipe the history.
+    repo::set_setting(&conn, "history_retention_days", "not a number").expect("set");
+    assert_eq!(repo::apply_retention(&conn).expect("bad setting"), 0);
+    assert_eq!(repo::list_history(&conn, 10).expect("list").len(), 1);
+
+    repo::set_setting(&conn, "history_retention_days", "30").expect("set");
+    assert_eq!(repo::apply_retention(&conn).expect("trim"), 1);
+    assert!(repo::list_history(&conn, 10).expect("list").is_empty());
+}
+
 fn open() -> Connection {
     db::open(Path::new(":memory:")).expect("in-memory database")
 }
