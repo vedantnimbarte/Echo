@@ -15,7 +15,7 @@
 | 2 | Local ASR (Whisper) | ✅ Code complete (build needs libclang) |
 | 3 | Text Injection | ✅ All platforms (macOS/Linux unverified on Win host) |
 | 4 | Dictionaries | ✅ Complete |
-| 5 | Cloud ASR Providers | ✅ Complete (Deepgram streams over WebSocket) |
+| 5 | Cloud ASR Providers | ✅ Complete (superseded by Phase 16) |
 | 6 | Telemetry | ✅ Complete |
 | 7 | Plugin System | ✅ Complete (echo-sdk crate + export_plugin! macro) |
 | 8 | Packaging | ✅ Config + CI (signing certs TBD) |
@@ -26,6 +26,7 @@
 | 13 | Measurement & languages | ✅ 9.2 measured; punctuation in 7 languages |
 | 14 | Plugin integrity | ✅ Fingerprinted at install, refused if changed (not a sandbox) |
 | 15 | Accuracy & auto-editing | ✅ Filler removal, fast partial model, stats, language warning |
+| 16 | Cloud BYOK, widened | ✅ Ten providers + custom endpoint, one catalog, two bugs fixed |
 
 ---
 
@@ -495,7 +496,18 @@ let processed = state.dictionary.read().await.process(&segment.text);
 
 ## Phase 5 — Cloud ASR Providers ✅
 
-**Done:** OpenAI + Groq via shared `WhisperApiProvider` (5.1, 5.2), Deepgram via the pre-recorded `/v1/listen` HTTP API (5.3 — WebSocket streaming deferred), `keychain.rs` for OS-keychain key storage (5.4), `commands/providers.rs` with `set_api_key`/`get_api_key_set`/`remove_api_key` + startup registration (5.5), and the `CloudProviders` settings UI (5.6). Shared WAV encoder (`hound`) and a default buffered `transcribe_stream` on the trait support all batch providers.
+**Done:** OpenAI + Groq via shared `WhisperApiProvider` (5.1, 5.2), Deepgram over
+both the pre-recorded `/v1/listen` HTTP API and the realtime WebSocket (5.3),
+`keychain.rs` for OS-keychain key storage (5.4), `commands/providers.rs` with
+`set_api_key`/`get_api_key_set`/`remove_api_key` + startup registration (5.5),
+and the `CloudProviders` settings UI (5.6). Shared WAV encoder (`hound`) and a
+default buffered `transcribe_stream` on the trait support all batch providers.
+
+> **Superseded by [Phase 16](#phase-16--cloud-byok-widened-).** The three-provider
+> `match` and the hardcoded lists described below were replaced by a catalog, and
+> the provider count went from three to ten plus a custom endpoint. The sections
+> that follow record what was built at the time; read Phase 16 for what the code
+> does now.
 
 ### 5.1 OpenAI Whisper API
 
@@ -1497,6 +1509,194 @@ marketing unless it says what it assumed.
 
 ---
 
+## Phase 16 — Cloud BYOK, Widened ✅
+
+Prompted by a request to "add cloud provider support", which Echo already had.
+The premise was wrong and the work underneath it was not: cloud shipped for three
+providers, could not be pointed anywhere else, and had two failure paths that
+were quietly broken.
+
+**The finding that reframed the phase.** Reading before building turned up a bug
+worth more than the feature. Both cloud providers built their HTTP client with
+`reqwest::Client::new()`, which carries no timeout at all. A provider that
+accepts the connection and then goes quiet leaves the future pending forever, so
+`transcribe` never returns an `Err`, so `FallbackProvider` never sees a failure
+and never diverts the audio to the offline engine. From the user's side the
+hotkey simply stops working — nothing on screen, nothing in the log, and a
+working local model sitting idle. The fallback was not weak here; it was
+unreachable.
+
+### 16.1 One shared client, with a ceiling on hanging
+
+`core/asr/http.rs` holds a single `reqwest::Client` behind a `OnceLock`, with a
+30-second request timeout and a 5-second connect timeout. The two are separate
+because they fail for different reasons: no connection in five seconds means
+unreachable — wrong endpoint, dead proxy, no network — and there is no point
+spending the other twenty-five discovering that.
+
+The request timeout is deliberately generous. It is **a ceiling on a hang, not a
+latency target**: a cloud decode of a long utterance can legitimately take a
+while, and cutting off a request that would have succeeded is a worse failure
+than waiting for it.
+
+One retry on 429 and 5xx, and only those — a 4xx is a bad key, and repeating it
+just delays the fallback. One retry rather than a backoff ladder, because
+somebody is waiting for their words to appear and the offline engine is the
+better answer after that. A ladder of escalating sleeps would only make a failing
+provider feel broken for longer.
+
+### 16.2 The Deepgram URL that had eight spaces in it
+
+`stream_url` was split across two source lines without a continuation, leaving
+eight literal spaces inside the query string. `smart_format` got a padded value
+and `interim_results` rode along inside it — so live streaming, on the one
+provider that supports it, had quietly never turned on.
+
+The test that now guards it asserts the property rather than the string: no URL
+this module builds contains whitespace. A test pinning the exact URL would have
+passed with the spaces in it.
+
+### 16.3 One catalog, replacing four lists
+
+The provider list lived in four places — the boot loop in `lib.rs`, the `match`
+in `commands/providers.rs`, the key-entry array in `CloudProviders.tsx`, and the
+engine `<select>` in `SettingsPanel.tsx`. Adding seven providers that way is
+twenty-eight edits and four chances to leave one half-existing: a provider you
+can give a key to but never select, or select but never configure.
+
+`core/asr/catalog.rs` is now the only declaration. The frontend reads it too,
+through `list_cloud_providers`, so the arrays are gone rather than duplicated.
+A new provider is one row, plus a file only if its request shape is new.
+
+The catalog carries a `note` per provider, and it is load-bearing rather than
+decorative: it is where the things people otherwise learn the hard way get said
+out loud — latency, hard limits, where the key travels.
+
+### 16.4 Providers grouped by request shape, not by vendor
+
+The grouping is the design, because it is what decides whether a vendor costs
+code:
+
+| Kind | Providers | Cost |
+|---|---|---|
+| `OpenAiCompatible` | OpenAI, Groq, Mistral Voxtral, **Custom** | four catalog rows, no new code |
+| `Deepgram` | Deepgram | already existed |
+| `ElevenLabs` / `AzureSpeech` | one each | one file each |
+| `AssemblyAi` / `Speechmatics` | one each | one file each + a shared poll helper |
+| `GoogleStt` | Google | one file |
+
+`WhisperApiProvider` was **already** parameterised by endpoint and model — its
+constructor was simply private. Making it public is what turned "add three more
+vendors" into three rows in a table, and it is why the custom endpoint cost
+nothing extra.
+
+ElevenLabs and Azure were deliberately *not* folded into it. They differ in three
+places each (auth header, field names, response shape), and generalising for two
+callers would mean three conditionals in a struct that currently has none. Two
+small files beat one configurable one.
+
+### 16.5 The custom endpoint, which is the actual point
+
+`custom` is a catalog row with `needs_endpoint: true`. It reaches LiteLLM,
+OpenRouter, vLLM, Azure OpenAI, Speaches, faster-whisper servers — and every
+OpenAI-compatible service that does not exist yet.
+
+A **local** endpoint is the interesting case: it keeps the audio on your own
+machine or network while still skipping the native Whisper build, which is the
+one real friction in running Echo offline.
+
+### 16.6 Two providers that are honest about being slow
+
+AssemblyAI uploads bytes, creates a job, then polls. Speechmatics submits a job,
+then polls. Three round trips for a four-second phrase.
+
+These are good APIs built for batch files, and a poor fit for a voice keyboard
+where latency *is* the product. They ship because the accuracy is good and people
+ask for them, but the catalog note says so plainly — the alternative is somebody
+choosing one and concluding Echo is slow.
+
+`http::poll_until` is shared between them so they cannot drift, with a deadline
+because a stalled queue would otherwise hold the dictation open until the app
+closes. The state parsing is where the real risk was: a job reporting
+`processing` has no text yet, and reading that as an empty transcript would drop
+the utterance on the first poll. Both providers have a test for exactly that
+confusion.
+
+### 16.7 Google, and three things it does differently
+
+- **60-second cap**, enforced before upload rather than by Google. Left to
+  Google, the request is truncated and comes back as a confident partial
+  sentence that reads as a complete one — the worst kind of failure, because
+  nothing about it looks wrong.
+- **The key rides in the query string.** That is Google's design for REST
+  API-key auth, not a choice made here, but it means the key can land in the logs
+  of any proxy in between. `core::egress` records hosts only, so Echo itself
+  never writes it down.
+- **Base64 audio inline**, which is the one new dependency in this phase.
+
+### 16.8 Storage: keys in the keychain, choices in settings
+
+The keychain keeps doing one job. Model, endpoint and region are **not secrets**,
+so they live in the ordinary settings table under `cloud_{id}_{field}`. Putting
+them in the keychain would make them invisible to the user and unexportable for
+no benefit, while turning the keychain entry into a blob that has to be parsed
+before a key can be read.
+
+The subtle case is an emptied field. Clearing a text input writes `""`, and an
+empty endpoint that shadowed the catalog default would send every request to
+`/audio/transcriptions` with no host. `resolve_config` treats blank as unset and
+falls back — with a test, because the failure is invisible until someone speaks.
+
+### 16.9 Two gaps closed while the code was open
+
+**The custom dictionary biased only the offline decoder.** Adding a name to the
+dictionary helped local users and silently did nothing for cloud ones, which is
+worse than not having the feature — the setting exists, appears to apply, and
+does not. `whisper_cli::initial_prompt` was already `pub(super)`, so the
+OpenAI-compatible path now sends the same prompt it always built for local.
+
+**Azure and Google want BCP-47, not the bare codes Whisper takes.** Azure rejects
+`en` outright; Google accepts it and transcribes as US English whatever was
+actually said. Neither failure explains itself, so `core/asr/locale.rs` does the
+expansion once, with the guess spelled out: `pt` becomes `pt-BR` because Brazil
+has far more speakers, not because Portugal was considered and rejected. A code
+the table does not know passes through untouched rather than being doubled —
+`ca` to `ca-CA` is wrong far more often than leaving it alone.
+
+### 16.10 UI: free text, and a key you can test
+
+The model field is **free text with a `<datalist>` of suggestions**, not a closed
+dropdown. Providers ship model names faster than Echo ships releases, and a
+self-hosted endpoint's model is whatever the user called it. A dropdown would
+make Echo the thing standing between a user and a model that already works.
+
+A **Test** button sends one second of silence through the real provider, so a
+typo'd key is caught at entry rather than mid-sentence with the error buried in a
+log. Empty text back is a pass — the provider answered, which is the only
+question being asked.
+
+Only providers with a stored key appear in the engine picker. Offering one
+without a key can only fail at the moment somebody speaks.
+
+### 16.11 What the tests do and do not cover
+
+47 new tests, none of which touch the network — parsing, URL building, config
+resolution, poll-state handling, locale expansion. They follow the habit the rest
+of the ASR module already had: test the pure functions, do not mock HTTP.
+
+The named tests target failures that would otherwise be invisible in production:
+a queued job mistaken for silence, punctuation joined with a leading space,
+samples past full scale wrapping to a crackle instead of clipping, audio past
+Google's cap uploaded anyway.
+
+**The network path is verified by the Test button, and that is manual on
+purpose.** No test here proves that ElevenLabs, Azure, AssemblyAI, Speechmatics
+or Google actually answer — those were built from vendor documentation, and the
+first real key pasted is what proves each path. The three shipped before this
+phase (OpenAI, Groq, Deepgram) are the only ones with a track record.
+
+---
+
 ## Key Architectural Rules (do not violate)
 
 1. `AppState.db` is `Mutex<Connection>` — never share `Connection` across threads.
@@ -1557,6 +1757,9 @@ tokio-tungstenite = "0.26"
 
 # To add in Phase 7 (plugins)
 libloading = "0.8"
+
+# To add in Phase 16 (Google STT sends audio base64-encoded inline)
+base64 = "0.22"
 ```
 
 ---

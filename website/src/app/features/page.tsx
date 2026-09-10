@@ -62,9 +62,19 @@ const GROUPS: Group[] = [
         body: "Runs on your CPU with no account and no connection. Pick a model size that fits your machine — tiny for instant, larger for accuracy — and Echo downloads it once.",
       },
       {
-        label: "openai · groq · deepgram",
+        label: "ten providers · byok",
         title: "Bring your own key",
-        body: "Prefer a hosted model? Add a key and Echo routes to it. The key goes into the OS keychain and is never handed back to the interface that stored it. Echo adds no markup and takes no cut.",
+        body: "Prefer a hosted model? Add a key and Echo routes to it — OpenAI, Groq, Deepgram, Mistral, ElevenLabs, AssemblyAI, Speechmatics, Azure or Google. The key goes into the OS keychain and is never handed back to the interface that stored it. Echo adds no markup and takes no cut.",
+      },
+      {
+        label: "openai-compatible",
+        title: "Or your own endpoint",
+        body: "Point Echo at anything speaking the OpenAI transcription API: a LiteLLM proxy, OpenRouter, vLLM, or a faster-whisper server on your own machine. A local one keeps the audio on your network and still saves you compiling Whisper.",
+      },
+      {
+        label: "tested before you trust it",
+        title: "Keys you can check",
+        body: "One button sends a second of silence and tells you whether the key, endpoint and model actually work together — so a typo surfaces when you paste it, not halfway through a sentence. If a cloud request fails anyway, Echo falls back to the offline engine rather than losing what you said.",
       },
       {
         label: "autodetect or pinned",

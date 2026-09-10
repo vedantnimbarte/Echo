@@ -14,7 +14,11 @@ Built with **Rust · Tauri v2 · React 19 · TypeScript · TailwindCSS v4 · SQL
 
 - 🎙️ **Live capture** with device selection and voice-activity detection (VAD)
 - 🧠 **Local transcription** via Whisper (whisper.cpp) — fully offline
-- ☁️ **Cloud transcription (BYOK)** via OpenAI, Groq, Deepgram, Mistral, ElevenLabs, AssemblyAI, Speechmatics, Azure or Google — or point Echo at your own OpenAI-compatible endpoint
+- ☁️ **Cloud transcription (BYOK)** — ten providers: OpenAI, Groq, Deepgram, Mistral, ElevenLabs, AssemblyAI, Speechmatics, Azure and Google
+- 🔌 **Any OpenAI-compatible endpoint** — LiteLLM, OpenRouter, vLLM, or a self-hosted Whisper server on your own machine
+- 🎚️ **Pick the model per provider** — free text, so a model released after your copy of Echo still works
+- 🧪 **Test a key before you trust it** — one button, caught at entry instead of mid-sentence
+- 🛟 **Falls back to offline** if a cloud request fails — and only ever toward more privacy; local never falls back to cloud
 - ⌨️ **Text injection** into the focused app — type keystrokes *or* clipboard-paste
 - ↩️ **Undo the last insert** with a global hotkey, or by saying "scratch that"
 - 🔁 **Retry the last utterance** on a stronger model without saying it again
@@ -27,7 +31,7 @@ Built with **Rust · Tauri v2 · React 19 · TypeScript · TailwindCSS v4 · SQL
 - 🖥️ **Scriptable** — `echo --transcribe recording.mp3` prints to stdout
 - 📈 **`echo --benchmark`** — measures your machine rather than promising numbers
 - 📁 **Transcribe a file** you already have — wav, mp3, ogg or flac, offline
-- 📖 **Custom dictionary** with replacements, enable/disable, JSON import/export
+- 📖 **Custom dictionary** with replacements, enable/disable, JSON import/export — biases the decoder offline *and* in the cloud
 - 🗂️ **Per-app profiles** — override insert behaviour and dictionary scope per application
 - 🌍 **Language selection** — pin a dictation language or let Whisper auto-detect
 - ⚡ **Global hotkey** to toggle recording from anywhere

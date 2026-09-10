@@ -37,8 +37,8 @@ const MODES = [
     name: "Cloud (optional)",
     tag: "bring your own key",
     price: "you pay your provider",
-    note: "Route to OpenAI, Groq, or Deepgram if you want.",
-    points: ["Your key, your bill", "Stored in your keychain", "Echo adds zero markup", "Switch back anytime"],
+    note: "Route to any of ten providers, or your own endpoint.",
+    points: ["Your key, your bill", "Stored in your keychain", "Echo adds zero markup", "Or self-host an endpoint", "Falls back to local if it fails"],
     glow: false,
   },
 ];

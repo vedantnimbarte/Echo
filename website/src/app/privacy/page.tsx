@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 const LEAVES = [
   {
     when: "You add a cloud provider",
-    what: "Your audio goes to OpenAI, Groq, or Deepgram — the one you chose, with your key.",
+    what: "Your audio goes to the one provider you chose, with your key. Self-host an OpenAI-compatible endpoint and it never leaves your network.",
     tone: "sends",
   },
   {

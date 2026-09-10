@@ -23,7 +23,7 @@ const STAGES = [
     no: "03",
     engine: "whisper.cpp · local",
     title: "Speech becomes text",
-    body: "Whisper transcribes on your CPU by default — offline, no account. Want cloud accuracy instead? Bring an OpenAI, Groq, or Deepgram key; it lives in the OS keychain and never comes back out.",
+    body: "Whisper transcribes on your CPU by default — offline, no account. Want cloud accuracy instead? Bring a key for any of ten providers, or point Echo at your own endpoint; the key lives in the OS keychain and never comes back out.",
   },
   {
     no: "04",
