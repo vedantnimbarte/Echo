@@ -87,6 +87,23 @@ box**, so treat it as a seatbelt of unknown strength rather than a guarantee.
 On Linux it does nothing at all: the question needs AT-SPI over D-Bus, and
 under Wayland usually not even that answers. Settings says so plainly.
 
+### Support tiers — what has actually been run
+
+Echo's CI compiles and tests every platform, and the Rust suite plus a real
+startup self-test run on Linux and macOS runners. That is not the same as
+somebody dictating into twenty applications, so here is the honest state:
+
+| Platform | Tier | What that means |
+|---|---|---|
+| **Windows x64** | Tested | Developed and used here. Text injection, the password-field guard, the tray, offline Whisper and the GPU pack have all been exercised by hand. |
+| **macOS arm64** | Community | Compiles, unit-tests and self-tests in CI on a macOS runner, but has not been driven by hand. Accessibility and Automation permissions, and the password-field guard, are unverified against real applications. Bug reports welcome and expected. |
+| **macOS x86_64** | Unsupported | No build exists. `ort` ships no prebuilt ONNX Runtime for Intel macOS, so Silero VAD and the wake word cannot link. See [docs/RELEASING.md](docs/RELEASING.md). |
+| **Linux X11** | Community | Needs `xdotool`. No password-field detection on any Linux — the question needs AT-SPI over D-Bus. |
+| **Linux Wayland** | Degraded | Needs `ydotool` plus the `ydotoold` daemon, and some compositors refuse synthetic input outright. Per-app profiles do not work: no Wayland protocol reports which window is focused. |
+
+If you use Echo on a Community-tier platform and it works, saying so is a
+genuinely useful contribution — the gap is verification, not code.
+
 ### Per-OS notes
 
 - **Windows** — needs the WebView2 runtime (preinstalled on Win11; on Win10 grab

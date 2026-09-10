@@ -81,6 +81,37 @@ jobs:
           # tauri.conf.json → plugins.updater.pubkey. See docs/RELEASING.md.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+          # ── macOS code signing and notarization ──────────────────────────
+          # Unsigned, Gatekeeper does not warn, it refuses: the only button it
+          # offers is "Move to Trash". That makes this the one platform where
+          # signing is a precondition for being installable at all, and it also
+          # gates a Homebrew cask and a Flathub submission.
+          #
+          # Every value below is empty until the secrets exist, and
+          # tauri-action skips signing when they are — so this stays a no-op
+          # rather than a broken build until an Apple Developer account
+          # ($99/yr) is in place. Setup: docs/RELEASING.md.
+          #
+          # APPLE_CERTIFICATE         base64 of the Developer ID .p12
+          # APPLE_CERTIFICATE_PASSWORD  its export password
+          # APPLE_SIGNING_IDENTITY    e.g. "Developer ID Application: Name (TEAMID)"
+          # APPLE_ID / APPLE_PASSWORD an app-specific password, for notarytool
+          # APPLE_TEAM_ID             the 10-character team id
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+          # ── Windows Authenticode ─────────────────────────────────────────
+          # Lower priority than macOS: SmartScreen warns but still offers
+          # "More info → Run anyway", which is survivable for a free project.
+          # Worth buying early all the same, because an OV certificate earns
+          # SmartScreen reputation on wall-clock time rather than on downloads.
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
         with:
           projectPath: echo-app
           tagName: ${{ github.ref_name }}
