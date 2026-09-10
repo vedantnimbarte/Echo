@@ -7,6 +7,7 @@ mod platform;
 mod selftest;
 mod state;
 mod storage;
+mod tray;
 
 #[cfg(test)]
 mod pipeline_tests;
@@ -101,6 +102,13 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        // No extra argv on an autostart launch: `--selftest`, `--transcribe`
+        // and `--benchmark` all exit without ever showing a window, so passing
+        // one through here would produce a login that silently does nothing.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![]),
+        ))
         .setup(|app| {
             let data_dir = app
                 .path()
@@ -394,6 +402,15 @@ pub fn run() {
                 benchmark::run(app.handle());
             }
 
+            // The tray is the only persistent route back to Settings and to
+            // Quit, because the pill has no chrome and stays out of the
+            // taskbar. Degraded rather than fatal: a desktop with no status
+            // area can still dictate, and refusing to start would be the
+            // worse trade.
+            if let Err(e) = tray::init(app.handle()) {
+                tracing::warn!("Tray icon unavailable, Echo is reachable only via the pill: {e}");
+            }
+
             // Surface the settings window on first launch so onboarding can run.
             if !onboarding_done {
                 if let Some(win) = app.get_webview_window("main") {
@@ -406,6 +423,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::app::quit,
+            commands::app::get_autostart,
+            commands::app::set_autostart,
             commands::audio::get_audio_devices,
             commands::asr::list_models,
             commands::asr::download_model,
