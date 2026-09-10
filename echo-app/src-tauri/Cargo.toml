@@ -73,6 +73,7 @@ async-trait = "0.1"
 # platform default TLS — schannel on Windows — to avoid extra native build deps).
 reqwest = { version = "0.12", features = ["stream", "multipart", "json"] }
 futures-util = "0.3"
+base64 = "0.22"
 
 # WebSocket client for true streaming ASR (Deepgram). native-tls uses the OS
 # TLS stack (schannel on Windows) so it adds no openssl/cmake build deps.

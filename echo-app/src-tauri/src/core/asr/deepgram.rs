@@ -14,14 +14,14 @@ use crate::error::{EchoError, Result};
 /// real-time WebSocket API for true word-by-word interim results.
 pub struct DeepgramProvider {
     api_key: String,
-    client: reqwest::Client,
+    model: String,
 }
 
 impl DeepgramProvider {
-    pub fn new(api_key: String) -> Self {
+    pub fn new(api_key: String, model: impl Into<String>) -> Self {
         Self {
             api_key,
-            client: reqwest::Client::new(),
+            model: model.into(),
         }
     }
 }
@@ -63,8 +63,9 @@ struct DgStreamResult {
 ///
 /// With no language Deepgram is asked to detect one; naming it is both more
 /// accurate and cheaper, so the two cases must not be confused.
-fn listen_url(language: Option<&str>) -> String {
-    let mut url = "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true".to_string();
+fn listen_url(model: &str, language: Option<&str>) -> String {
+    let mut url =
+        format!("https://api.deepgram.com/v1/listen?model={model}&smart_format=true");
     match language {
         Some(lang) => url.push_str(&format!("&language={lang}")),
         None => url.push_str("&detect_language=true"),
@@ -77,9 +78,11 @@ fn listen_url(language: Option<&str>) -> String {
 /// The encoding parameters must match what the writer actually sends: 16-bit
 /// little-endian PCM, 16 kHz, mono. A mismatch is not rejected — Deepgram
 /// decodes the bytes as whatever it was told and returns confident nonsense.
-fn stream_url(language: Option<&str>) -> String {
-    let mut url = "wss://api.deepgram.com/v1/listen?model=nova-2&smart_format=true        &interim_results=true&encoding=linear16&sample_rate=16000&channels=1"
-        .to_string();
+fn stream_url(model: &str, language: Option<&str>) -> String {
+    let mut url = format!(
+        "wss://api.deepgram.com/v1/listen?model={model}&smart_format=true\
+         &interim_results=true&encoding=linear16&sample_rate=16000&channels=1"
+    );
     if let Some(lang) = language {
         url.push_str(&format!("&language={lang}"));
     }
@@ -160,11 +163,10 @@ impl AsrProvider for DeepgramProvider {
     ) -> Result<TranscriptSegment> {
         let wav = pcm_f32_to_wav(&audio, 16_000)?;
 
-        let url = listen_url(language);
+        let url = listen_url(&self.model, language);
         crate::core::egress::record(&url, "cloud transcription");
 
-        let resp = self
-            .client
+        let resp = super::http::client()
             .post(&url)
             .header("Authorization", format!("Token {}", self.api_key))
             .header("Content-Type", "audio/wav")
@@ -199,7 +201,7 @@ impl AsrProvider for DeepgramProvider {
         tx: mpsc::Sender<TranscriptSegment>,
         language: Option<&str>,
     ) -> Result<()> {
-        let url = stream_url(language);
+        let url = stream_url(&self.model, language);
         let mut request = url
             .into_client_request()
             .map_err(|e| EchoError::AsrProvider(e.to_string()))?;
@@ -270,11 +272,11 @@ mod tests {
 
     #[test]
     fn a_named_language_is_requested_and_detection_is_not() {
-        let named = listen_url(Some("fr"));
+        let named = listen_url("nova-2", Some("fr"));
         assert!(named.contains("&language=fr"), "{named}");
         assert!(!named.contains("detect_language"), "{named}");
 
-        let auto = listen_url(None);
+        let auto = listen_url("nova-2", None);
         assert!(auto.contains("&detect_language=true"), "{auto}");
         assert!(!auto.contains("&language="), "{auto}");
     }
@@ -284,13 +286,38 @@ mod tests {
     /// mismatch returns fluent nonsense rather than an error.
     #[test]
     fn the_stream_url_describes_the_audio_actually_sent() {
-        let url = stream_url(None);
+        let url = stream_url("nova-2", None);
         assert!(url.starts_with("wss://"), "{url}");
         assert!(url.contains("encoding=linear16"), "{url}");
         assert!(url.contains("sample_rate=16000"), "{url}");
         assert!(url.contains("channels=1"), "{url}");
         assert!(url.contains("interim_results=true"), "{url}");
-        assert!(stream_url(Some("de")).contains("&language=de"));
+        assert!(stream_url("nova-2", Some("de")).contains("&language=de"));
+    }
+
+    /// The string used to be split across source lines without a continuation,
+    /// which left eight literal spaces inside the query — `smart_format` got a
+    /// padded value and `interim_results` rode along inside it, so the live
+    /// preview quietly never turned on.
+    #[test]
+    fn no_url_carries_whitespace() {
+        for url in [
+            listen_url("nova-2", None),
+            listen_url("nova-3", Some("fr")),
+            stream_url("nova-2", None),
+            stream_url("nova-3", Some("de")),
+        ] {
+            assert!(
+                !url.contains(char::is_whitespace),
+                "whitespace in query string: {url:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_chosen_model_reaches_both_apis() {
+        assert!(listen_url("nova-3", None).contains("model=nova-3"));
+        assert!(stream_url("nova-3", None).contains("model=nova-3"));
     }
 
     #[test]
