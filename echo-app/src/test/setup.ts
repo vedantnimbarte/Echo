@@ -32,7 +32,6 @@ const ANSWERS: Record<string, unknown> = {
     { name: "base.en", downloaded: true, size_mb: 142, english_only: true },
     { name: "small", downloaded: false, size_mb: 466, english_only: false },
   ],
-  active_model: "base.en",
   list_cloud_providers: [
     {
       id: "openai",
@@ -51,15 +50,15 @@ const ANSWERS: Record<string, unknown> = {
       available: true,
     },
   ],
-  list_dictionary_entries: [],
-  list_history: [],
+  list_dictionary: [],
+  get_history: [],
   list_plugins: [],
   list_profiles: [],
   list_wake_words: [],
   get_egress_log: [],
   get_egress_status: { offline_capable: true, hosts: [] },
-  telemetry_summary: [],
-  dictation_stats: null,
+  get_telemetry_summary: [],
+  get_dictation_stats: null,
   get_insights: {
     transcripts: 3,
     words: 42,

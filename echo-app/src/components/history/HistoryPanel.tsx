@@ -66,9 +66,9 @@ function HistoryRow({ record }: { record: TranscriptionRecord }) {
 
   return (
     <li className="group rounded-xl glass px-3.5 py-2.5 transition hover:border-[var(--hairline-strong)] hover:bg-[var(--surface-2)]">
-      <p className="text-[13px] leading-snug text-[var(--ink)]">{record.text}</p>
+      <p className="text-[15px] leading-snug text-[var(--ink)]">{record.text}</p>
       <div className="mt-1.5 flex items-center justify-between">
-        <p className="text-[10.5px] tracking-tight text-[var(--ink-faint)]">
+        <p className="text-[12.5px] tracking-tight text-[var(--ink-faint)]">
           {record.provider}
           {record.language ? ` · ${record.language}` : ""} · {wordCount(record.text)} words ·{" "}
           {relativeTime(when)}
@@ -170,20 +170,20 @@ function CorrectionForm({
 
   return (
     <div className="mt-2 space-y-1.5 border-t border-[var(--hairline)] pt-2">
-      <p className="text-[10.5px] text-[var(--ink-faint)]">
+      <p className="text-[12.5px] text-[var(--ink-faint)]">
         Replace what Echo heard with what you meant. Applies to every future
         transcript.
       </p>
       <div className="flex items-center gap-1.5">
         <input
-          className="field flex-1 text-[12px]"
+          className="field flex-1 text-[14px]"
           value={phrase}
           onChange={(e) => setPhrase(e.target.value)}
           placeholder="Echo heard…"
         />
         <span className="shrink-0 text-[var(--ink-faint)]">→</span>
         <input
-          className="field flex-1 text-[12px]"
+          className="field flex-1 text-[14px]"
           value={replacement}
           onChange={(e) => setReplacement(e.target.value)}
           placeholder="You meant…"
@@ -192,12 +192,12 @@ function CorrectionForm({
         <button
           onClick={submit}
           disabled={!phrase.trim() || !replacement.trim()}
-          className="btn-primary shrink-0 px-2.5 py-1 text-[11px]"
+          className="btn-primary shrink-0 px-2.5 py-1 text-[13px]"
         >
           Save
         </button>
       </div>
-      {error && <p className="text-[11px] font-medium text-[var(--ink)]">{error}</p>}
+      {error && <p className="text-[13px] font-medium text-[var(--ink)]">{error}</p>}
     </div>
   );
 }
@@ -208,10 +208,14 @@ export function HistoryPanel() {
   const qc = useQueryClient();
   const [query, setQuery] = useState("");
 
-  const { data: records = [], isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["history"],
     queryFn: () => commands.getHistory(200),
   });
+  // `?? []` rather than a destructuring default: that only fires on undefined,
+  // so a backend answering null reached the grouping loop as null and took the
+  // whole window down with it.
+  const records = data ?? [];
 
   const clearMutation = useMutation({
     mutationFn: () => commands.clearHistory(),
@@ -246,7 +250,7 @@ export function HistoryPanel() {
               if (path) await commands.exportHistory(path);
             }}
             disabled={records.length === 0}
-            className="btn-ghost px-2.5 py-1 text-[11px] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+            className="btn-ghost px-2.5 py-1 text-[13px] text-[var(--ink-muted)] hover:text-[var(--ink)]"
           >
             <Download className="h-3.5 w-3.5" />
             Export
@@ -254,7 +258,7 @@ export function HistoryPanel() {
           <button
             onClick={() => clearMutation.mutate()}
             disabled={records.length === 0 || clearMutation.isPending}
-            className="btn-ghost px-2.5 py-1 text-[11px] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+            className="btn-ghost px-2.5 py-1 text-[13px] text-[var(--ink-muted)] hover:text-[var(--ink)]"
           >
             <Trash2 className="h-3.5 w-3.5" />
             Clear all
@@ -275,16 +279,16 @@ export function HistoryPanel() {
       </div>
 
       {isLoading ? (
-        <p className="text-[13px] text-[var(--ink-muted)]">Loading…</p>
+        <p className="text-[15px] text-[var(--ink-muted)]">Loading…</p>
       ) : filtered.length === 0 ? (
-        <p className="text-[13px] text-[var(--ink-muted)]">
+        <p className="text-[15px] text-[var(--ink-muted)]">
           {query.trim() ? "No matching transcripts." : "No history yet."}
         </p>
       ) : (
         <div className="space-y-4">
           {groups.map((g) => (
             <section key={g.label} className="space-y-2">
-              <h3 className="px-0.5 text-[11.5px] font-medium text-[var(--ink-muted)]">
+              <h3 className="px-0.5 text-[13.5px] font-medium text-[var(--ink-muted)]">
                 {g.label}
               </h3>
               <ul className="space-y-2">
@@ -348,40 +352,40 @@ function TranscriptFix({
 
   return (
     <div className="mt-2 space-y-1.5 border-t border-[var(--hairline)] pt-2">
-      <p className="text-[10.5px] text-[var(--ink-faint)]">
+      <p className="text-[12.5px] text-[var(--ink-faint)]">
         Correct the text. If the change looks like a fixed mishearing, Echo adds
         it to your dictionary so it stops happening.
       </p>
       <textarea
-        className="field w-full resize-y text-[12px] leading-snug"
+        className="field w-full resize-y text-[14px] leading-snug"
         rows={3}
         value={text}
         onChange={(e) => setText(e.target.value)}
       />
       <div className="flex items-center justify-end gap-1.5">
-        <button onClick={onDone} className="btn-ghost px-2.5 py-1 text-[11px]">
+        <button onClick={onDone} className="btn-ghost px-2.5 py-1 text-[13px]">
           Cancel
         </button>
         <button
           onClick={save}
           disabled={!text.trim()}
-          className="btn-primary shrink-0 px-2.5 py-1 text-[11px]"
+          className="btn-primary shrink-0 px-2.5 py-1 text-[13px]"
         >
           Save
         </button>
       </div>
       {learned && learned.length > 0 && (
         <div className="space-y-1 pt-0.5">
-          <p className="text-[10.5px] text-[var(--ink-muted)]">Learned:</p>
+          <p className="text-[12.5px] text-[var(--ink-muted)]">Learned:</p>
           {learned.map((l) => (
-            <p key={l.phrase} className="text-[11px] text-[var(--ink)]">
+            <p key={l.phrase} className="text-[13px] text-[var(--ink)]">
               {l.phrase} <span className="text-[var(--ink-faint)]">&rarr;</span>{" "}
               {l.replacement}
             </p>
           ))}
         </div>
       )}
-      {error && <p className="text-[11px] text-[var(--ink)]">{error}</p>}
+      {error && <p className="text-[13px] text-[var(--ink)]">{error}</p>}
     </div>
   );
 }
