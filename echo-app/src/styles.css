@@ -155,11 +155,11 @@ body {
     box-shadow: var(--shadow-md), var(--edge-light);
   }
 
-  /* The page header, pinned while its page scrolls under it.
-     `-mx-12 px-12` in the markup pushes the wash out to the column's own
-     padding, so nothing passes through at the edges, and the gap below the
-     description is inside the padded box rather than under it — otherwise
-     content would surface in the gap before reaching the blur. */
+  /* The page title, pinned while its page — description included — scrolls
+     under it. `-mx-12 px-12` in the markup pushes the wash out to the column's
+     own padding, so nothing passes through at the edges, and the header keeps
+     the gap beneath the title inside its own padding rather than as a margin
+     under it, or a line would surface in that gap before reaching the blur. */
   .page-header {
     background: var(--glass-base);
     -webkit-backdrop-filter: blur(20px) saturate(140%);

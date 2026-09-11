@@ -47,23 +47,28 @@ export function Page({
 }) {
   return (
     <div className="mx-auto w-full px-12 pb-12" style={{ maxWidth: width }}>
-      {/* Pinned: the name of the page you are on, and the sentence saying what
-          it is for, are the two things worth being able to read from anywhere
-          in a long page. The vertical rhythm moved inside the header — its own
-          top and bottom padding rather than the container's `py` and a margin —
-          because the wash has to reach all the way to where the content starts.
-          A gap outside it would let a line of text surface before the blur. */}
-      <header className="page-header sticky top-0 z-10 -mx-12 flex items-start justify-between gap-6 px-12 pb-9 pt-12">
-        <div className="min-w-0">
-          <h2 className="display text-[30px] text-[var(--ink)]">{title}</h2>
-          {description && (
-            <p className="mt-2 max-w-[46ch] text-[14.5px] leading-relaxed text-[var(--ink-muted)]">
-              {description}
-            </p>
-          )}
-        </div>
+      {/* Pinned: the page's name, and whatever it offers to do to the page —
+          on the settings pages that is the search field, which is the one
+          control you reach for *because* the page is long.
+
+          The description is not pinned. It is read once on arrival and then
+          finished with, and a paragraph held permanently against the top of a
+          640px column costs more room than it is worth after the first read.
+          So it scrolls away under the title with the rest of the page.
+
+          `pt-12 pb-2` rather than the container's `py` and a margin: the wash
+          has to reach past the title to where the description starts, and a
+          gap outside the header would let a line surface before the blur. */}
+      <header className="page-header sticky top-0 z-10 -mx-12 flex items-start justify-between gap-6 px-12 pb-2 pt-12">
+        <h2 className="display min-w-0 text-[30px] text-[var(--ink)]">{title}</h2>
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </header>
+
+      {description && (
+        <p className="mb-9 max-w-[46ch] text-[14.5px] leading-relaxed text-[var(--ink-muted)]">
+          {description}
+        </p>
+      )}
       {/* divide-y draws rules only *between* groups, so no first/last-child
           padding fights with the group's own spacing. */}
       <div className="divide-y divide-[var(--hairline)]">{children}</div>
