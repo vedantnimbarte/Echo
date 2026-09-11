@@ -31,16 +31,26 @@ type NavItem = { id: Page; label: string; Icon: React.ElementType };
 
 /**
  * Settings split along the path a sentence takes through Echo: it is heard
- * (Dictation), turned into words (Engine), delivered somewhere (Output), and
+ * (Settings), turned into words (Engine), delivered somewhere (Output), and
  * whatever is kept afterwards is yours to see (Privacy). Four short pages
  * instead of one long scroll — you land on the topic you came for.
  */
 const SETTINGS_NAV: NavItem[] = [
-  { id: "settings", label: "Settings", Icon: SlidersHorizontal },
   { id: "engine", label: "Engine", Icon: Cpu },
   { id: "output", label: "Output", Icon: TextCursorInput },
   { id: "privacy", label: "Privacy", Icon: ShieldCheck },
 ];
+
+/**
+ * The general page, kept out of the list above because it sits at the foot of
+ * the sidebar instead — beside Quit Echo, where the things you reach for
+ * occasionally live rather than the topics you move between.
+ */
+const SETTINGS_ITEM: NavItem = {
+  id: "settings",
+  label: "Settings",
+  Icon: SlidersHorizontal,
+};
 
 /** Content you accumulate by using Echo, rather than settings you choose. */
 const LIBRARY_NAV: NavItem[] = [
@@ -50,7 +60,7 @@ const LIBRARY_NAV: NavItem[] = [
   { id: "plugins", label: "Plugins", Icon: Puzzle },
 ];
 
-const SETTINGS_IDS = SETTINGS_NAV.map((i) => i.id);
+const SETTINGS_IDS = [SETTINGS_ITEM, ...SETTINGS_NAV].map((i) => i.id);
 
 const SIDEBAR_KEY = "echo.sidebar-collapsed";
 
@@ -207,16 +217,31 @@ export default function App() {
             ))}
           </div>
 
-          {/* Quitting is an app-level action, not a setting — it belongs to the
-              window chrome rather than to whichever page you happen to be on. */}
-          <button
-            onClick={() => void commands.quit()}
-            title={collapsed ? "Quit Echo" : undefined}
-            className="mt-auto flex items-center gap-2.5 overflow-hidden whitespace-nowrap rounded-lg px-2.5 py-[7px] text-[12.5px] tracking-tight text-[var(--ink-muted)] transition-colors hover:bg-[var(--surface-1)] hover:text-[var(--ink)]"
-          >
-            <Power className="h-[15px] w-[15px] shrink-0" />
-            Quit Echo
-          </button>
+          {/* The foot of the sidebar: the page you adjust things on, and the one
+              entry that is not a page at all. `mt-auto` pushes the pair down
+              however tall the nav above it happens to be; `pt-5` keeps them off
+              it when the window is short enough that there is no slack left. */}
+          <div className="mt-auto flex flex-col gap-0.5 pt-5">
+            <div className="mx-2.5 mb-3 border-t border-[var(--hairline)]" />
+
+            <NavButton
+              item={SETTINGS_ITEM}
+              active={page === SETTINGS_ITEM.id}
+              collapsed={collapsed}
+              onClick={() => setPage(SETTINGS_ITEM.id)}
+            />
+
+            {/* Quitting is an app-level action, not a setting — it belongs to the
+                window chrome rather than to whichever page you happen to be on. */}
+            <button
+              onClick={() => void commands.quit()}
+              title={collapsed ? "Quit Echo" : undefined}
+              className="flex items-center gap-2.5 overflow-hidden whitespace-nowrap rounded-lg px-2.5 py-[7px] text-[12.5px] tracking-tight text-[var(--ink-muted)] transition-colors hover:bg-[var(--surface-1)] hover:text-[var(--ink)]"
+            >
+              <Power className="h-[15px] w-[15px] shrink-0" />
+              Quit Echo
+            </button>
+          </div>
         </nav>
 
         <main className="min-w-0 flex-1 overflow-y-auto">
