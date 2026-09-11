@@ -11,10 +11,15 @@
 //! settles the matter ("five percent"). A bare "one", "two", "nine" stays a
 //! word — which is also what a style guide would say.
 //!
-//! ponytail: English only, and cardinals only. Ordinals ("twenty-fifth"),
-//! fractions and other languages are left alone rather than half-done — a
-//! number converted wrongly is worse than one left as words, because the reader
-//! cannot tell it was Echo that changed it.
+//! Compound ordinals follow the same rule: "the twenty fifth of June" is a
+//! date and becomes "the 25th of June", while a lone "fifth" stays a word —
+//! "first of all" and "a fifth of the budget" are prose, not numbers.
+//!
+//! ponytail: English only, and fractions ("two thirds") are still left alone —
+//! they collide with the ordinals above, and "two thirds" is as often prose as
+//! arithmetic. Other languages are a parser each, not another table. A number
+//! converted wrongly is worse than one left as words, because the reader cannot
+//! tell it was Echo that changed it.
 
 use super::{key, words};
 
@@ -37,6 +42,16 @@ const TENS: &[(&str, u64)] = &[
 const SCALES: &[(&str, u64)] = &[
     ("hundred", 100), ("thousand", 1_000), ("million", 1_000_000),
     ("billion", 1_000_000_000),
+];
+
+/// Ordinal words below twenty. Paired with their cardinal value, because what
+/// gets written is the digits plus a suffix worked out from that value.
+const UNIT_ORDINALS: &[(&str, u64)] = &[
+    ("first", 1), ("second", 2), ("third", 3), ("fourth", 4), ("fifth", 5),
+    ("sixth", 6), ("seventh", 7), ("eighth", 8), ("ninth", 9), ("tenth", 10),
+    ("eleventh", 11), ("twelfth", 12), ("thirteenth", 13), ("fourteenth", 14),
+    ("fifteenth", 15), ("sixteenth", 16), ("seventeenth", 17),
+    ("eighteenth", 18), ("nineteenth", 19),
 ];
 
 /// Units that follow a number and are conventionally written as a symbol or
@@ -96,6 +111,13 @@ pub fn apply(text: &str) -> String {
             i += len;
             continue;
         }
+        // Before the cardinal, or "twenty fifth" would match "twenty" and
+        // leave "fifth" stranded as a word beside a digit.
+        if let Some((len, written)) = match_ordinal(&keys, i) {
+            out.push(written);
+            i += len;
+            continue;
+        }
         if let Some((len, value)) = match_cardinal(&keys, i) {
             // A unit behind settles the ambiguity even for one word.
             if let Some((unit_len, written)) = match_unit(&keys, i + len, value) {
@@ -115,6 +137,61 @@ pub fn apply(text: &str) -> String {
     }
 
     out.join(" ")
+}
+
+/// The written suffix for an ordinal: 1st, 2nd, 3rd, 4th — and 11th, 12th,
+/// 13th, which are the exceptions every naive version gets wrong.
+fn ordinal_suffix(value: u64) -> &'static str {
+    match (value % 100, value % 10) {
+        (11..=13, _) => "th",
+        (_, 1) => "st",
+        (_, 2) => "nd",
+        (_, 3) => "rd",
+        _ => "th",
+    }
+}
+
+/// The value of an ordinal word below twenty, if it is one.
+fn ordinal_value(word: &str) -> Option<u64> {
+    UNIT_ORDINALS.iter().find(|(w, _)| *w == word).map(|(_, v)| *v)
+}
+
+/// The value of a cardinal tens word, which is the only thing a unit ordinal
+/// may be joined to. "twentieth-fifth" is not English, so an ordinal tens is
+/// deliberately not accepted here.
+fn tens_value(word: &str) -> Option<u64> {
+    TENS.iter().find(|(w, _)| *w == word).map(|(_, v)| *v)
+}
+
+/// Match a compound ordinal at `i` — "twenty fifth", "twenty-fifth" — and
+/// return how many words it spans and the written form.
+///
+/// Only compounds. A lone "first", "second" or "fifth" is far more often prose
+/// than a number ("first of all", "a fifth of the budget"), which is the same
+/// reason a lone cardinal is left alone. "second" would be the worst of them:
+/// it is also a unit of time and a verb.
+///
+/// The tens-only ordinals ("thirtieth") are single words too, so they are left
+/// alone for the same reason.
+fn match_ordinal(keys: &[String], i: usize) -> Option<(usize, String)> {
+    let here = keys.get(i)?.as_str();
+
+    // "twenty-fifth" arrives as one token: `key` strips punctuation only from
+    // the ends, so the joining hyphen survives.
+    if let Some((tens, unit)) = here.split_once('-') {
+        let value = tens_value(tens)? + unit_below_ten(unit)?;
+        return Some((1, format!("{value}{}", ordinal_suffix(value))));
+    }
+
+    // "twenty fifth" as two words.
+    let value = tens_value(here)? + unit_below_ten(keys.get(i + 1)?)?;
+    Some((2, format!("{value}{}", ordinal_suffix(value))))
+}
+
+/// A unit ordinal that can follow a tens. "twenty tenth" is not a number, so
+/// anything from ten up stops the match rather than being added on.
+fn unit_below_ten(word: &str) -> Option<u64> {
+    ordinal_value(word).filter(|v| *v < 10)
 }
 
 /// The value of the number word at `i`, if it is one.
@@ -295,6 +372,38 @@ mod tests {
 
     /// The rule the whole module hangs on. A lone small number stays a word,
     /// because "one of the best" must survive.
+    #[test]
+    fn compound_ordinals_become_digits() {
+        // The case this exists for: dates.
+        assert_eq!(apply("the twenty fifth of June"), "the 25th of June");
+        assert_eq!(apply("the twenty-fifth of June"), "the 25th of June");
+        // The suffix comes off the value, not off the last word.
+        assert_eq!(apply("twenty first"), "21st");
+        assert_eq!(apply("thirty second"), "32nd");
+        assert_eq!(apply("forty third"), "43rd");
+        assert_eq!(apply("ninety ninth"), "99th");
+    }
+
+    #[test]
+    fn a_lone_ordinal_stays_a_word() {
+        // Same rule as the cardinals: prose far more often than a number.
+        assert_eq!(apply("first of all"), "first of all");
+        assert_eq!(apply("a fifth of the budget"), "a fifth of the budget");
+        assert_eq!(apply("wait a second"), "wait a second");
+        // Tens on their own are one word too, so they are left alone.
+        assert_eq!(apply("the thirtieth"), "the thirtieth");
+    }
+
+    #[test]
+    fn shapes_that_are_not_ordinals_are_left_alone() {
+        // "twentieth-fifth" is not English, and must not be salvaged into one.
+        assert_eq!(apply("twentieth-fifth"), "twentieth-fifth");
+        // A tens followed by a cardinal is a cardinal, not an ordinal.
+        assert_eq!(apply("twenty five"), "25");
+        // An ordinal after a non-tens is left as spoken.
+        assert_eq!(apply("hundred fifth"), "hundred fifth");
+    }
+
     #[test]
     fn a_lone_small_number_stays_a_word() {
         assert_eq!(apply("one of the best"), "one of the best");
