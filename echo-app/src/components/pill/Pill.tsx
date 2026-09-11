@@ -305,8 +305,10 @@ function PillLarge({
               "flex h-8 w-8 items-center justify-center rounded-full transition-all active:scale-90",
               !isRecording &&
                 "bg-[var(--surface-2)] text-[var(--ink)] hover:bg-[var(--surface-3)]",
-              // Live: the one place colour is spent.
-              isRecording && live && "animate-rec bg-[var(--rec)] text-white",
+              // Live: the one place colour is spent. A flat red disc, not a
+              // pulsing one — it is a state, and a state does not need to keep
+              // announcing itself once you have seen it.
+              isRecording && live && "bg-[var(--rec)] text-white",
               // Armed but not capturing — neutral, so red always means "live".
               isRecording &&
                 !live &&

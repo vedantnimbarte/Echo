@@ -318,21 +318,6 @@ optgroup {
   animation: pill-rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* Keep these rgba values in step with --rec; keyframes can't interpolate a
-   var() inside rgba(). */
-@keyframes rec-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(255, 69, 58, 0.55);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(255, 69, 58, 0);
-  }
-}
-.animate-rec {
-  animation: rec-pulse 1.6s ease-out infinite;
-}
-
 /* Insights' speed arc drawing itself once, on first paint. The length differs
    per gauge, so the start offset comes in as a custom property rather than
    being baked in here. */
@@ -382,7 +367,6 @@ optgroup {
    waveform separately falls back to a static meter (see Waveform.tsx). */
 @media (prefers-reduced-motion: reduce) {
   .animate-rise,
-  .animate-rec,
   .animate-hint,
   .text-shimmer {
     animation: none !important;
