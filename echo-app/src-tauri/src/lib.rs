@@ -454,6 +454,15 @@ pub fn run() {
             // tauri.macos.conf.json would mean duplicating the whole `windows`
             // array, which the merge replaces wholesale, and watching the two
             // copies drift.
+            //
+            // Note for anyone changing the window size: this reclaims the
+            // caption strip into the client area while the outer size stays
+            // put, so the window renders ~30px taller than `height` in
+            // tauri.conf.json says. The config number is picked so the result
+            // still fits the ~720px work area of a 1366x768 laptop — overshoot
+            // it and `center: true` places the top at a negative Y, putting our
+            // own title bar (and its close button) off the top of the screen,
+            // with no native chrome left to recover from.
             #[cfg(not(target_os = "macos"))]
             if let Some(win) = app.get_webview_window("main") {
                 // Safe to do before the window is shown (`visible: false` in the
