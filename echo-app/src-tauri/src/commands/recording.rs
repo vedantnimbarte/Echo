@@ -166,14 +166,22 @@ pub async fn begin_recording(
             .map(|v| v != "false")
             .unwrap_or(true)
     };
-    let asr_rx = if retain {
-        let (keep_tx, keep_rx) = mpsc::channel::<Vec<f32>>(256);
-        let slot = state.last_utterance.clone();
-        tokio::spawn(retain_utterances(vad_rx, keep_tx, slot));
-        keep_rx
-    } else {
+    // The crash spool runs whether or not retry does: retry is a convenience
+    // the user may switch off, and this is the difference between losing a
+    // sentence and losing nothing.
+    let spool = app
+        .path()
+        .app_data_dir()
+        .ok()
+        .and_then(|dir| crate::core::spool::Spool::create(&dir));
+    if !retain {
         *state.last_utterance.lock_live() = None;
-        vad_rx
+    }
+    let asr_rx = {
+        let (keep_tx, keep_rx) = mpsc::channel::<Vec<f32>>(256);
+        let slot = retain.then(|| state.last_utterance.clone());
+        tokio::spawn(retain_utterances(vad_rx, keep_tx, slot, spool));
+        keep_rx
     };
 
     // Never type a dictated password into the box that is masking it. Checked
@@ -717,10 +725,29 @@ fn word_edits(before: &str, after: &str) -> i64 {
 }
 
 
-/// Cap on retained audio: 30 seconds at 16 kHz mono f32, about 1.9 MB.
+/// Cap on retained audio: three minutes at 16 kHz mono f32, about 11.5 MB.
 ///
-/// Long enough for anything said in one breath, which is what a retry is for.
-const MAX_RETAINED_SAMPLES: usize = 30 * 16_000;
+/// Was thirty seconds, which is one breath — but an utterance ends at a pause,
+/// not at a breath, and someone reading a prepared paragraph runs well past it.
+/// Losing retry there is the case retry exists for. One buffer at a time, held
+/// only until the next utterance replaces it, so the memory is worth the cover.
+pub(crate) const MAX_RETAINED_SAMPLES: usize = 180 * 16_000;
+
+/// Seconds of audio [`MAX_RETAINED_SAMPLES`] stands for, for saying so.
+pub(crate) const MAX_RETAINED_SECONDS: usize = MAX_RETAINED_SAMPLES / 16_000;
+
+/// What is being held for a re-decode of the last utterance.
+///
+/// Not an `Option<Vec<f32>>`: "nothing was recorded" and "what was recorded ran
+/// past the cap" are different answers, and collapsing them told a user who had
+/// just dictated for four minutes that there was no recent dictation.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Retained {
+    /// Audio, ready to decode again.
+    Audio(Vec<f32>),
+    /// The utterance ran past [`MAX_RETAINED_SAMPLES`], so none was kept.
+    TooLong,
+}
 
 /// Forward the VAD's output to the ASR unchanged, keeping a copy of the most
 /// recent complete utterance so it can be re-decoded without being re-spoken.
@@ -729,6 +756,11 @@ const MAX_RETAINED_SAMPLES: usize = 30 * 16_000;
 /// already assembled here, and every provider — including one from a plugin —
 /// gets the behaviour without implementing anything.
 ///
+/// Also where the crash spool is written, for the same reason: this is the one
+/// stage that already sees every speech chunk and every utterance boundary.
+/// `slot` is `None` when the user has turned retry off; the spool is not,
+/// because losing a sentence to a crash is not a preference.
+///
 /// An utterance longer than [`MAX_RETAINED_SAMPLES`] is dropped rather than
 /// truncated. Retrying the first thirty seconds of a longer sentence would
 /// silently return a shorter transcript than the one it replaced, which looks
@@ -736,18 +768,26 @@ const MAX_RETAINED_SAMPLES: usize = 30 * 16_000;
 pub(crate) async fn retain_utterances(
     mut rx: mpsc::Receiver<Vec<f32>>,
     tx: mpsc::Sender<Vec<f32>>,
-    slot: Arc<std::sync::Mutex<Option<Vec<f32>>>>,
+    slot: Option<Arc<std::sync::Mutex<Option<Retained>>>>,
+    mut spool: Option<crate::core::spool::Spool>,
 ) {
     let mut current: Vec<f32> = Vec::new();
     let mut overflowed = false;
 
     while let Some(chunk) = rx.recv().await {
+        if let (Some(spool), false) = (spool.as_mut(), chunk.is_empty()) {
+            spool.write(&chunk);
+        }
         if chunk.is_empty() {
             // Utterance boundary: publish what was collected, or clear the slot
             // if it was too long to keep honestly.
             let finished = std::mem::take(&mut current);
-            if !finished.is_empty() || overflowed {
-                *slot.lock_live() = (!overflowed).then_some(finished);
+            if let Some(slot) = &slot {
+                if overflowed {
+                    *slot.lock_live() = Some(Retained::TooLong);
+                } else if !finished.is_empty() {
+                    *slot.lock_live() = Some(Retained::Audio(finished));
+                }
             }
             overflowed = false;
         } else if !overflowed {
@@ -760,8 +800,15 @@ pub(crate) async fn retain_utterances(
         }
 
         if tx.send(chunk).await.is_err() {
-            return;
+            break;
         }
+    }
+
+    // Capture ended and every chunk reached the ASR stage, so nothing is left
+    // that a crash could have taken. Dropping the spool instead would leave the
+    // file behind and stage a recovery of audio that was already transcribed.
+    if let Some(spool) = spool {
+        spool.finish();
     }
 }
 

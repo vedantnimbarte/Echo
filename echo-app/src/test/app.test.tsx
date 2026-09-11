@@ -90,6 +90,32 @@ describe("every settings page", () => {
     expect(await screen.findByLabelText("Speech detection")).toBeTruthy();
   });
 
+  // The one screen a user only ever sees after a crash, which is exactly the
+  // kind that rots unnoticed. Both halves: silent when there is nothing, and
+  // offering the audio back when there is.
+  it("says nothing about recovered audio when there is none", async () => {
+    mount(<SettingsPanel page="engine" />);
+    expect(await screen.findByText(/Choose an audio file/i)).toBeTruthy();
+    expect(screen.queryByText(/stopped before it could transcribe/i)).toBeNull();
+  });
+
+  it("offers back audio a crash interrupted", async () => {
+    ANSWERS.recovered_recordings = ["/data/recovered-1700000000.wav"];
+    try {
+      const user = userEvent.setup();
+      mount(<SettingsPanel page="engine" />);
+
+      expect(await screen.findByText(/stopped before it could transcribe/i)).toBeTruthy();
+      await user.click(await screen.findByText("Transcribe it"));
+
+      // Goes through the same decoder an imported file does, on the path the
+      // recovery wrote — not on whatever the file picker last returned.
+      expect(invoked).toContain("transcribe_file");
+    } finally {
+      ANSWERS.recovered_recordings = [];
+    }
+  });
+
   // The setting only bites when the model is there, so a machine without it
   // must not be shown a choice that does nothing.
   it("says so when the neural detector did not load", async () => {

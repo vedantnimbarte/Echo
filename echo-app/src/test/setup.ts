@@ -95,6 +95,7 @@ export const ANSWERS: Record<string, unknown> = {
     { code: "es", label: "Spanish" },
   ],
   silero_available: true,
+  recovered_recordings: [],
   get_hotkey: "CommandOrControl+Shift+Space",
   secure_field_detection: true,
   wake_word_ready: false,

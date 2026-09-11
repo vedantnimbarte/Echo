@@ -53,7 +53,7 @@ pub struct AppState {
     /// PCM of the most recent utterance, retained so a retry can re-decode it
     /// on a stronger model instead of asking the user to say it again.
     /// Memory only, capped, and dropped when retry is disabled.
-    pub last_utterance: Arc<Mutex<Option<Vec<f32>>>>,
+    pub last_utterance: Arc<Mutex<Option<crate::commands::recording::Retained>>>,
     /// Live decoder-prompt context: focused app, its dictionary profile, and
     /// the sentence just spoken. Shared with the local whisper provider.
     pub prompt_ctx: Arc<crate::core::asr::prompt::PromptContext>,

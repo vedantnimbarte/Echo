@@ -470,6 +470,15 @@ export const commands = {
   openLog: () => invoke<void>("open_log"),
 
   /**
+   * Audio rescued from a session that ended without finishing. Absolute paths,
+   * newest first; empty is the normal answer.
+   */
+  recoveredRecordings: () => invoke<string[]>("recovered_recordings"),
+
+  /** Delete one recovered recording once the user is done with it. */
+  discardRecovered: (path: string) => invoke<void>("discard_recovered", { path }),
+
+  /**
    * Whether the neural voice-activity model loaded. False means the energy
    * detector is running whatever the `vad_engine` setting says.
    */

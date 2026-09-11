@@ -458,6 +458,17 @@ pub fn run() {
             // taskbar. Degraded rather than fatal: a desktop with no status
             // area can still dictate, and refusing to start would be the
             // worse trade.
+            // A spool still on disk means the last session did not end the way
+            // it should have. Before the tray, so a launch that fails later
+            // has still rescued the audio.
+            match crate::core::spool::recover(&data_dir) {
+                Ok(Some(path)) => {
+                    tracing::warn!("Recovered audio from an interrupted session: {}", path.display())
+                }
+                Ok(None) => {}
+                Err(e) => tracing::error!("Could not recover the interrupted session: {e}"),
+            }
+
             if let Err(e) = tray::init(app.handle()) {
                 tracing::warn!("Tray icon unavailable, Echo is reachable only via the pill: {e}");
             }
@@ -590,6 +601,8 @@ pub fn run() {
             commands::settings::dictation_languages,
             commands::app::diagnostics,
             commands::app::open_log,
+            commands::app::recovered_recordings,
+            commands::app::discard_recovered,
             commands::audio::silero_available,
         ])
         .build(tauri::generate_context!())

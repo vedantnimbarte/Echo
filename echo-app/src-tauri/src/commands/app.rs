@@ -106,6 +106,45 @@ pub fn open_log(app: AppHandle) -> Result<()> {
         .map_err(|e| EchoError::Config(format!("could not show {}: {e}", target.display())))
 }
 
+/// Audio rescued from a session that ended without finishing — a crash, a
+/// power cut, an OOM kill. Absolute paths, newest first, ready for
+/// `transcribe_file`.
+///
+/// Empty is the normal answer, and the one the UI shows nothing for.
+#[tauri::command]
+pub fn recovered_recordings(app: AppHandle) -> Vec<String> {
+    let Ok(dir) = app.path().app_data_dir() else {
+        return Vec::new();
+    };
+    crate::core::spool::recovered(&dir)
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect()
+}
+
+/// Delete one recovered recording, once the user is done with it.
+///
+/// The path comes from the frontend, so it is checked rather than trusted:
+/// only a file this module would have created, and only in the data directory
+/// it would have created it in. A `delete this path` command that took the
+/// caller's word for it would be a gift to anything that could reach the IPC.
+#[tauri::command]
+pub fn discard_recovered(app: AppHandle, path: String) -> Result<()> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| EchoError::Config(format!("no application data directory: {e}")))?;
+    let path = std::path::PathBuf::from(path);
+
+    if path.parent() != Some(dir.as_path()) || !crate::core::spool::is_recovered(&path) {
+        return Err(EchoError::PermissionDenied(
+            "That is not a recovered recording.".into(),
+        ));
+    }
+    std::fs::remove_file(&path)
+        .map_err(|e| EchoError::Config(format!("could not delete {}: {e}", path.display())))
+}
+
 /// The facts a bug report needs, as the markdown block Echo pastes into one.
 ///
 /// Built here rather than in the frontend because every line of it already
