@@ -43,9 +43,9 @@ export function Page({
     <div className="mx-auto w-full px-12 py-12" style={{ maxWidth: width }}>
       <header className="mb-9 flex items-start justify-between gap-6">
         <div className="min-w-0">
-          <h2 className="display text-[26px] text-[var(--ink)]">{title}</h2>
+          <h2 className="display text-[30px] text-[var(--ink)]">{title}</h2>
           {description && (
-            <p className="mt-2 max-w-[46ch] text-[12.5px] leading-relaxed text-[var(--ink-muted)]">
+            <p className="mt-2 max-w-[46ch] text-[14.5px] leading-relaxed text-[var(--ink-muted)]">
               {description}
             </p>
           )}
@@ -78,7 +78,7 @@ export function Group({
   return (
     <section className="space-y-4 py-7 first:pt-0 last:pb-0">
       {title ? (
-        <h3 className="flex items-center gap-1.5 text-[12.5px] font-medium tracking-tight text-[var(--ink)]">
+        <h3 className="flex items-center gap-1.5 text-[14.5px] font-medium tracking-tight text-[var(--ink)]">
           {title}
           {hint && <Hint label={`About ${title.toLowerCase()}`}>{hint}</Hint>}
         </h3>
@@ -116,7 +116,7 @@ export function Field({
   // `block`, because an inline span lets the control ride up beside its own
   // label — which is how these read before, and why "Method" and "Insert delay"
   // started at different left edges.
-  const labelClass = "block text-[11.5px] font-medium text-[var(--ink-muted)]";
+  const labelClass = "block text-[13.5px] font-medium text-[var(--ink-muted)]";
   const control = isValidElement<{ id?: string }>(children);
 
   if (!hint || !control) {
@@ -163,7 +163,7 @@ export function Check({
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}
         />
-        <span className="text-[12.5px] leading-snug text-[var(--ink)]">{children}</span>
+        <span className="text-[14.5px] leading-snug text-[var(--ink)]">{children}</span>
       </label>
       {hint && <Hint>{hint}</Hint>}
     </div>

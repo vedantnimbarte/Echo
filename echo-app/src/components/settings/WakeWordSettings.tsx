@@ -97,9 +97,9 @@ export function WakeWordSettings() {
           onChange={(e) => guard(() => commands.setWakeWordEnabled(e.target.checked))}
           className="mt-0.5 h-3.5 w-3.5 accent-white"
         />
-        <span className="text-[12px] leading-snug">
+        <span className="text-[14px] leading-snug">
           Listen for a wake phrase
-          <span className="block text-[10.5px] text-[var(--ink-muted)]">
+          <span className="block text-[12.5px] text-[var(--ink-muted)]">
             Echo keeps the microphone open and starts dictating when it hears the
             phrase. Everything is matched on-device — no audio leaves your machine.
             Your OS will show its microphone indicator the whole time.
@@ -108,7 +108,7 @@ export function WakeWordSettings() {
       </label>
 
       <label className="block space-y-1">
-        <span className="text-[11.5px] font-medium text-[var(--ink-muted)]">
+        <span className="text-[13.5px] font-medium text-[var(--ink-muted)]">
           Phrase
         </span>
         <div className="flex gap-1.5">
@@ -132,7 +132,7 @@ export function WakeWordSettings() {
             <button
               onClick={() => guard(() => commands.downloadWakeModel(active))}
               disabled={progress !== null}
-              className="btn-ghost shrink-0 gap-1 px-2.5 text-[12px]"
+              className="btn-ghost shrink-0 gap-1 px-2.5 text-[14px]"
             >
               {progress !== null ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -146,7 +146,7 @@ export function WakeWordSettings() {
       </label>
 
       <label className="block space-y-1">
-        <span className="text-[11.5px] font-medium text-[var(--ink-muted)]">
+        <span className="text-[13.5px] font-medium text-[var(--ink-muted)]">
           Sensitivity — {threshold.toFixed(2)}
         </span>
         <input
@@ -160,14 +160,14 @@ export function WakeWordSettings() {
           }
           className="w-full accent-white"
         />
-        <span className="text-[10.5px] leading-snug text-[var(--ink-muted)]">
+        <span className="text-[12.5px] leading-snug text-[var(--ink-muted)]">
           Lower catches the phrase more often but misfires more. Raise it if Echo
           starts recording on its own.
         </span>
       </label>
 
       <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-[11px] text-[var(--ink-muted)]">
+        <span className="flex items-center gap-1.5 text-[13px] text-[var(--ink-muted)]">
           <Mic
             className="h-3.5 w-3.5"
             style={{
@@ -185,7 +185,7 @@ export function WakeWordSettings() {
 
         <button
           onClick={importCustom}
-          className="btn-ghost shrink-0 gap-1 px-2.5 py-1 text-[11px]"
+          className="btn-ghost shrink-0 gap-1 px-2.5 py-1 text-[13px]"
           title="Import an openWakeWord .onnx model you trained yourself"
         >
           <Upload className="h-3.5 w-3.5" />
@@ -194,7 +194,7 @@ export function WakeWordSettings() {
       </div>
 
       {error && (
-        <p className="flex items-start gap-1 text-[11px] font-medium text-[var(--ink)]">
+        <p className="flex items-start gap-1 text-[13px] font-medium text-[var(--ink)]">
           <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
           {error}
         </p>

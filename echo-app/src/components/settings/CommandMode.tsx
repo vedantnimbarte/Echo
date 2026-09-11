@@ -48,9 +48,9 @@ export function CommandMode() {
           }
           className="mt-0.5 h-3.5 w-3.5 accent-white"
         />
-        <span className="text-[12px] leading-snug">
+        <span className="text-[14px] leading-snug">
           Treat “{prefix} …” as an instruction
-          <span className="block text-[10.5px] text-[var(--ink-muted)]">
+          <span className="block text-[12.5px] text-[var(--ink-muted)]">
             Select some text and say “{prefix}, make this more formal” to rewrite
             it. With nothing selected, the answer is typed at your cursor.
           </span>
@@ -58,7 +58,7 @@ export function CommandMode() {
       </label>
 
       <label className="block space-y-1">
-        <span className="text-[11.5px] font-medium text-[var(--ink-muted)]">
+        <span className="text-[13.5px] font-medium text-[var(--ink-muted)]">
           Trigger word
         </span>
         <input
@@ -69,14 +69,14 @@ export function CommandMode() {
             if (next && next !== prefix) save("command_prefix", next);
           }}
         />
-        <span className="text-[10.5px] leading-snug text-[var(--ink-muted)]">
+        <span className="text-[12.5px] leading-snug text-[var(--ink-muted)]">
           Pick a word you rarely dictate. Anything not starting with it is typed
           as normal text.
         </span>
       </label>
 
       <label className="block space-y-1">
-        <span className="text-[11.5px] font-medium text-[var(--ink-muted)]">
+        <span className="text-[13.5px] font-medium text-[var(--ink-muted)]">
           Model runs on
         </span>
         <select
@@ -88,14 +88,14 @@ export function CommandMode() {
           <option value="openai">OpenAI — uses your stored API key</option>
         </select>
         {provider === "openai" && (
-          <span className="block text-[10.5px] leading-snug text-[var(--ink-muted)]">
+          <span className="block text-[12.5px] leading-snug text-[var(--ink-muted)]">
             Selected text is sent to OpenAI. Ollama keeps it on your machine.
           </span>
         )}
       </label>
 
       <label className="block space-y-1">
-        <span className="text-[11.5px] font-medium text-[var(--ink-muted)]">
+        <span className="text-[13.5px] font-medium text-[var(--ink-muted)]">
           Model
         </span>
         <input
@@ -111,7 +111,7 @@ export function CommandMode() {
 
       {provider === "ollama" && (
         <label className="block space-y-1">
-          <span className="text-[11.5px] font-medium text-[var(--ink-muted)]">
+          <span className="text-[13.5px] font-medium text-[var(--ink-muted)]">
             Ollama address
           </span>
           <input
@@ -122,7 +122,7 @@ export function CommandMode() {
               if (next && next !== endpoint) save("ollama_endpoint", next);
             }}
           />
-          <span className="text-[10.5px] leading-snug text-[var(--ink-muted)]">
+          <span className="text-[12.5px] leading-snug text-[var(--ink-muted)]">
             Needs Ollama running locally (<code>ollama serve</code>) with the model
             pulled.
           </span>

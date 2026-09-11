@@ -44,7 +44,7 @@ export function AudioImport() {
     <div className="space-y-3">
       <button
         type="button"
-        className="btn-ghost text-[11px]"
+        className="btn-ghost text-[13px]"
         disabled={run.isPending}
         onClick={() => run.mutate()}
       >
@@ -52,14 +52,14 @@ export function AudioImport() {
       </button>
 
       {run.isPending && name && (
-        <p className="text-[10.5px] leading-relaxed text-[var(--ink-faint)]">
+        <p className="text-[12.5px] leading-relaxed text-[var(--ink-faint)]">
           Transcribing {name}. Long recordings take a while — this runs entirely
           on your machine.
         </p>
       )}
 
       {run.error != null && (
-        <p className="text-[11px] leading-snug text-[var(--ink)]">
+        <p className="text-[13px] leading-snug text-[var(--ink)]">
           {String(run.error)}
         </p>
       )}
@@ -67,10 +67,10 @@ export function AudioImport() {
       {text !== null && (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3">
-            <span className="truncate text-[11px] font-medium text-[var(--ink-muted)]">
+            <span className="truncate text-[13px] font-medium text-[var(--ink-muted)]">
               {name}
             </span>
-            <button type="button" className="btn-ghost text-[11px]" onClick={copy}>
+            <button type="button" className="btn-ghost text-[13px]" onClick={copy}>
               {copied ? "Copied" : "Copy"}
             </button>
           </div>
@@ -78,7 +78,7 @@ export function AudioImport() {
             readOnly
             value={text}
             rows={8}
-            className="field w-full resize-y font-mono text-[11px] leading-relaxed"
+            className="field w-full resize-y font-mono text-[13px] leading-relaxed"
           />
         </div>
       )}

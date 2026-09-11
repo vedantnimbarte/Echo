@@ -117,14 +117,14 @@ function Figure({
   return (
     <div>
       <div className="tabular flex items-baseline gap-1">
-        <span className="text-[27px] font-semibold leading-none tracking-[-0.03em] text-[var(--ink)]">
+        <span className="text-[31px] font-semibold leading-none tracking-[-0.03em] text-[var(--ink)]">
           {value}
         </span>
         {suffix && (
-          <span className="text-[12px] font-medium text-[var(--ink-muted)]">{suffix}</span>
+          <span className="text-[14px] font-medium text-[var(--ink-muted)]">{suffix}</span>
         )}
       </div>
-      <div className="mt-1.5 text-[11px] leading-snug text-[var(--ink-muted)]">{label}</div>
+      <div className="mt-1.5 text-[13px] leading-snug text-[var(--ink-muted)]">{label}</div>
     </div>
   );
 }
@@ -196,7 +196,7 @@ function BarRow({
   return (
     <div className="flex items-center gap-3">
       <span
-        className="w-[96px] shrink-0 truncate text-[11.5px] text-[var(--ink)]"
+        className="w-[96px] shrink-0 truncate text-[13.5px] text-[var(--ink)]"
         title={label}
       >
         {label}
@@ -207,7 +207,7 @@ function BarRow({
           style={{ width: `${Math.max(2, share * 100)}%`, background: barShade(share) }}
         />
       </span>
-      <span className="tabular w-[86px] shrink-0 text-right text-[11px] text-[var(--ink-muted)]">
+      <span className="tabular w-[86px] shrink-0 text-right text-[13px] text-[var(--ink-muted)]">
         {value}
       </span>
     </div>
@@ -224,7 +224,7 @@ function Breakdown({
   name?: (key: string) => string;
 }) {
   if (rows.length === 0) {
-    return <p className="text-[11px] leading-relaxed text-[var(--ink-faint)]">{empty}</p>;
+    return <p className="text-[13px] leading-relaxed text-[var(--ink-faint)]">{empty}</p>;
   }
   const total = rows.reduce((sum, r) => sum + r.transcripts, 0) || 1;
   return (
@@ -393,7 +393,7 @@ export function InsightsPanel() {
   if (isLoading || !data) {
     return (
       <Page title="Insights" width={880}>
-        <p className="py-5 text-[11px] text-[var(--ink-muted)]">Counting…</p>
+        <p className="py-5 text-[13px] text-[var(--ink-muted)]">Counting…</p>
       </Page>
     );
   }
@@ -405,7 +405,7 @@ export function InsightsPanel() {
         description="What your dictation adds up to — speed, fixes, and where the words went."
         width={880}
       >
-        <p className="max-w-[56ch] py-5 text-[11.5px] leading-relaxed text-[var(--ink-muted)]">
+        <p className="max-w-[56ch] py-5 text-[13.5px] leading-relaxed text-[var(--ink-muted)]">
           Nothing counted yet. These numbers are worked out from your History, so
           they stay empty while History is switched off — there is nothing stored
           to count. Dictate something with History on and this fills in.
@@ -453,7 +453,7 @@ export function InsightsPanel() {
 
           <Card>
             <Figure value={count(fixes)} label="words Echo changed for you" />
-            <div className="mt-3 space-y-1 border-t border-[var(--hairline)] pt-2.5 text-[11px] text-[var(--ink-muted)]">
+            <div className="mt-3 space-y-1 border-t border-[var(--hairline)] pt-2.5 text-[13px] text-[var(--ink-muted)]">
               <div className="flex justify-between gap-3">
                 <span>your dictionary</span>
                 <span className="tabular text-[var(--ink)]">
@@ -469,7 +469,7 @@ export function InsightsPanel() {
 
           <Card>
             <Figure value={count(data.words)} label="words dictated in total" />
-            <div className="mt-3 space-y-1 border-t border-[var(--hairline)] pt-2.5 text-[11px] text-[var(--ink-muted)]">
+            <div className="mt-3 space-y-1 border-t border-[var(--hairline)] pt-2.5 text-[13px] text-[var(--ink-muted)]">
               <div className="flex justify-between gap-3">
                 <span>this week</span>
                 <span className="tabular text-[var(--ink)]">
@@ -484,7 +484,7 @@ export function InsightsPanel() {
           </Card>
         </div>
 
-        <p className="max-w-[70ch] text-[10.5px] leading-relaxed text-[var(--ink-faint)]">
+        <p className="max-w-[70ch] text-[12.5px] leading-relaxed text-[var(--ink-faint)]">
           Saying it took {duration(spokenMinutes)}. Typing the same words at{" "}
           {TYPING_WPM} a minute would have taken roughly{" "}
           <strong className="font-medium text-[var(--ink-muted)]">
@@ -499,7 +499,7 @@ export function InsightsPanel() {
       <Group>
         <div className="grid gap-2.5 lg:grid-cols-2">
           <Card>
-            <h4 className="mb-3 text-[12px] font-medium text-[var(--ink)]">
+            <h4 className="mb-3 text-[14px] font-medium text-[var(--ink)]">
               Apps you dictate into
             </h4>
             <Breakdown
@@ -511,10 +511,10 @@ export function InsightsPanel() {
 
           <Card>
             <div className="mb-3 flex items-baseline justify-between gap-3">
-              <h4 className="text-[12px] font-medium text-[var(--ink)]">
+              <h4 className="text-[14px] font-medium text-[var(--ink)]">
                 {data.streak > 0 ? `${count(data.streak)}-day streak` : "No streak running"}
               </h4>
-              <span className="text-[10.5px] text-[var(--ink-faint)]">
+              <span className="text-[12.5px] text-[var(--ink-faint)]">
                 longest {plural(data.longest_streak, "day")} · {plural(data.days, "day")} used
               </span>
             </div>
@@ -538,8 +538,8 @@ export function InsightsPanel() {
         <div className="grid gap-2.5 lg:grid-cols-2">
           <Card>
             <div className="mb-3 flex items-baseline justify-between gap-3">
-              <h4 className="text-[12px] font-medium text-[var(--ink)]">On device or cloud</h4>
-              <span className="tabular text-[10.5px] text-[var(--ink-faint)]">
+              <h4 className="text-[14px] font-medium text-[var(--ink)]">On device or cloud</h4>
+              <span className="tabular text-[12.5px] text-[var(--ink-faint)]">
                 {offlineShare}% never left this machine
               </span>
             </div>
@@ -551,7 +551,7 @@ export function InsightsPanel() {
           </Card>
 
           <Card>
-            <h4 className="mb-3 text-[12px] font-medium text-[var(--ink)]">Languages</h4>
+            <h4 className="mb-3 text-[14px] font-medium text-[var(--ink)]">Languages</h4>
             <Breakdown
               rows={data.languages}
               name={languageName}
@@ -563,7 +563,7 @@ export function InsightsPanel() {
 
       <Group>
         <Card>
-          <h4 className="mb-3 text-[12px] font-medium text-[var(--ink)]">When you dictate</h4>
+          <h4 className="mb-3 text-[14px] font-medium text-[var(--ink)]">When you dictate</h4>
           <HourStrip hours={data.hours} />
         </Card>
       </Group>

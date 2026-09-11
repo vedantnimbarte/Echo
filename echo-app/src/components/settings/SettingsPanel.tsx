@@ -66,7 +66,7 @@ const LANGUAGES: { code: string; label: string }[] = [
 /** Inline problem report, in the one place the failing control lives. */
 function Problem({ children }: { children: React.ReactNode }) {
   return (
-    <span className="flex items-start gap-1.5 text-[11px] font-medium leading-snug text-[var(--ink)]">
+    <span className="flex items-start gap-1.5 text-[13px] font-medium leading-snug text-[var(--ink)]">
       <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
       {children}
     </span>
@@ -404,14 +404,14 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
                       : "border-[var(--hairline)] bg-[var(--surface-1)] hover:bg-[var(--surface-2)]")
                   }
                 >
-                  <span className="flex items-center gap-2 text-[12.5px] font-medium">
+                  <span className="flex items-center gap-2 text-[14.5px] font-medium">
                     <Icon
                       className="h-4 w-4"
                       style={{ color: active ? "var(--ink)" : "var(--ink-muted)" }}
                     />
                     {title}
                   </span>
-                  <span className="text-[11px] leading-snug text-[var(--ink-muted)]">{sub}</span>
+                  <span className="text-[13px] leading-snug text-[var(--ink-muted)]">{sub}</span>
                 </button>
               );
             })}
@@ -473,8 +473,8 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
                       }
                     />
                   </span>
-                  <span className="text-[12.5px] font-medium">{title}</span>
-                  <span className="text-[11px] leading-snug text-[var(--ink-muted)]">
+                  <span className="text-[14.5px] font-medium">{title}</span>
+                  <span className="text-[13px] leading-snug text-[var(--ink-muted)]">
                     {sub}
                   </span>
                 </button>
@@ -636,11 +636,11 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
                     className="h-4 w-4"
                     style={{ color: selected ? "var(--ink)" : "var(--ink-muted)" }}
                   />
-                  <span className="text-[12.5px] font-medium">{title}</span>
-                  <span className="text-[11px] leading-relaxed text-[var(--ink-muted)]">
+                  <span className="text-[14.5px] font-medium">{title}</span>
+                  <span className="text-[13px] leading-relaxed text-[var(--ink-muted)]">
                     {sub}
                   </span>
-                  <span className="mt-1 text-[11px] text-[var(--ink-faint)]">
+                  <span className="mt-1 text-[13px] text-[var(--ink-faint)]">
                     {running ?? "Not in use"}
                   </span>
                 </button>
@@ -649,14 +649,14 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
           </div>
 
           {activeProvider === "none" ? (
-            <p className="text-[11px] text-[var(--ink-muted)]">
+            <p className="text-[13px] text-[var(--ink-muted)]">
               Transcription is off — Echo records nothing. Pick an engine above
               to turn it back on.
             </p>
           ) : (
             <button
               onClick={() => setProviderMutation.mutate("none")}
-              className="text-[11px] text-[var(--ink-faint)] underline-offset-2 hover:text-[var(--ink)] hover:underline"
+              className="text-[13px] text-[var(--ink-faint)] underline-offset-2 hover:text-[var(--ink)] hover:underline"
             >
               Turn transcription off
             </button>
@@ -962,12 +962,12 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
           }
         >
           <div className="flex items-center gap-3">
-            <button onClick={checkPermission} className="btn-ghost px-3 py-1.5 text-[11.5px]">
+            <button onClick={checkPermission} className="btn-ghost px-3 py-1.5 text-[13.5px]">
               Check permission
             </button>
             {permissionStatus !== null && (
               // Without colour the icon is what distinguishes these two states.
-              <span className="flex items-center gap-1.5 text-[11.5px] font-medium text-[var(--ink)]">
+              <span className="flex items-center gap-1.5 text-[13.5px] font-medium text-[var(--ink)]">
                 {permissionStatus ? (
                   <CheckIcon className="h-3.5 w-3.5" />
                 ) : (

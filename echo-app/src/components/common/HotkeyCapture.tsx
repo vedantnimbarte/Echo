@@ -105,34 +105,34 @@ export function HotkeyCapture({
         onKeyDown={recording ? onKeyDown : undefined}
         onKeyUp={recording ? onKeyUp : undefined}
         className={clsx(
-          "flex min-h-[34px] w-full items-center justify-center gap-1 rounded-lg border px-2.5 py-1.5 text-[13px] outline-none transition",
+          "flex min-h-[34px] w-full items-center justify-center gap-1 rounded-lg border px-2.5 py-1.5 text-[15px] outline-none transition",
           recording
             ? "border-[var(--hairline-strong)] bg-[var(--surface-2)] text-[var(--ink)]"
             : "border-[var(--hairline)] bg-[var(--surface-1)] text-[var(--ink)] hover:bg-[var(--surface-2)]"
         )}
       >
         {recording ? (
-          <span className="text-[12px] text-[var(--ink-muted)]">
+          <span className="text-[14px] text-[var(--ink-muted)]">
             Press a key or combination…
           </span>
         ) : value ? (
           prettyHotkey(value).map((k, i) => (
             <kbd
               key={`${k}-${i}`}
-              className="rounded border border-[var(--hairline)] bg-[var(--surface-2)] px-1.5 py-px text-[11px] font-medium text-[var(--ink)]"
+              className="rounded border border-[var(--hairline)] bg-[var(--surface-2)] px-1.5 py-px text-[13px] font-medium text-[var(--ink)]"
             >
               {k}
             </kbd>
           ))
         ) : (
-          <span className="text-[12px] text-[var(--ink-faint)]">
+          <span className="text-[14px] text-[var(--ink-faint)]">
             Click to set a shortcut
           </span>
         )}
       </button>
 
       {problem && (
-        <p className="text-[10.5px] leading-relaxed text-[var(--ink-faint)]">{problem}</p>
+        <p className="text-[12.5px] leading-relaxed text-[var(--ink-faint)]">{problem}</p>
       )}
     </div>
   );

@@ -81,16 +81,16 @@ export function Performance() {
       >
         <div className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] px-3.5 py-3">
           <div className="flex items-baseline justify-between gap-4">
-            <span className="text-[12px] font-medium text-[var(--ink)]">
+            <span className="text-[14px] font-medium text-[var(--ink)]">
               {gpu?.detected ?? "Checking…"}
             </span>
-            <span className="text-[10.5px] text-[var(--ink-faint)]">
+            <span className="text-[12.5px] text-[var(--ink-faint)]">
               {statusLabel(gpu)}
             </span>
           </div>
 
           {gpu?.failed && (
-            <p className="mt-2 text-[10.5px] leading-relaxed text-[var(--ink-muted)]">
+            <p className="mt-2 text-[12.5px] leading-relaxed text-[var(--ink-muted)]">
               The accelerated build failed to run, so Echo switched to the CPU
               for this session. Toggling GPU acceleration off and on tries it
               again.
@@ -99,7 +99,7 @@ export function Performance() {
 
           {canAccelerate && !gpu?.pack_installed && (
             <div className="mt-2.5 space-y-2">
-              <p className="text-[10.5px] leading-relaxed text-[var(--ink-muted)]">
+              <p className="text-[12.5px] leading-relaxed text-[var(--ink-muted)]">
                 A build for your GPU is available and will make local
                 transcription substantially faster.
                 {gpu?.available_pack_mb
@@ -108,7 +108,7 @@ export function Performance() {
               </p>
               <button
                 type="button"
-                className="btn-primary text-[11px]"
+                className="btn-primary text-[13px]"
                 disabled={busy}
                 onClick={() => download.mutate()}
               >
@@ -119,7 +119,7 @@ export function Performance() {
                   : "Download GPU build"}
               </button>
               {download.error != null && (
-                <p className="text-[10.5px] leading-relaxed text-[var(--ink)]">
+                <p className="text-[12.5px] leading-relaxed text-[var(--ink)]">
                   {String(download.error)}
                 </p>
               )}

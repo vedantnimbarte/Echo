@@ -102,7 +102,7 @@ export function Hint({
             background: "var(--popup)",
             boxShadow: "var(--shadow-lg), var(--edge-light)",
           }}
-          className="animate-hint z-50 rounded-xl border border-[var(--hairline)] px-3.5 py-2.5 text-[11.5px] leading-[1.55] text-[var(--ink-muted)]"
+          className="animate-hint z-50 rounded-xl border border-[var(--hairline)] px-3.5 py-2.5 text-[13.5px] leading-[1.55] text-[var(--ink-muted)]"
         >
           {children}
         </div>

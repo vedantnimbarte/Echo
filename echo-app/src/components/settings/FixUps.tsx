@@ -62,7 +62,7 @@ export function FixUps() {
           />
           {undoKey !== UNBOUND && (
             <button
-              className="btn-ghost px-2.5 py-1.5 text-[11px]"
+              className="btn-ghost px-2.5 py-1.5 text-[13px]"
               onClick={() => setHotkey.mutate({ which: "undo", shortcut: UNBOUND })}
             >
               Unbind
@@ -92,7 +92,7 @@ export function FixUps() {
               />
               {retryKey !== UNBOUND && (
                 <button
-                  className="btn-ghost px-2.5 py-1.5 text-[11px]"
+                  className="btn-ghost px-2.5 py-1.5 text-[13px]"
                   onClick={() => setHotkey.mutate({ which: "retry", shortcut: UNBOUND })}
                 >
                   Unbind
@@ -119,7 +119,7 @@ export function FixUps() {
       )}
 
       {setHotkey.isError && (
-        <p className="text-[11px] font-medium text-[var(--ink)]">
+        <p className="text-[13px] font-medium text-[var(--ink)]">
           {String(setHotkey.error)}
         </p>
       )}

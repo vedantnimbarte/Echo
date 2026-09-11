@@ -79,12 +79,12 @@ function ProviderBody({
 
   return (
     <div className="space-y-5 border-t border-[var(--hairline)] px-4 py-5">
-      <p className="max-w-[52ch] text-[11.5px] leading-relaxed text-[var(--ink-muted)]">
+      <p className="max-w-[52ch] text-[13.5px] leading-relaxed text-[var(--ink-muted)]">
         {provider.note}
       </p>
 
       <div className="space-y-2">
-        <span className="block text-[11.5px] font-medium text-[var(--ink-muted)]">
+        <span className="block text-[13.5px] font-medium text-[var(--ink-muted)]">
           API key
         </span>
         <div className="flex gap-2">
@@ -99,7 +99,7 @@ function ProviderBody({
           <button
             onClick={save}
             disabled={!value}
-            className="btn-primary shrink-0 rounded-lg px-3.5 text-[11.5px]"
+            className="btn-primary shrink-0 rounded-lg px-3.5 text-[13.5px]"
           >
             Save key
           </button>
@@ -109,13 +109,13 @@ function ProviderBody({
             <button
               onClick={() => runTest.mutate()}
               disabled={runTest.isPending || !provider.available}
-              className="btn-ghost rounded-lg px-3 py-1.5 text-[11px] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+              className="btn-ghost rounded-lg px-3 py-1.5 text-[13px] text-[var(--ink-muted)] hover:text-[var(--ink)]"
             >
               {runTest.isPending ? "Testing…" : "Test the key"}
             </button>
             <button
               onClick={remove}
-              className="btn-ghost rounded-lg px-3 py-1.5 text-[11px] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+              className="btn-ghost rounded-lg px-3 py-1.5 text-[13px] text-[var(--ink-muted)] hover:text-[var(--ink)]"
             >
               Remove
             </button>
@@ -125,8 +125,8 @@ function ProviderBody({
           <p
             className={
               test.ok
-                ? "text-[11px] text-[var(--ink)]"
-                : "text-[11px] text-[var(--danger,#e5484d)]"
+                ? "text-[13px] text-[var(--ink)]"
+                : "text-[13px] text-[var(--danger,#e5484d)]"
             }
           >
             {test.message}
@@ -186,19 +186,19 @@ function ProviderBody({
           href={provider.docs_url}
           target="_blank"
           rel="noreferrer"
-          className="text-[11px] text-[var(--ink-muted)] underline-offset-2 hover:text-[var(--ink)] hover:underline"
+          className="text-[13px] text-[var(--ink-muted)] underline-offset-2 hover:text-[var(--ink)] hover:underline"
         >
           Where to get a key
         </a>
         {isActive ? (
-          <span className="text-[11px] text-[var(--ink-muted)]">
+          <span className="text-[13px] text-[var(--ink-muted)]">
             Dictation is running on {provider.label}.
           </span>
         ) : (
           <button
             onClick={onUse}
             disabled={!provider.key_set || !provider.available}
-            className="btn-primary rounded-lg px-3.5 py-1.5 text-[11.5px]"
+            className="btn-primary rounded-lg px-3.5 py-1.5 text-[13.5px]"
           >
             Dictate with {provider.label}
           </button>
@@ -243,7 +243,7 @@ export function CloudProviders() {
   return (
     <div className="space-y-4">
       {!activeCloud && (
-        <p className="max-w-[56ch] text-[11.5px] leading-relaxed text-[var(--ink-muted)]">
+        <p className="max-w-[56ch] text-[13.5px] leading-relaxed text-[var(--ink-muted)]">
           Dictation is still running on this machine. Add a key below, then
           choose that provider to send audio to it instead.
         </p>
@@ -276,12 +276,12 @@ export function CloudProviders() {
                     (isActive ? "bg-[var(--ink)]" : "bg-[var(--hairline-strong)]")
                   }
                 />
-                <span className="flex-1 truncate text-[12.5px] font-medium text-[var(--ink)]">
+                <span className="flex-1 truncate text-[14.5px] font-medium text-[var(--ink)]">
                   {p.label}
                 </span>
                 <span
                   className={
-                    "shrink-0 text-[11px] " +
+                    "shrink-0 text-[13px] " +
                     (isActive ? "text-[var(--ink)]" : "text-[var(--ink-faint)]")
                   }
                 >
@@ -301,7 +301,7 @@ export function CloudProviders() {
       </div>
 
       {use.isError && (
-        <p className="text-[11px] text-[var(--danger,#e5484d)]">{String(use.error)}</p>
+        <p className="text-[13px] text-[var(--danger,#e5484d)]">{String(use.error)}</p>
       )}
     </div>
   );

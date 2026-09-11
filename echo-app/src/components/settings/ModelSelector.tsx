@@ -143,20 +143,20 @@ export function ModelSelector() {
             step deserves the whole surface anyway. */}
         {pendingRemoval ? (
           <div className="flex flex-col gap-1.5">
-            <span className="text-[11px] text-[var(--ink-muted)]">
+            <span className="text-[13px] text-[var(--ink-muted)]">
               Remove {formatSize(m.size_mb)}?
             </span>
             <span className="flex items-center gap-1.5">
               <button
                 onClick={() => deleteMutation.mutate(m.name)}
                 disabled={removing}
-                className="btn-primary px-2 py-0.5 text-[11px]"
+                className="btn-primary px-2 py-0.5 text-[13px]"
               >
                 {removing ? "Removing…" : "Remove"}
               </button>
               <button
                 onClick={() => setConfirming(null)}
-                className="btn-ghost px-2 py-0.5 text-[11px]"
+                className="btn-ghost px-2 py-0.5 text-[13px]"
               >
                 Keep
               </button>
@@ -165,8 +165,8 @@ export function ModelSelector() {
         ) : (
           <div className="flex items-center justify-between gap-2">
             <span className="flex min-w-0 flex-col">
-              <span className="truncate text-[12px] font-medium text-[var(--ink)]">{m.name}</span>
-              <span className="tabular text-[10.5px] text-[var(--ink-faint)]">
+              <span className="truncate text-[14px] font-medium text-[var(--ink)]">{m.name}</span>
+              <span className="tabular text-[12.5px] text-[var(--ink-faint)]">
                 {formatSize(m.size_mb)}
                 {m.downloaded && " on disk"}
               </span>
@@ -174,7 +174,7 @@ export function ModelSelector() {
 
             <span className="flex shrink-0 items-center gap-1">
               {downloading ? (
-                <span className="flex items-center gap-1.5 text-[11px] text-[var(--ink-muted)]">
+                <span className="flex items-center gap-1.5 text-[13px] text-[var(--ink-muted)]">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   <span className="tabular">{Math.round((progress[m.name] ?? 0) * 100)}%</span>
                 </span>
@@ -196,7 +196,7 @@ export function ModelSelector() {
                   ) : (
                     <button
                       onClick={() => select(m.name)}
-                      className="btn-primary px-2 py-0.5 text-[11px]"
+                      className="btn-primary px-2 py-0.5 text-[13px]"
                     >
                       Use
                     </button>
@@ -236,7 +236,7 @@ export function ModelSelector() {
 
   return (
     <div className="space-y-5">
-      <p className="text-[11px] text-[var(--ink-muted)]">
+      <p className="text-[13px] text-[var(--ink-muted)]">
         {downloaded.length === 0 ? (
           "Nothing downloaded yet."
         ) : (
@@ -249,7 +249,7 @@ export function ModelSelector() {
 
       {families.map((family) => (
         <div key={family.label} className="space-y-2">
-          <h4 className="text-[11px] font-medium text-[var(--ink-faint)]">{family.label}</h4>
+          <h4 className="text-[13px] font-medium text-[var(--ink-faint)]">{family.label}</h4>
           {/* Three across: the English family is exactly one row of the size
               ladder, and medium — the outlier at 1.5 GB — ends up alone, which
               is what it is. */}
@@ -258,7 +258,7 @@ export function ModelSelector() {
       ))}
 
       {deleteMutation.isError && (
-        <span className="flex items-start gap-1.5 text-[11px] font-medium leading-snug text-[var(--ink)]">
+        <span className="flex items-start gap-1.5 text-[13px] font-medium leading-snug text-[var(--ink)]">
           <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
           {String(deleteMutation.error)}
         </span>

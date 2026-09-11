@@ -159,7 +159,7 @@ export function DictionaryPanel() {
       {/* Profiles: groups that a per-app profile can switch on */}
       <div className="glass space-y-2 rounded-lg p-3">
         <div className="flex items-center gap-1.5">
-          <p className="text-[12px] font-medium text-[var(--ink)]">Profiles</p>
+          <p className="text-[14px] font-medium text-[var(--ink)]">Profiles</p>
           <Hint label="About profiles">
             Entries with no profile always apply. Put an entry in a profile and
             it only applies while an app using that profile is focused — set
@@ -168,7 +168,7 @@ export function DictionaryPanel() {
         </div>
         <div className="flex gap-1.5">
           <input
-            className="field flex-1 text-[12px]"
+            className="field flex-1 text-[14px]"
             placeholder="New profile name"
             value={newProfile}
             onChange={(e) => setNewProfile(e.target.value)}
@@ -179,7 +179,7 @@ export function DictionaryPanel() {
           <button
             onClick={() => addProfileMutation.mutate()}
             disabled={!newProfile.trim()}
-            className="btn-primary shrink-0 px-2.5 py-1 text-[11px]"
+            className="btn-primary shrink-0 px-2.5 py-1 text-[13px]"
           >
             <Plus className="h-3.5 w-3.5" />
             Add
@@ -190,7 +190,7 @@ export function DictionaryPanel() {
             {profiles.map((p) => (
               <li
                 key={p.id}
-                className="flex items-center gap-1.5 rounded-md border border-[var(--hairline)] bg-[var(--surface-1)] px-2 py-0.5 text-[11px]"
+                className="flex items-center gap-1.5 rounded-md border border-[var(--hairline)] bg-[var(--surface-1)] px-2 py-0.5 text-[13px]"
               >
                 {p.name}
                 <button
@@ -251,7 +251,7 @@ export function DictionaryPanel() {
               </span>
               {profiles.length > 0 && (
                 <select
-                  className="field w-32 shrink-0 text-[11px]"
+                  className="field w-32 shrink-0 text-[13px]"
                   value={entry.profile_id == null ? "global" : String(entry.profile_id)}
                   disabled={entry.id == null}
                   onChange={(e) =>
