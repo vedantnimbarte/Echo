@@ -40,7 +40,7 @@ describe("the app shell", () => {
     // The four pages Settings is split into. If any throws on mount, this fails.
     // `findAllBy` because a page name appears in the nav *and* as a heading once
     // that page is open — the assertion is that the shell rendered them at all.
-    for (const page of ["Settings", "Engine", "Output", "Privacy"]) {
+    for (const page of ["Settings", "Engine", "Output", "Privacy", "About"]) {
       expect((await screen.findAllByText(page)).length).toBeGreaterThan(0);
     }
   });
@@ -57,7 +57,7 @@ describe("the app shell", () => {
 });
 
 describe("every settings page", () => {
-  const PAGES: SettingsPage[] = ["settings", "engine", "output", "privacy"];
+  const PAGES: SettingsPage[] = ["settings", "engine", "output", "privacy", "about"];
 
   // The original defect was a panel that threw while rendering. A loop over the
   // real page list catches a new page added without being exercised, which a
@@ -77,6 +77,28 @@ describe("every settings page", () => {
   it("lists the microphone the backend reported", async () => {
     mount(<SettingsPanel page="settings" />);
     expect(await screen.findByText(/Test Microphone/)).toBeTruthy();
+  });
+
+  // About was carved out of the settings page, so the thing worth pinning is
+  // that the move happened on both ends — the groups arrived, and they did not
+  // stay behind as a second copy.
+  it("keeps the open-source groups on About, not on Settings", async () => {
+    const { unmount } = mount(<SettingsPanel page="about" />);
+    // `findAll`: "Updates" is the group's name and also a word in the sentence
+    // on its checkbox, and the assertion is that the group arrived at all.
+    for (const group of [/Report an issue/i, /Contribute/i, /Updates/i]) {
+      expect((await screen.findAllByText(group)).length).toBeGreaterThan(0);
+    }
+    // Diagnostics reach the report from the backend, not from a hardcoded string.
+    expect(await screen.findByDisplayValue(/OS: windows/)).toBeTruthy();
+    unmount();
+
+    mount(<SettingsPanel page="settings" />);
+    // Waited for, not asserted on an empty render: the page has to have drawn
+    // something before "it is not here" means anything.
+    expect(await screen.findByText(/Start Echo when I log in/i)).toBeTruthy();
+    expect(screen.queryByText(/Report an issue/i)).toBeNull();
+    expect(screen.queryByText(/Contributing guide/i)).toBeNull();
   });
 
   // The engine page swaps its whole lower half on this choice, and the cloud

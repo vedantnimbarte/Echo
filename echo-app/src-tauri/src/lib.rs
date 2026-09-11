@@ -587,6 +587,8 @@ pub fn run() {
             commands::settings::get_setting,
             commands::settings::set_setting,
             commands::settings::spoken_punctuation_languages,
+            commands::settings::dictation_languages,
+            commands::app::diagnostics,
         ])
         .build(tauri::generate_context!())
         .expect("error while building echo")

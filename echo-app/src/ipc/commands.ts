@@ -5,6 +5,11 @@ export interface AudioDevice {
   is_default: boolean;
 }
 
+export interface Language {
+  code: string;
+  label: string;
+}
+
 export interface DictionaryEntry {
   id: number | null;
   phrase: string;
@@ -448,6 +453,18 @@ export const commands = {
    */
   spokenPunctuationLanguages: () =>
     invoke<string[]>("spoken_punctuation_languages"),
+
+  /**
+   * The dictation languages Echo offers. Lives in Rust because the tray menu
+   * renders the same list, and two copies drift.
+   */
+  dictationLanguages: () => invoke<Language[]>("dictation_languages"),
+
+  /**
+   * The version, platform, engine and hotkey state a bug report needs, as the
+   * block Echo pastes into one. Shown to the user before it goes anywhere.
+   */
+  diagnostics: () => invoke<string>("diagnostics"),
 
   getDictationStats: () => invoke<DictationStats>("get_dictation_stats"),
 

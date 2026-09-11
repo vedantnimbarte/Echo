@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Keyboard,
@@ -28,8 +28,9 @@ import { HotkeyCapture } from "../common/HotkeyCapture";
 import type { PillSize } from "../pill/Pill";
 import { Page, Group, Field, Check } from "../common/Page";
 import { t, LOCALES, setLocale } from "../../i18n";
+import { About } from "./About";
 
-export type SettingsPage = "settings" | "engine" | "output" | "privacy";
+export type SettingsPage = "settings" | "engine" | "output" | "privacy" | "about";
 
 // Read through `t` at call time rather than baked into a constant, so a
 // language change takes effect on the next render instead of the next launch.
@@ -37,31 +38,6 @@ const pageMeta = (page: SettingsPage) => ({
   title: t(`settings.${page}.title`),
   description: t(`settings.${page}.description`),
 });
-
-/**
- * Languages Whisper handles well, plus auto-detect. Not the full ~99-language
- * list: a picker nobody can scan is worse than a short one, and the long tail
- * is better served by pinning a code by hand if it ever comes up.
- */
-const LANGUAGES: { code: string; label: string }[] = [
-  { code: "auto", label: "Auto-detect" },
-  { code: "en", label: "English" },
-  { code: "es", label: "Spanish" },
-  { code: "fr", label: "French" },
-  { code: "de", label: "German" },
-  { code: "it", label: "Italian" },
-  { code: "pt", label: "Portuguese" },
-  { code: "nl", label: "Dutch" },
-  { code: "pl", label: "Polish" },
-  { code: "ru", label: "Russian" },
-  { code: "uk", label: "Ukrainian" },
-  { code: "tr", label: "Turkish" },
-  { code: "ar", label: "Arabic" },
-  { code: "hi", label: "Hindi" },
-  { code: "zh", label: "Chinese" },
-  { code: "ja", label: "Japanese" },
-  { code: "ko", label: "Korean" },
-];
 
 /** Inline problem report, in the one place the failing control lives. */
 function Problem({ children }: { children: React.ReactNode }) {
@@ -127,6 +103,17 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
     setModeMutation.mutate(m);
   }
 
+  // Language and microphone can also be set from the tray menu, which this
+  // window cannot see happen — so it is told, and re-reads just that key.
+  useEffect(() => {
+    const unlisten = echoEvents.onSettingChanged((key) =>
+      qc.invalidateQueries({ queryKey: ["setting", key] })
+    );
+    return () => {
+      unlisten.then((f) => f());
+    };
+  }, [qc]);
+
   const { data: devices = [] } = useQuery({
     queryKey: ["audio-devices"],
     queryFn: commands.getAudioDevices,
@@ -165,6 +152,11 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
   const { data: provider } = useQuery({
     queryKey: ["setting", "asr_provider"],
     queryFn: () => commands.getSetting("asr_provider"),
+  });
+  // The list itself lives in Rust: the tray menu renders the same one.
+  const { data: languages = [] } = useQuery({
+    queryKey: ["dictation-languages"],
+    queryFn: commands.dictationLanguages,
   });
   const { data: language } = useQuery({
     queryKey: ["setting", "language"],
@@ -357,7 +349,7 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
       title={searching ? "Search" : meta.title}
       description={
         searching
-          ? `Everything matching “${q.trim()}”, from all four settings pages.`
+          ? `Everything matching “${q.trim()}”, from every page of this window.`
           : meta.description
       }
       actions={search}
@@ -503,6 +495,13 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
           )}
         </Group>
       )}
+
+      {on("about", [
+        "about", "version", "update", "updates", "release", "upgrade", "new version",
+        "auto-update", "issue", "bug", "report", "github", "source", "open source",
+        "licence", "license", "mit", "contribute", "contributing", "star", "diagnostics",
+        "feature request",
+      ]) && <About label={(title) => label("about", title)} />}
 
       {on("settings", ["microphone", "mic", "input", "device", "audio"]) && (
         <Group title={label("settings", "Microphone")}>
@@ -686,7 +685,7 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
             value={language ?? "auto"}
             onChange={(e) => setLanguageMutation.mutate(e.target.value)}
           >
-            {LANGUAGES.map((l) => (
+            {languages.map((l) => (
               <option key={l.code} value={l.code}>
                 {l.label}
               </option>
@@ -857,7 +856,7 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
                 <p className="mt-2">
                   Works in{" "}
                   {punctuationLanguages
-                    .map((c) => LANGUAGES.find((l) => l.code === c)?.label ?? c)
+                    .map((c) => languages.find((l) => l.code === c)?.label ?? c)
                     .join(", ")}
                   . Other languages are left exactly as spoken.
                 </p>

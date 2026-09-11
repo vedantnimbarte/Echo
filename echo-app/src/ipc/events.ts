@@ -93,6 +93,16 @@ export const echoEvents = {
 
   // Which engine is in use is chosen in the settings window and reported by
   // both windows, so the change is broadcast for the same reason pill size is.
+  // A setting changed outside this window — the tray menu can set the
+  // dictation language and the microphone. Carries the settings key, so the
+  // listener invalidates one cached read rather than all of them.
+  onSettingChanged: (cb: (key: string) => void) =>
+    listen<string>("echo://setting-changed", (e) => cb(e.payload)),
+
+  // "Check for Updates…" in the tray menu. The updater is a frontend plugin,
+  // so the tray can only ask the window to do it.
+  onCheckForUpdates: (cb: () => void) => listen("echo://check-for-updates", cb),
+
   onEngineChanged: (cb: () => void) => listen("echo://engine-changed", cb),
   emitEngineChanged: () => emit("echo://engine-changed"),
 

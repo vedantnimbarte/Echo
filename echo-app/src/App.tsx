@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import {
   BarChart3,
@@ -9,6 +9,7 @@ import {
   Cpu,
   TextCursorInput,
   ShieldCheck,
+  Info,
   Power,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -16,7 +17,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import { useEchoEvents } from "./hooks/useEchoEvents";
 import { commands } from "./ipc/commands";
-import { checkForUpdate } from "./update";
+import { checkForUpdate, CHECK_ON_START } from "./update";
+import { echoEvents } from "./ipc/events";
 import { TitleBar } from "./components/common/TitleBar";
 import { DictionaryPanel } from "./components/dictionary/DictionaryPanel";
 import { HistoryPanel } from "./components/history/HistoryPanel";
@@ -42,15 +44,18 @@ const SETTINGS_NAV: NavItem[] = [
 ];
 
 /**
- * The general page, kept out of the list above because it sits at the foot of
- * the sidebar instead — beside Quit Echo, where the things you reach for
+ * The two pages kept out of the list above because they sit at the foot of the
+ * sidebar instead — beside Quit Echo, where the things you reach for
  * occasionally live rather than the topics you move between.
+ *
+ * About is under Settings rather than in it: which version you are on, who
+ * wrote this, and where to report that it broke are questions about the
+ * application, not knobs on it.
  */
-const SETTINGS_ITEM: NavItem = {
-  id: "settings",
-  label: "Settings",
-  Icon: SlidersHorizontal,
-};
+const FOOT_NAV: NavItem[] = [
+  { id: "settings", label: "Settings", Icon: SlidersHorizontal },
+  { id: "about", label: "About", Icon: Info },
+];
 
 /**
  * Content you accumulate by using Echo, rather than settings you choose — and
@@ -65,7 +70,7 @@ const LIBRARY_NAV: NavItem[] = [
   { id: "plugins", label: "Plugins", Icon: Puzzle },
 ];
 
-const SETTINGS_IDS = [SETTINGS_ITEM, ...SETTINGS_NAV].map((i) => i.id);
+const SETTINGS_IDS = [...FOOT_NAV, ...SETTINGS_NAV].map((i) => i.id);
 
 const SIDEBAR_KEY = "echo.sidebar-collapsed";
 
@@ -187,9 +192,33 @@ export default function App() {
     queryFn: () => commands.getSetting("onboarding_complete"),
   });
 
-  // Check for a new release once on startup (silent if the updater isn't set up).
+  // Opt-out rather than opt-in: an app that types into every window is one
+  // you want patched, and the check is a single request to the release feed.
+  // Absent means on, so nobody has to have visited Settings for it to work.
+  const { data: checkOnStart } = useQuery({
+    queryKey: ["setting", CHECK_ON_START],
+    queryFn: () => commands.getSetting(CHECK_ON_START),
+  });
+
+  // Once per launch, not once per change of the setting — turning the box back
+  // on in Settings should not fire a check from under the user.
+  const startupChecked = useRef(false);
   useEffect(() => {
-    void checkForUpdate();
+    if (checkOnStart === undefined || startupChecked.current) return;
+    startupChecked.current = true;
+    if (checkOnStart === "false") return;
+    // Silent: nobody asked, so an up-to-date answer is not worth a dialog.
+    void checkForUpdate({ silent: true });
+  }, [checkOnStart]);
+
+  // The tray's "Check for Updates…" — loud, because someone asked.
+  useEffect(() => {
+    const unlisten = echoEvents.onCheckForUpdates(() => {
+      void checkForUpdate();
+    });
+    return () => {
+      unlisten.then((f) => f());
+    };
   }, []);
 
   // Keep this window alive when closed so the pill's gear can reopen it.
@@ -252,19 +281,23 @@ export default function App() {
             ))}
           </div>
 
-          {/* The foot of the sidebar: the page you adjust things on, and the one
-              entry that is not a page at all. `mt-auto` pushes the pair down
-              however tall the nav above it happens to be; `pt-5` keeps them off
-              it when the window is short enough that there is no slack left. */}
+          {/* The foot of the sidebar: the pages you adjust and read about the
+              app on, and the one entry that is not a page at all. `mt-auto`
+              pushes the group down however tall the nav above it happens to be;
+              `pt-5` keeps them off it when the window is short enough that
+              there is no slack left. */}
           <div className="mt-auto flex flex-col gap-0.5 pt-5">
             <div className="mx-2.5 mb-3 border-t border-[var(--hairline)]" />
 
-            <NavButton
-              item={SETTINGS_ITEM}
-              active={page === SETTINGS_ITEM.id}
-              collapsed={collapsed}
-              onClick={() => setPage(SETTINGS_ITEM.id)}
-            />
+            {FOOT_NAV.map((item) => (
+              <NavButton
+                key={item.id}
+                item={item}
+                active={page === item.id}
+                collapsed={collapsed}
+                onClick={() => setPage(item.id)}
+              />
+            ))}
 
             {/* Quitting is an app-level action, not a setting — it belongs to the
                 window chrome rather than to whichever page you happen to be on. */}

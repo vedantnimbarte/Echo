@@ -82,6 +82,14 @@ const ANSWERS: Record<string, unknown> = {
     ],
   },
   spoken_punctuation_languages: ["en", "es", "fr", "de", "it", "pt", "nl"],
+  diagnostics: "Echo 0.3.0\nOS: windows (x86_64)\nEngine: local\n",
+  // Shortened, but `auto` first and real codes, because the language `<select>`
+  // ticks against these and the punctuation hint looks labels up in them.
+  dictation_languages: [
+    { code: "auto", label: "Auto-detect" },
+    { code: "en", label: "English" },
+    { code: "es", label: "Spanish" },
+  ],
   get_hotkey: "CommandOrControl+Shift+Space",
   secure_field_detection: true,
   wake_word_ready: false,
@@ -171,6 +179,16 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
   save: vi.fn(async () => null),
   message: vi.fn(async () => {}),
   confirm: vi.fn(async () => false),
+}));
+
+// Every external link leaves the webview through this, so a test that clicked
+// one would otherwise try to launch a browser on the machine running it.
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openUrl: vi.fn(async () => {}),
+}));
+
+vi.mock("@tauri-apps/api/app", () => ({
+  getVersion: vi.fn(async () => "0.3.0"),
 }));
 
 vi.mock("@tauri-apps/plugin-process", () => ({

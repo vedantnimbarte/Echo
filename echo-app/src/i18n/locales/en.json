@@ -14,6 +14,8 @@
   "settings.output.description": "Where the finished text goes, and how it gets there.",
   "settings.privacy.title": "Privacy",
   "settings.privacy.description": "What Echo keeps on this machine, and what it sends off it.",
+  "settings.about.title": "About",
+  "settings.about.description": "Which version you are on, who wrote Echo, and where to say it broke.",
   "settings.search": "Search settings",
   "settings.language": "Interface language",
   "settings.language.auto": "Match my system"

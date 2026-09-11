@@ -14,6 +14,8 @@
   "settings.output.description": "Où va le texte final, et comment il y arrive.",
   "settings.privacy.title": "Confidentialité",
   "settings.privacy.description": "Ce qu'Echo conserve sur cette machine et ce qu'il en envoie.",
+  "settings.about.title": "À propos",
+  "settings.about.description": "Votre version, qui a écrit Echo, et où signaler un problème.",
   "settings.search": "Rechercher un réglage",
   "settings.language": "Langue de l'interface",
   "settings.language.auto": "Utiliser celle du système"

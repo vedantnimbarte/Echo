@@ -1,7 +1,9 @@
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
 use tauri_plugin_autostart::ManagerExt;
 
 use crate::error::{EchoError, Result};
+use crate::state::AppState;
+use crate::storage::repositories;
 
 /// Quit the entire application. The floating pill has no native window chrome,
 /// so the frontend needs an explicit way to exit (exposed from Settings, and
@@ -77,6 +79,66 @@ pub fn account_name() -> Option<String> {
     let mut chars = first.chars();
     let head = chars.next()?.to_uppercase().to_string();
     Some(head + chars.as_str())
+}
+
+/// The facts a bug report needs, as the markdown block Echo pastes into one.
+///
+/// Built here rather than in the frontend because every line of it already
+/// lives on this side — the settings table, the binary manager, the session
+/// probe — and gathering it there would mean four round-trips and a second
+/// place that has to know what "active" means for the GPU.
+///
+/// Deliberately small and readable: it is shown to the user in an editable box
+/// before it goes anywhere, and a wall of JSON is not something anyone reads
+/// before agreeing to publish it. Nothing here identifies the machine or the
+/// person — no hostname, no username, no paths, no API keys.
+///
+/// ponytail: OS is the compile-time target, not the running build (no
+/// "Windows 11 26100"). Add `os_info` if a report ever turns on a point
+/// release.
+#[tauri::command]
+pub fn diagnostics(state: State<'_, AppState>) -> String {
+    let (provider, model, language) = {
+        let conn = state.db.lock().unwrap();
+        let get = |k: &str| repositories::get_setting(&conn, k).ok().flatten();
+        (
+            get("asr_provider").unwrap_or_else(|| "local".into()),
+            get("whisper_model").unwrap_or_else(|| "none".into()),
+            get("language").unwrap_or_else(|| "auto".into()),
+        )
+    };
+
+    let hotkey = crate::core::session::hotkey_support();
+    // Last: it consumes the state guard.
+    let gpu = crate::commands::asr::gpu_status(state);
+
+    let mut out = String::new();
+    out.push_str(&format!("Echo {}\n", env!("CARGO_PKG_VERSION")));
+    out.push_str(&format!(
+        "OS: {} ({})\n",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    ));
+    out.push_str(&format!("Engine: {provider}\n"));
+    out.push_str(&format!("Model: {model}\n"));
+    out.push_str(&format!("Language: {language}\n"));
+    out.push_str(&format!(
+        "Acceleration: {} (detected {}, {} threads){}\n",
+        if gpu.active { "on" } else { "off" },
+        gpu.detected,
+        gpu.threads,
+        if gpu.failed { ", latched to CPU after a failure" } else { "" }
+    ));
+    out.push_str(&format!(
+        "Session: {:?}{}, hotkey {}\n",
+        hotkey.session,
+        hotkey
+            .desktop
+            .map(|d| format!(" / {d}"))
+            .unwrap_or_default(),
+        if hotkey.can_bind { "bindable" } else { "NOT bindable" }
+    ));
+    out
 }
 
 #[cfg(test)]
