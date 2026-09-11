@@ -18,7 +18,8 @@
   wash over the near-black base, lit along its top edge and dropped onto a
   layered shadow, so stacking them reads as glass on glass. One accent survives
   — the record red — because a live microphone is the single state that must be
-  unmistakable across a room.
+  unmistakable across a room. It is spent on the record dot and nothing else:
+  one small solid mark, not a glow over everything near it.
 
   Echo turns speech into set text, so the window that configures it is set like
   a page. EB Garamond, a face cut for books, carries the title of each page and
@@ -296,21 +297,10 @@ optgroup {
   pointer-events: none;
 }
 
-/* The one place color is spent: a red bloom while the microphone is live. */
-.pill-shell::after {
-  content: "";
-  position: absolute;
-  inset: -2px;
-  border-radius: inherit;
-  background: var(--rec);
-  filter: blur(20px);
-  opacity: 0;
-  transition: opacity 0.5s ease;
-  z-index: -1;
-}
-.pill-shell.is-live::after {
-  opacity: 0.3;
-}
+/* No bloom behind the pill while it is live. The record dot already says
+   "listening" and says it precisely; a red wash bleeding off the whole shell
+   said the same thing again, louder and less exactly, and it tinted the glass
+   edge the `::before` rim is there to keep clean. */
 
 /* ---- Animations ----------------------------------------------------------- */
 

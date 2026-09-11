@@ -263,7 +263,6 @@ function PillLarge({
     view === "transcribing" ? "transcribing" : view === "active" ? "listening" : "idle";
   // The red bloom means one thing only: the microphone is capturing. Whisper
   // working afterwards is not that, so transcribing stays colourless.
-  const hot = view === "active";
 
   return (
     <div
@@ -274,8 +273,7 @@ function PillLarge({
       <div
         className={clsx(
           "pill-shell animate-rise flex select-none items-center gap-1 rounded-full p-1.5",
-          "cursor-grab active:cursor-grabbing",
-          hot && "is-live"
+          "cursor-grab active:cursor-grabbing"
         )}
         style={{ color: "var(--ink)" }}
       >
@@ -458,8 +456,7 @@ function PillMinimal({
         <div
           className={clsx(
             "pill-shell animate-rise flex items-center rounded-full",
-            "cursor-grab transition-[height,padding] duration-200 ease-out active:cursor-grabbing",
-            view === "active" && "is-live"
+            "cursor-grab transition-[height,padding] duration-200 ease-out active:cursor-grabbing"
           )}
           style={{ height, padding: open ? "0 4px" : 0, color: "var(--ink)" }}
         >
@@ -591,8 +588,7 @@ function PillSmall({ view, live, isRecording, engine, error, toggle, retry }: Pi
         <div
           className={clsx(
             "pill-shell animate-rise flex items-center rounded-full",
-            "cursor-grab active:cursor-grabbing",
-            view === "active" && "is-live"
+            "cursor-grab active:cursor-grabbing"
           )}
           style={{ color: "var(--ink)" }}
         >
