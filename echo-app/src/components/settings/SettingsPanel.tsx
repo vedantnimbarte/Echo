@@ -1,6 +1,16 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Keyboard, AudioWaveform, Hand, Search, Check as CheckIcon, X, AlertTriangle } from "lucide-react";
+import {
+  Keyboard,
+  AudioWaveform,
+  Hand,
+  Search,
+  Check as CheckIcon,
+  X,
+  AlertTriangle,
+  Laptop,
+  Cloud,
+} from "lucide-react";
 import { commands } from "../../ipc/commands";
 import { echoEvents } from "../../ipc/events";
 import { normalizeMode, useRecordingStore, type RecordingMode } from "../../store/recordingStore";
@@ -170,6 +180,8 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
     mutationFn: (v: string) => commands.setAsrProvider(v),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["setting", "asr_provider"] }),
   });
+  /** Which half of the engine page is showing, once someone has said. */
+  const [laneChoice, setLaneChoice] = useState<"local" | "cloud" | null>(null);
 
   /* ---- output ----------------------------------------------------------- */
   const { data: autoInject } = useQuery({
@@ -310,6 +322,21 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
   });
 
   const activeProvider = provider ?? "local";
+  // The provider in use, when it is a cloud one — also what decides which lane
+  // the page opens on.
+  const activeCloud = (cloudProviders ?? []).find((p) => p.id === activeProvider) ?? null;
+  // Derived rather than synced: an explicit click wins, and until there is one
+  // the lane follows whatever is actually running. No effect to keep in step.
+  const lane = laneChoice ?? (activeCloud ? "cloud" : "local");
+
+  function chooseLane(next: "local" | "cloud") {
+    setLaneChoice(next);
+    // Picking "local" is the whole decision, so it commits. Picking "cloud"
+    // isn't: which provider is still unanswered, and pointing dictation at one
+    // without a key would break it mid-setup. The list below commits that.
+    if (next === "local" && activeProvider !== "local") setProviderMutation.mutate("local");
+  }
+
   const meta = pageMeta(page);
 
   const search = (
@@ -563,43 +590,90 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
       )}
 
       {/* ---- Engine ------------------------------------------------------- */}
-      {on("engine", ["provider", "engine", "whisper", "openai", "groq", "deepgram", "cloud", "offline"]) && (
+      {on("engine", ["provider", "engine", "whisper", "openai", "groq", "deepgram", "cloud", "offline", "local", "online", "off", "no transcription"]) && (
         <Group title={label("engine", "Speech engine")}>
-          <select
-            className="field"
-            aria-label="Speech engine"
-            value={activeProvider}
-            onChange={(e) => setProviderMutation.mutate(e.target.value)}
-          >
-            <option value="local">Local Whisper (offline)</option>
-            <option value="none">None (no transcription)</option>
-            {/* Cloud engines come from the backend catalog, not a list kept
-                here — the two used to drift, leaving providers you could give
-                a key to but never select. Only ones with a key stored are
-                offered: picking a keyless provider just fails at the moment
-                you speak. */}
-            {(cloudProviders ?? [])
-              .filter((p) => p.available && p.key_set)
-              .map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-          </select>
-          {(cloudProviders ?? []).every((p) => !p.key_set) && (
+          {/* Two lanes rather than one list of eleven. The question is never
+              "which of these names" — it is whether your voice stays on this
+              machine, and that answer decides everything under it. Each card
+              carries what is actually running, which the old dropdown could
+              only say by being open. */}
+          <div className="grid grid-cols-2 gap-2.5">
+            {(
+              [
+                {
+                  id: "local" as const,
+                  Icon: Laptop,
+                  title: "On this machine",
+                  sub: "Whisper runs offline. Audio never leaves your computer.",
+                  running:
+                    activeProvider === "local"
+                      ? `Whisper ${whisperModel || "base.en"}`
+                      : null,
+                },
+                {
+                  id: "cloud" as const,
+                  Icon: Cloud,
+                  title: "A cloud provider",
+                  sub: "Faster and more accurate. Audio is sent to the provider you choose.",
+                  running: activeCloud ? `${activeCloud.label}, ${activeCloud.model}` : null,
+                },
+              ]
+            ).map(({ id, Icon, title, sub, running }) => {
+              const selected = lane === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => chooseLane(id)}
+                  aria-pressed={selected}
+                  className={
+                    "flex flex-col gap-2 rounded-xl border p-4 text-left transition " +
+                    (selected
+                      ? "border-[var(--hairline-strong)] bg-[var(--surface-2)] shadow-[var(--edge-light)]"
+                      : "border-[var(--hairline)] bg-[var(--surface-1)] hover:bg-[var(--surface-2)]")
+                  }
+                >
+                  <Icon
+                    className="h-4 w-4"
+                    style={{ color: selected ? "var(--ink)" : "var(--ink-muted)" }}
+                  />
+                  <span className="text-[12.5px] font-medium">{title}</span>
+                  <span className="text-[11px] leading-relaxed text-[var(--ink-muted)]">
+                    {sub}
+                  </span>
+                  <span className="mt-1 text-[11px] text-[var(--ink-faint)]">
+                    {running ?? "Not in use"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {activeProvider === "none" ? (
             <p className="text-[11px] text-[var(--ink-muted)]">
-              Add an API key under Cloud API keys below to use a cloud engine.
+              Transcription is off — Echo records nothing. Pick an engine above
+              to turn it back on.
             </p>
+          ) : (
+            <button
+              onClick={() => setProviderMutation.mutate("none")}
+              className="text-[11px] text-[var(--ink-faint)] underline-offset-2 hover:text-[var(--ink)] hover:underline"
+            >
+              Turn transcription off
+            </button>
           )}
           {setProviderMutation.isError && <Problem>{String(setProviderMutation.error)}</Problem>}
         </Group>
       )}
 
-      {on("engine", ["model", "models", "local", "download", "remove", "delete", "disk", "storage"]) && (
-        <Group title={label("engine", "Local models")}>
-          <ModelSelector />
-        </Group>
-      )}
+      {/* Models and compute belong to the offline engine; on cloud they would
+          be controls for something that isn't running. Search reaches across
+          pages, so a search still shows them. */}
+      {on("engine", ["model", "models", "local", "download", "remove", "delete", "disk", "storage"]) &&
+        (searching || lane === "local") && (
+          <Group title={label("engine", "Local models")}>
+            <ModelSelector />
+          </Group>
+        )}
 
       {on("engine", ["language", "auto-detect", "english", "multilingual"]) && (
         <Group
@@ -636,9 +710,18 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
-      {on("engine", ["gpu", "cuda", "nvidia", "metal", "acceleration", "accelerated", "threads", "cpu", "performance", "speed", "slow", "warm", "microphone"]) && (
-        <Performance />
-      )}
+      {on("engine", ["gpu", "cuda", "nvidia", "metal", "acceleration", "accelerated", "threads", "cpu", "performance", "speed", "slow", "warm", "microphone"]) &&
+        (searching || lane === "local") && <Performance />}
+
+      {on("engine", ["api key", "key", "openai", "groq", "deepgram", "cloud", "keychain", "provider", "azure", "google", "mistral", "elevenlabs", "assemblyai", "speechmatics"]) &&
+        (searching || lane === "cloud") && (
+          <Group
+            title={label("engine", "Cloud provider")}
+            hint="Keys are stored in your operating system's keychain, not in Echo's database. Audio for the provider you choose is sent to it as you speak; everything else stays on this machine."
+          >
+            <CloudProviders />
+          </Group>
+        )}
 
       {on("engine", ["import", "file", "audio file", "recording", "mp3", "wav", "transcribe file", "voice memo"]) && (
         <Group
@@ -646,12 +729,6 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
           hint="Uses the offline engine and the model selected above, so nothing is uploaded."
         >
           <AudioImport />
-        </Group>
-      )}
-
-      {on("engine", ["api key", "key", "openai", "groq", "deepgram", "cloud", "keychain"]) && (
-        <Group title={label("engine", "Cloud API keys")}>
-          <CloudProviders />
         </Group>
       )}
 

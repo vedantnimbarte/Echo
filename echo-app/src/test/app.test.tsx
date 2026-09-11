@@ -10,9 +10,10 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { settings } from "./setup";
+import { settings, invoked } from "./setup";
 import App from "../App";
 import { SettingsPanel, type SettingsPage } from "../components/settings/SettingsPanel";
 import { DictionaryPanel } from "../components/dictionary/DictionaryPanel";
@@ -76,6 +77,37 @@ describe("every settings page", () => {
   it("lists the microphone the backend reported", async () => {
     mount(<SettingsPanel page="settings" />);
     expect(await screen.findByText(/Test Microphone/)).toBeTruthy();
+  });
+
+  // The engine page swaps its whole lower half on this choice, and the cloud
+  // half must not commit: dictation stays local until a provider with a key is
+  // picked, or someone mid-setup is left pointing at a provider that can't
+  // answer.
+  it("shows cloud providers without switching the engine to one", async () => {
+    const user = userEvent.setup();
+    mount(<SettingsPanel page="engine" />);
+
+    expect(await screen.findByText("Local models")).toBeTruthy();
+
+    await user.click(await screen.findByText("A cloud provider"));
+
+    expect(await screen.findByText("OpenAI")).toBeTruthy();
+    expect(screen.queryByText("Local models")).toBeNull();
+    expect(invoked).not.toContain("set_asr_provider");
+  });
+
+  it("switches back to the offline engine when local is picked", async () => {
+    settings.set("asr_provider", "openai");
+    const user = userEvent.setup();
+    mount(<SettingsPanel page="engine" />);
+
+    // Opens on the lane that is actually running.
+    expect(await screen.findByText("OpenAI")).toBeTruthy();
+
+    await user.click(await screen.findByText("On this machine"));
+
+    expect(await screen.findByText("Local models")).toBeTruthy();
+    expect(settings.get("asr_provider")).toBe("local");
   });
 });
 

@@ -276,9 +276,10 @@ the app data directory (see [Where things live](#where-things-live)).
 
 ### Cloud providers (no native build needed)
 
-In **Settings → Cloud API keys**, paste a key and click **Save** (stored in your
-OS keychain), then **Test** to check it before you rely on it. The provider then
-appears in the **Speech engine** list.
+In **Settings → Engine**, choose **A cloud provider**, then open the provider you
+want. Paste a key and click **Save key** (it goes to your OS keychain), **Test
+the key** to check it before you rely on it, and **Dictate with …** to send audio
+there instead of to the offline engine.
 
 | Provider | Get a key | Notes |
 |---|---|---|

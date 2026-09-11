@@ -33,6 +33,24 @@ const ANSWERS: Record<string, unknown> = {
     { name: "small", downloaded: false, size_mb: 466, english_only: false },
   ],
   active_model: "base.en",
+  list_cloud_providers: [
+    {
+      id: "openai",
+      label: "OpenAI",
+      kind: "openai",
+      default_endpoint: "https://api.openai.com/v1",
+      models: ["whisper-1"],
+      needs_endpoint: false,
+      needs_region: false,
+      docs_url: "https://platform.openai.com/api-keys",
+      note: "Whisper on OpenAI's servers.",
+      key_set: false,
+      model: "whisper-1",
+      endpoint: "https://api.openai.com/v1",
+      region: null,
+      available: true,
+    },
+  ],
   list_dictionary_entries: [],
   list_history: [],
   list_plugins: [],
@@ -99,6 +117,12 @@ vi.mock("@tauri-apps/api/core", () => ({
     if (command === "get_setting") return settings.get(args?.key as string) ?? null;
     if (command === "set_setting") {
       settings.set(args?.key as string, args?.value as string);
+      return null;
+    }
+    // Registers the provider *and* persists it, the way the real command does,
+    // so a test can read back which engine a click actually chose.
+    if (command === "set_asr_provider") {
+      settings.set("asr_provider", args?.name as string);
       return null;
     }
     return command in ANSWERS ? ANSWERS[command] : null;
