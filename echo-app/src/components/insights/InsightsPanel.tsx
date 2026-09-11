@@ -31,7 +31,7 @@ const RAMP = [0.07, 0.15, 0.26, 0.4, 0.58];
 
 /** A bar's brightness is its share, floored so the smallest one is still there. */
 function barShade(share: number) {
-  return `rgba(255,255,255,${(0.18 + 0.6 * share).toFixed(3)})`;
+  return `rgba(255,246,235,${(0.18 + 0.6 * share).toFixed(3)})`;
 }
 
 const reducedMotion =
@@ -149,7 +149,7 @@ function SpeedArc({ wpm }: { wpm: number }) {
       <path
         d="M 10 54 A 44 44 0 0 1 98 54"
         fill="none"
-        stroke="rgba(255,255,255,0.09)"
+        stroke="rgba(255,246,235,0.09)"
         strokeWidth="6"
         strokeLinecap="round"
       />
@@ -282,7 +282,7 @@ function Calendar({ daily }: { daily: DayWords[] }) {
   const shade = (words: number) => {
     if (words === 0) return "var(--surface-1)";
     const i = Math.min(RAMP.length - 1, Math.floor((words / busiest) * RAMP.length));
-    return `rgba(255,255,255,${RAMP[i]})`;
+    return `rgba(255,246,235,${RAMP[i]})`;
   };
 
   /** A month is labelled on the first column that lands in it. */
@@ -367,7 +367,7 @@ function HourStrip({ hours }: { hours: number[] }) {
             style={{
               height: `${Math.max(3, (n / busiest) * 100)}%`,
               background: n
-                ? `rgba(255,255,255,${0.14 + 0.66 * (n / busiest)})`
+                ? `rgba(255,246,235,${0.14 + 0.66 * (n / busiest)})`
                 : "var(--surface-1)",
             }}
           />
@@ -525,7 +525,7 @@ export function InsightsPanel() {
                 <span
                   key={o}
                   className="h-[10px] w-[10px] rounded-[2px]"
-                  style={{ background: `rgba(255,255,255,${o})` }}
+                  style={{ background: `rgba(255,246,235,${o})` }}
                 />
               ))}
               <span>more</span>

@@ -58,7 +58,7 @@ export function CommandMode() {
       </label>
 
       <label className="block space-y-1">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-faint)]">
+        <span className="text-[11.5px] font-medium text-[var(--ink-muted)]">
           Trigger word
         </span>
         <input
@@ -76,7 +76,7 @@ export function CommandMode() {
       </label>
 
       <label className="block space-y-1">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-faint)]">
+        <span className="text-[11.5px] font-medium text-[var(--ink-muted)]">
           Model runs on
         </span>
         <select
@@ -95,7 +95,7 @@ export function CommandMode() {
       </label>
 
       <label className="block space-y-1">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-faint)]">
+        <span className="text-[11.5px] font-medium text-[var(--ink-muted)]">
           Model
         </span>
         <input
@@ -111,7 +111,7 @@ export function CommandMode() {
 
       {provider === "ollama" && (
         <label className="block space-y-1">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-faint)]">
+          <span className="text-[11.5px] font-medium text-[var(--ink-muted)]">
             Ollama address
           </span>
           <input

@@ -120,7 +120,11 @@ const fakeWindow = {
   close: vi.fn(async () => {}),
   setSize: vi.fn(async () => {}),
   startDragging: vi.fn(async () => {}),
+  minimize: vi.fn(async () => {}),
+  toggleMaximize: vi.fn(async () => {}),
+  isMaximized: vi.fn(async () => false),
   onCloseRequested: vi.fn(async () => () => {}),
+  onResized: vi.fn(async () => () => {}),
   label: "main",
 };
 

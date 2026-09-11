@@ -17,6 +17,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEchoEvents } from "./hooks/useEchoEvents";
 import { commands } from "./ipc/commands";
 import { checkForUpdate } from "./update";
+import { TitleBar } from "./components/common/TitleBar";
 import { DictionaryPanel } from "./components/dictionary/DictionaryPanel";
 import { HistoryPanel } from "./components/history/HistoryPanel";
 import { InsightsPanel } from "./components/insights/InsightsPanel";
@@ -51,6 +52,18 @@ const LIBRARY_NAV: NavItem[] = [
 
 const SETTINGS_IDS = SETTINGS_NAV.map((i) => i.id);
 
+const SIDEBAR_KEY = "echo.sidebar-collapsed";
+
+/**
+ * Collapsed is a rail, not an absence: every nav item is already an icon
+ * followed by its label, so narrowing the column and clipping the overflow
+ * leaves the icons behind without a single conditional. 59px is what centres
+ * them — 12px of nav padding, 10px of button padding, the 15px icon, and the
+ * same again back out.
+ */
+const RAIL = 59;
+const COLUMN = 188;
+
 function isSettingsPage(page: Page): page is SettingsPage {
   return (SETTINGS_IDS as Page[]).includes(page);
 }
@@ -58,10 +71,12 @@ function isSettingsPage(page: Page): page is SettingsPage {
 function NavButton({
   item,
   active,
+  collapsed,
   onClick,
 }: {
   item: NavItem;
   active: boolean;
+  collapsed: boolean;
   onClick: () => void;
 }) {
   const { label, Icon } = item;
@@ -69,8 +84,10 @@ function NavButton({
     <button
       onClick={onClick}
       aria-current={active ? "page" : undefined}
+      // Only worth a tooltip once the rail has hidden the label it would repeat.
+      title={collapsed ? label : undefined}
       className={clsx(
-        "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[12.5px] tracking-tight transition-colors",
+        "flex w-full items-center gap-2.5 overflow-hidden whitespace-nowrap rounded-lg px-2.5 py-[7px] text-[12.5px] tracking-tight transition-colors",
         active
           ? "bg-[var(--surface-2)] text-[var(--ink)] shadow-[var(--edge-light)]"
           : "text-[var(--ink-muted)] hover:bg-[var(--surface-1)] hover:text-[var(--ink)]"
@@ -82,9 +99,15 @@ function NavButton({
   );
 }
 
-function NavGroup({ label }: { label: string }) {
+function NavGroup({ label, collapsed }: { label: string; collapsed: boolean }) {
   return (
-    <span className="px-2.5 pb-1.5 pt-1 text-[10px] font-medium uppercase tracking-[0.11em] text-[var(--ink-faint)]">
+    <span
+      aria-hidden={collapsed}
+      className={clsx(
+        "whitespace-nowrap px-2.5 pb-2 pt-1 text-[11px] font-medium text-[var(--ink-faint)] transition-opacity duration-150 motion-reduce:transition-none",
+        collapsed && "opacity-0"
+      )}
+    >
       {label}
     </span>
   );
@@ -94,6 +117,18 @@ export default function App() {
   // The settings window observes state only — the pill owns the hotkey toggle.
   useEchoEvents();
   const [page, setPage] = useState<Page>("dictation");
+  // A view preference, not a setting — it belongs to this machine's window, so
+  // it stays out of the settings database.
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem(SIDEBAR_KEY) === "1"
+  );
+
+  function toggleSidebar() {
+    setCollapsed((was) => {
+      localStorage.setItem(SIDEBAR_KEY, was ? "0" : "1");
+      return !was;
+    });
+  }
 
   // First run shows the onboarding wizard until it's marked complete.
   const { data: onboardingDone, isLoading: onboardingLoading } = useQuery({
@@ -134,36 +169,31 @@ export default function App() {
         className="pointer-events-none absolute inset-x-0 top-0 h-64"
         style={{
           background:
-            "radial-gradient(75% 100% at 50% 0%, rgba(255,255,255,0.055), transparent 70%)",
+            "radial-gradient(75% 100% at 50% 0%, rgba(255,240,224,0.055), transparent 70%)",
         }}
       />
 
-      <div className="relative flex min-h-0 flex-1">
-        <nav className="flex w-[196px] flex-shrink-0 flex-col border-r border-[var(--hairline)] p-3.5">
-          <div className="mb-5 flex items-center gap-2 px-2.5 pt-1">
-            <span
-              className="h-2 w-2 rounded-full"
-              style={{
-                background: "var(--ink)",
-                boxShadow: "0 0 10px rgba(255,255,255,0.45)",
-              }}
-            />
-            <span className="text-[13px] font-semibold tracking-tight">Echo</span>
-          </div>
+      <TitleBar sidebar={{ collapsed, onToggle: toggleSidebar }} />
 
+      <div className="relative flex min-h-0 flex-1">
+        <nav
+          style={{ width: collapsed ? RAIL : COLUMN }}
+          className="flex flex-shrink-0 flex-col overflow-hidden border-r border-[var(--hairline)] p-3 transition-[width] duration-200 ease-out motion-reduce:transition-none"
+        >
           <div className="flex flex-col gap-0.5">
-            <NavGroup label="Settings" />
+            <NavGroup label="Settings" collapsed={collapsed} />
             {SETTINGS_NAV.map((item) => (
               <NavButton
                 key={item.id}
                 item={item}
                 active={page === item.id}
+                collapsed={collapsed}
                 onClick={() => setPage(item.id)}
               />
             ))}
           </div>
 
-          <div className="mx-2.5 my-4 border-t border-[var(--hairline)]" />
+          <div className="mx-2.5 my-5 border-t border-[var(--hairline)]" />
 
           <div className="flex flex-col gap-0.5">
             {LIBRARY_NAV.map((item) => (
@@ -171,6 +201,7 @@ export default function App() {
                 key={item.id}
                 item={item}
                 active={page === item.id}
+                collapsed={collapsed}
                 onClick={() => setPage(item.id)}
               />
             ))}
@@ -180,7 +211,8 @@ export default function App() {
               window chrome rather than to whichever page you happen to be on. */}
           <button
             onClick={() => void commands.quit()}
-            className="mt-auto flex items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-[12.5px] tracking-tight text-[var(--ink-muted)] transition-colors hover:bg-[var(--surface-1)] hover:text-[var(--ink)]"
+            title={collapsed ? "Quit Echo" : undefined}
+            className="mt-auto flex items-center gap-2.5 overflow-hidden whitespace-nowrap rounded-lg px-2.5 py-[7px] text-[12.5px] tracking-tight text-[var(--ink-muted)] transition-colors hover:bg-[var(--surface-1)] hover:text-[var(--ink)]"
           >
             <Power className="h-[15px] w-[15px] shrink-0" />
             Quit Echo

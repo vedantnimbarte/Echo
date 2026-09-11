@@ -48,7 +48,7 @@ function ProviderRow({ provider }: { provider: CloudProvider }) {
         <span className="text-[12px] font-medium text-[var(--ink)]">
           {provider.label}
           {!provider.available && (
-            <span className="ml-1.5 text-[10px] uppercase tracking-wide text-[var(--ink-faint)]">
+            <span className="ml-1.5 text-[10.5px] text-[var(--ink-faint)]">
               coming soon
             </span>
           )}
@@ -176,7 +176,7 @@ export function CloudProviders() {
 
   return (
     <div className="space-y-1.5">
-      <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-faint)]">
+      <span className="text-[11.5px] font-medium text-[var(--ink-muted)]">
         Cloud provider API keys
       </span>
       <div className="space-y-1.5">

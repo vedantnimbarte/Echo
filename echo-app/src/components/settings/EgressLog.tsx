@@ -108,11 +108,6 @@ export function EgressLog() {
         </div>
       )}
 
-      <p className="text-[10.5px] leading-snug text-[var(--ink-faint)]">
-        This lists requests Echo itself made. It is not proof that nothing else
-        left your machine — Echo can’t see traffic from other programs, and a
-        native plugin can make requests that bypass this log entirely.
-      </p>
     </div>
   );
 }

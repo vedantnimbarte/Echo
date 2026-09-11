@@ -123,14 +123,6 @@ export function FixUps() {
           {String(setHotkey.error)}
         </p>
       )}
-
-      <p className="max-w-[56ch] text-[10.5px] leading-relaxed text-[var(--ink-faint)]">
-        Undo sends the focused app its own undo shortcut, so it works wherever
-        that does — and can’t delete text you typed yourself afterwards. Retry
-        re-runs the audio Echo already has: nothing leaves this machine unless
-        you pick a cloud provider above. The audio is held in memory only, one
-        utterance at a time, and never written to disk.
-      </p>
     </div>
   );
 }

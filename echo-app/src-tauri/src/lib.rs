@@ -442,6 +442,25 @@ pub fn run() {
                 tracing::warn!("Tray icon unavailable, Echo is reachable only via the pill: {e}");
             }
 
+            // Echo draws its own title bar (see components/common/TitleBar.tsx),
+            // because the native one on Windows and Linux arrives in the OS's
+            // colours and reads as a strip of another app stapled to the top of
+            // a very dark window. macOS is left decorated on purpose: its
+            // traffic lights are muscle memory, and `titleBarStyle: "Overlay"`
+            // floats them inside our own strip.
+            //
+            // Done here rather than with `decorations: false` in the config
+            // because that key has no per-platform form — splitting it out into
+            // tauri.macos.conf.json would mean duplicating the whole `windows`
+            // array, which the merge replaces wholesale, and watching the two
+            // copies drift.
+            #[cfg(not(target_os = "macos"))]
+            if let Some(win) = app.get_webview_window("main") {
+                // Safe to do before the window is shown (`visible: false` in the
+                // config), so there is no frame to flicker away.
+                let _ = win.set_decorations(false);
+            }
+
             // Surface the settings window on first launch so onboarding can run.
             if !onboarding_done {
                 if let Some(win) = app.get_webview_window("main") {

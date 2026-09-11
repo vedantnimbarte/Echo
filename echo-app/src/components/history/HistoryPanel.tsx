@@ -284,7 +284,7 @@ export function HistoryPanel() {
         <div className="space-y-4">
           {groups.map((g) => (
             <section key={g.label} className="space-y-2">
-              <h3 className="px-0.5 text-[11px] font-medium uppercase tracking-wide text-[var(--ink-faint)]">
+              <h3 className="px-0.5 text-[11.5px] font-medium text-[var(--ink-muted)]">
                 {g.label}
               </h3>
               <ul className="space-y-2">

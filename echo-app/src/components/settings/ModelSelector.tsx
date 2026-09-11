@@ -106,7 +106,7 @@ export function ModelSelector() {
           "Nothing downloaded yet."
         ) : (
           <>
-            {downloaded.length} downloaded ·{" "}
+            {downloaded.length} downloaded, taking{" "}
             <span className="tabular text-[var(--ink)]">{formatSize(usedMb)}</span> on disk
           </>
         )}
@@ -131,7 +131,7 @@ export function ModelSelector() {
                 <div className="flex min-w-0 flex-col gap-0.5">
                   <span className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--ink)]">
                     {m.name}
-                    <span className="rounded bg-[var(--surface-2)] px-1 py-px text-[9px] uppercase tracking-wide text-[var(--ink-muted)]">
+                    <span className="rounded bg-[var(--surface-2)] px-1.5 py-px text-[9.5px] uppercase tracking-[0.06em] text-[var(--ink-muted)]">
                       {m.english_only ? "EN" : "multi"}
                     </span>
                   </span>
@@ -221,7 +221,7 @@ export function ModelSelector() {
                   className="absolute bottom-0 left-0 h-[3px] rounded-r-full"
                   style={{
                     width: `${Math.max(4, (m.size_mb / scale) * 100)}%`,
-                    background: "rgba(255,255,255,0.32)",
+                    background: "rgba(255,246,235,0.32)",
                   }}
                 />
               )}

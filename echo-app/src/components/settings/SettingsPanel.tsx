@@ -501,20 +501,21 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
           title={label("dictation", "Interface language")}
           hint="This is the language Echo's own buttons and labels use. It has no effect on which language it transcribes — that is set under Engine."
         >
-          <Field label={t("settings.language")}>
-            <select
-              className="field w-full"
-              value={uiLanguage ?? "auto"}
-              onChange={(e) => setUiLanguage(e.target.value)}
-            >
-              <option value="auto">{t("settings.language.auto")}</option>
-              {Object.entries(LOCALES).map(([code, { label: name }]) => (
-                <option key={code} value={code}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </Field>
+          {/* No Field label: the group is already called Interface language,
+              and repeating it above the select said the same word twice. */}
+          <select
+            className="field w-full"
+            aria-label={t("settings.language")}
+            value={uiLanguage ?? "auto"}
+            onChange={(e) => setUiLanguage(e.target.value)}
+          >
+            <option value="auto">{t("settings.language.auto")}</option>
+            {Object.entries(LOCALES).map(([code, { label: name }]) => (
+              <option key={code} value={code}>
+                {name}
+              </option>
+            ))}
+          </select>
         </Group>
       )}
 
@@ -673,7 +674,24 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
             Insert the transcript as soon as it's ready
           </Check>
 
-          <Field label="Method">
+          <Field
+            label="Method"
+            hint={
+              <>
+                <p>
+                  Typing works everywhere but is slow on long text. Pasting is
+                  fast, and briefly replaces your clipboard before putting it
+                  back.
+                </p>
+                <p className="mt-2">
+                  Auto pastes anything with a line break or longer than about
+                  160 characters, and types the rest. Line breaks are why this
+                  matters — typed as keystrokes they become Return, which submits
+                  a chat box instead of breaking the line.
+                </p>
+              </>
+            }
+          >
             <select
               className="field w-64"
               value={injectionMethod ?? "type"}
@@ -685,36 +703,26 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
             </select>
           </Field>
 
-          {injectionMethod === "auto" && (
-            <p className="max-w-[56ch] text-[10.5px] leading-relaxed text-[var(--ink-faint)]">
-              Anything with a line break, or longer than about 160 characters,
-              is pasted; everything else is typed. Line breaks are the reason
-              this matters — typed as keystrokes they become Return, which
-              submits a chat box instead of breaking the line.
-            </p>
-          )}
-
           {injectionMethod === "paste" && (
-            <>
-              <Field label="Clipboard hold (ms)">
-                <input
-                  type="number"
-                  min={20}
-                  step={20}
-                  className="field w-32"
-                  defaultValue={clipboardSettle ?? "180"}
-                  onBlur={(e) => setClipboardSettleMutation.mutate(e.target.value || "180")}
-                />
-              </Field>
-              <p className="max-w-[56ch] text-[10.5px] leading-relaxed text-[var(--ink-faint)]">
-                Pasting briefly replaces your clipboard, then puts it back. Raise
-                the hold if text goes missing — Electron apps, terminals and
-                remote desktops often need longer than the default to read it.
-              </p>
-            </>
+            <Field
+              label="Clipboard hold (ms)"
+              hint="How long Echo leaves the text on your clipboard before restoring what was there. Raise it if text goes missing — Electron apps, terminals and remote desktops often need longer than the default to read it."
+            >
+              <input
+                type="number"
+                min={20}
+                step={20}
+                className="field w-32"
+                defaultValue={clipboardSettle ?? "180"}
+                onBlur={(e) => setClipboardSettleMutation.mutate(e.target.value || "180")}
+              />
+            </Field>
           )}
 
-          <Field label="Insert delay (ms)">
+          <Field
+            label="Insert delay (ms)"
+            hint="A pause before Echo starts typing. Leave it at zero unless text lands in the wrong place — some apps need a moment to take focus back after the pill closes."
+          >
             <input
               type="number"
               min={0}
@@ -736,13 +744,9 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
             onChange={(v) =>
               setFormatSetting.mutate({ key: "auto_edit", value: v ? "true" : "false" })
             }
+            hint="Only sounds nobody means to write. Words that are sometimes filler — “like”, “actually”, “basically” — are left alone, because no rule can tell when you meant them. English only."
           >
             Drop “um”, “uh” and stuttered words
-            <span className="block text-[10.5px] text-[var(--ink-faint)]">
-              Only sounds nobody means to write. Words that are sometimes filler
-              — “like”, “actually”, “basically” — are left alone, because no rule
-              can tell when you meant them. English only.
-            </span>
           </Check>
 
           <Check
@@ -750,58 +754,50 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
             onChange={(v) =>
               setFormatSetting.mutate({ key: "auto_edit_llm", value: v ? "true" : "false" })
             }
+            hint="“Send it Tuesday, no, Wednesday” becomes “Send it Wednesday”. Uses the Command mode model on every utterance, so it costs latency — and it is the one setting here that changes the words you said. Off by default for that reason. Your History keeps what you actually said either way."
           >
             Also let the model fix self-corrections
-            <span className="block text-[10.5px] text-[var(--ink-faint)]">
-              “Send it Tuesday, no, Wednesday” becomes “Send it Wednesday”. Uses
-              the Command mode model on every utterance, so it costs latency —
-              and it is the one setting here that changes the words you said.
-              Off by default for that reason. Your History keeps what you
-              actually said either way.
-            </span>
           </Check>
 
+          {/* The catch belongs where you decide, not after you have decided:
+              this used to appear only once the setting was already on. Which
+              languages have rules is part of it — a speaker of one that doesn't
+              would otherwise dictate "coma", get nothing, and reasonably
+              conclude the feature is broken. */}
           <Check
             checked={spokenPunctuation === "true"}
             onChange={(v) =>
               setFormatSetting.mutate({ key: "spoken_punctuation", value: v ? "true" : "false" })
             }
+            hint={
+              <>
+                <p>
+                  The cost of this one is real: “period” and “colon” stop being
+                  usable as ordinary words. Echo keeps them when the sentence
+                  makes it obvious — “a period of time”, “the colon” — but that
+                  is a rule of thumb, not grammar. Off by default for that reason.
+                </p>
+                <p className="mt-2">
+                  Works in{" "}
+                  {punctuationLanguages
+                    .map((c) => LANGUAGES.find((l) => l.code === c)?.label ?? c)
+                    .join(", ")}
+                  . Other languages are left exactly as spoken.
+                </p>
+              </>
+            }
           >
             Let me say punctuation — “comma”, “new paragraph”, “question mark”
           </Check>
-          {spokenPunctuation === "true" && (
-            <>
-              <p className="max-w-[56ch] text-[10.5px] leading-relaxed text-[var(--ink-faint)]">
-                The cost of this one is real: “period” and “colon” stop being
-                usable as ordinary words. Echo keeps them when the sentence makes
-                it obvious — “a period of time”, “the colon” — but it is a rule of
-                thumb, not grammar. Off by default for that reason.
-              </p>
-              {/* Which languages have rules is a fact worth stating: a speaker
-                  of one that doesn't would otherwise dictate "coma", get
-                  nothing, and reasonably conclude the feature is broken. */}
-              <p className="max-w-[56ch] text-[10.5px] leading-relaxed text-[var(--ink-faint)]">
-                Works in{" "}
-                {punctuationLanguages
-                  .map((c) => LANGUAGES.find((l) => l.code === c)?.label ?? c)
-                  .join(", ")}
-                . Other languages are left exactly as spoken — the words would
-                have to be written and checked by someone who speaks it, and a
-                wrong guess would corrupt every sentence.
-              </p>
-            </>
-          )}
 
           <Check
             checked={formatNumbers !== "false"}
             onChange={(v) =>
               setFormatSetting.mutate({ key: "format_numbers", value: v ? "true" : "false" })
             }
+            hint="English only: number words are grammar, not a word list."
           >
             Write numbers, times and units as digits — “twenty five” → 25
-            <span className="block text-[10.5px] text-[var(--ink-faint)]">
-              English only: number words are grammar, not a word list.
-            </span>
           </Check>
 
           <Check
@@ -855,7 +851,24 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
       {on("output", ["undo", "scratch", "retry", "again", "mistake", "wrong", "fix", "take back"]) && (
         <Group
           title={label("output", "When it gets it wrong")}
-          hint="Both shortcuts are global: by the time you notice, the focus is in the app that got the text."
+          hint={
+            <>
+              <p>
+                Both shortcuts are global: by the time you notice, the focus is
+                in the app that got the text.
+              </p>
+              <p className="mt-2">
+                Undo sends the focused app its own undo shortcut, so it works
+                wherever that does — and can’t delete text you typed yourself
+                afterwards.
+              </p>
+              <p className="mt-2">
+                Retry re-runs the audio Echo already has. Nothing leaves this
+                machine unless you pick a cloud provider, and the audio is held
+                in memory only, one utterance at a time, never written to disk.
+              </p>
+            </>
+          }
         >
           <FixUps />
         </Group>
@@ -901,7 +914,10 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
 
       {/* ---- Privacy ------------------------------------------------------ */}
       {on("privacy", ["request", "network", "egress", "offline", "outbound", "privacy"]) && (
-        <Group title={label("privacy", "Request log")}>
+        <Group
+          title={label("privacy", "Request log")}
+          hint="This lists requests Echo itself made. It is not proof that nothing else left your machine — Echo can’t see traffic from other programs, and a native plugin can make requests that bypass this log entirely."
+        >
           <EgressLog />
         </Group>
       )}

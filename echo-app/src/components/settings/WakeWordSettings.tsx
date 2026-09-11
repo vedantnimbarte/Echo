@@ -108,7 +108,7 @@ export function WakeWordSettings() {
       </label>
 
       <label className="block space-y-1">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-faint)]">
+        <span className="text-[11.5px] font-medium text-[var(--ink-muted)]">
           Phrase
         </span>
         <div className="flex gap-1.5">
@@ -146,7 +146,7 @@ export function WakeWordSettings() {
       </label>
 
       <label className="block space-y-1">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-[var(--ink-faint)]">
+        <span className="text-[11.5px] font-medium text-[var(--ink-muted)]">
           Sensitivity — {threshold.toFixed(2)}
         </span>
         <input

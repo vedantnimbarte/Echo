@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus, Trash2, Crosshair } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { commands, type AppProfile } from "../../ipc/commands";
+import { Hint } from "../common/Hint";
 
 /**
  * Per-app overrides. Each field can be left on "Global", which inherits the
@@ -135,9 +136,9 @@ export function AppProfiles() {
                 </button>
               </div>
 
-              <div className="mt-2 grid grid-cols-3 gap-1.5">
+              <div className="mt-2.5 grid grid-cols-3 gap-2">
                 <label className="block">
-                  <span className="mb-0.5 block text-[9.5px] uppercase tracking-wide text-[var(--ink-faint)]">
+                  <span className="mb-1 block text-[11px] text-[var(--ink-muted)]">
                     Insert text
                   </span>
                   <select
@@ -159,7 +160,7 @@ export function AppProfiles() {
                 </label>
 
                 <label className="block">
-                  <span className="mb-0.5 block text-[9.5px] uppercase tracking-wide text-[var(--ink-faint)]">
+                  <span className="mb-1 block text-[11px] text-[var(--ink-muted)]">
                     Method
                   </span>
                   <select
@@ -178,11 +179,12 @@ export function AppProfiles() {
                   </select>
                 </label>
 
-                <label className="block">
-                  <span className="mb-0.5 block text-[9.5px] uppercase tracking-wide text-[var(--ink-faint)]">
+                <div>
+                  <ColumnLabel htmlFor={`${p.id}-live`} hint="Types words as you speak them, correcting as the decoder revises itself. It rewrites text already in the app, which is why it is set per app rather than globally.">
                     Live text
-                  </span>
+                  </ColumnLabel>
                   <select
+                    id={`${p.id}-live`}
                     className="field text-[11px]"
                     value={
                       p.stream_partials === null
@@ -197,19 +199,19 @@ export function AppProfiles() {
                           e.target.value === "global" ? null : e.target.value === "on",
                       })
                     }
-                    title="Type words as you speak them, correcting as the decoder revises. Rewrites text in this app, so turn it on per app."
                   >
                     <option value="global">Global</option>
                     <option value="on">Stream</option>
                     <option value="off">Wait</option>
                   </select>
-                </label>
+                </div>
 
-                <label className="block">
-                  <span className="mb-0.5 block text-[9.5px] uppercase tracking-wide text-[var(--ink-faint)]">
+                <div>
+                  <ColumnLabel htmlFor={`${p.id}-fmt`} hint="Spoken punctuation, numbers and tidy-up. Turn it off where you want the words exactly as spoken — a terminal, for instance.">
                     Formatting
-                  </span>
+                  </ColumnLabel>
                   <select
+                    id={`${p.id}-fmt`}
                     className="field text-[11px]"
                     value={
                       p.formatting === null ? "global" : p.formatting ? "on" : "off"
@@ -220,16 +222,15 @@ export function AppProfiles() {
                           e.target.value === "global" ? null : e.target.value === "on",
                       })
                     }
-                    title="Spoken punctuation, numbers and tidy-up. Turn it off where you want the words exactly as spoken — a terminal, for instance."
                   >
                     <option value="global">Global</option>
                     <option value="on">Format</option>
                     <option value="off">Raw</option>
                   </select>
-                </label>
+                </div>
 
                 <label className="block">
-                  <span className="mb-0.5 block text-[9.5px] uppercase tracking-wide text-[var(--ink-faint)]">
+                  <span className="mb-1 block text-[11px] text-[var(--ink-muted)]">
                     Dictionary
                   </span>
                   <select
@@ -257,6 +258,32 @@ export function AppProfiles() {
       )}
 
       {error && <p className="text-[11px] font-medium text-[var(--ink)]">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * A grid column's heading, optionally carrying its explanation.
+ *
+ * These columns are three abbreviations in a row — "Live text", "Formatting" —
+ * and the abbreviation is the point: the row stays scannable. What each one
+ * actually does goes behind the icon.
+ */
+function ColumnLabel({
+  htmlFor,
+  hint,
+  children,
+}: {
+  htmlFor: string;
+  hint?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mb-1 flex items-center gap-1">
+      <label htmlFor={htmlFor} className="text-[11px] text-[var(--ink-muted)]">
+        {children}
+      </label>
+      {hint && <Hint>{hint}</Hint>}
     </div>
   );
 }
