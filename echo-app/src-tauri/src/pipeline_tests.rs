@@ -20,7 +20,9 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 
-use crate::commands::recording::{resolve_delivery, retain_utterances, vad_gate, VadEvent};
+use crate::commands::recording::{
+    resolve_delivery, retain_utterances, vad_gate, Retained, VadEvent, MAX_RETAINED_SAMPLES,
+};
 use crate::core::{
     asr::{manager::AsrManager, AsrProvider, TranscriptSegment},
     dictionary::{DictionaryEngine, DictionaryEntry},
@@ -251,12 +253,12 @@ async fn vad_gate_flushes_a_trailing_utterance_when_capture_stops() {
 
 /// Drive [`retain_utterances`] over a chunk sequence and report both what the
 /// ASR stage received and what was left in the retention slot.
-async fn run_retain(input: Vec<Vec<f32>>) -> (Vec<Vec<f32>>, Option<Vec<f32>>) {
+async fn run_retain(input: Vec<Vec<f32>>) -> (Vec<Vec<f32>>, Option<Retained>) {
     let (tx_in, rx_in) = mpsc::channel::<Vec<f32>>(64);
     let (tx_out, mut rx_out) = mpsc::channel::<Vec<f32>>(64);
     let slot = Arc::new(Mutex::new(None));
 
-    let task = tokio::spawn(retain_utterances(rx_in, tx_out, slot.clone()));
+    let task = tokio::spawn(retain_utterances(rx_in, tx_out, Some(slot.clone()), None));
     for chunk in input {
         tx_in.send(chunk).await.unwrap();
     }
@@ -292,23 +294,41 @@ async fn only_the_most_recent_utterance_is_kept() {
         Vec::new(),
     ])
     .await;
-    assert_eq!(kept, Some(vec![0.2; 6]));
+    assert_eq!(kept, Some(Retained::Audio(vec![0.2; 6])));
 }
 
-/// An utterance too long to keep clears the slot instead of keeping a prefix.
+/// An utterance too long to keep drops the audio instead of keeping a prefix.
 /// Retrying a truncated buffer would return a shorter transcript than the one
 /// it replaced, which is indistinguishable from the retry itself failing.
+///
+/// It records *that* it happened, though: "too long to keep" and "nothing was
+/// recorded" need different answers, or someone who just dictated for minutes
+/// is told there was no recent dictation.
 #[tokio::test]
 async fn an_overlong_utterance_is_dropped_rather_than_truncated() {
     // Prime the slot with a short utterance, then overflow the next one.
     let (_, kept) = run_retain(vec![
         vec![0.1; 8],
         Vec::new(),
-        vec![0.0; 31 * 16_000],
+        vec![0.0; MAX_RETAINED_SAMPLES + 16_000],
         Vec::new(),
     ])
     .await;
-    assert_eq!(kept, None, "a truncated retry is worse than no retry");
+    assert_eq!(
+        kept,
+        Some(Retained::TooLong),
+        "a truncated retry is worse than no retry, but silence is worse than saying so"
+    );
+}
+
+/// The cap covers a read-aloud paragraph, which is the length that used to
+/// lose its retry. Guards the constant against being tuned back down by
+/// someone counting bytes rather than sentences.
+#[tokio::test]
+async fn a_long_paragraph_still_keeps_its_audio() {
+    // Ninety seconds of speech in one go — past the old thirty-second cap.
+    let (_, kept) = run_retain(vec![vec![0.1; 90 * 16_000], Vec::new()]).await;
+    assert!(matches!(kept, Some(Retained::Audio(a)) if a.len() == 90 * 16_000));
 }
 
 // ── VAD → ASR ────────────────────────────────────────────────────────────────
@@ -525,11 +545,10 @@ async fn pipeline_delivers_dictionary_corrected_text_to_the_focused_app() {
             repo::insert_history(
                 &conn,
                 &crate::storage::models::TranscriptionRecord {
-                    id: None,
                     text: processed.clone(),
                     language: segment.language.clone(),
                     provider: "fake".into(),
-                    created_at: String::new(),
+                    ..Default::default()
                 },
             )
             .unwrap();

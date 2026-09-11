@@ -20,6 +20,8 @@ import { Waveform } from "../pill/Waveform";
 import { CloudProviders } from "../settings/CloudProviders";
 import { WakeWordSettings } from "../settings/WakeWordSettings";
 import { HotkeyCapture } from "../common/HotkeyCapture";
+import { Hint } from "../common/Hint";
+import { TitleBar } from "../common/TitleBar";
 
 type StepId = "welcome" | "mic" | "engine" | "permissions" | "hotkey" | "wake";
 const STEPS: { id: StepId; label: string; Icon: React.ElementType }[] = [
@@ -47,22 +49,26 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   const isLast = stepIdx === STEPS.length - 1;
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-[#0a0b11] text-[var(--ink)]">
+    <div className="relative flex h-screen flex-col overflow-hidden bg-[var(--surface-0)] text-[var(--ink)]">
+      {/* The same ambient top light as the settings window, so arriving in one
+          from the other doesn't feel like changing apps. */}
       <div
-        className="pointer-events-none absolute inset-x-0 top-0 h-64 opacity-60"
+        className="pointer-events-none absolute inset-x-0 top-0 h-64"
         style={{
           background:
-            "radial-gradient(60% 100% at 30% 0%, rgba(52,231,228,0.14), transparent 70%), radial-gradient(60% 100% at 80% 0%, rgba(160,107,255,0.14), transparent 70%)",
+            "radial-gradient(75% 100% at 50% 0%, rgba(255,240,224,0.055), transparent 70%)",
         }}
       />
 
       {/* Step rail */}
-      <div className="relative flex items-center justify-center gap-2 pt-6">
+      <TitleBar />
+
+      <div className="relative flex items-center justify-center gap-2 pt-5">
         {STEPS.map((s, i) => (
           <div key={s.id} className="flex items-center gap-2">
             <span
               className={clsx(
-                "flex h-7 w-7 items-center justify-center rounded-full border text-[11px] transition",
+                "flex h-7 w-7 items-center justify-center rounded-full border text-[13px] transition",
                 i < stepIdx && "border-[var(--hairline-strong)] bg-[var(--surface-3)] text-[var(--ink)]",
                 i === stepIdx && "border-[var(--ink)] bg-[var(--surface-3)] text-[var(--ink)]",
                 i > stepIdx && "border-[var(--hairline)] text-[var(--ink-faint)]"
@@ -84,7 +90,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
       {/* Step body */}
       <div className="relative flex min-h-0 flex-1 items-center justify-center px-6">
-        <div className="w-full max-w-[440px]">
+        <div className="w-full max-w-[460px]">
           {step === "welcome" && <WelcomeStep />}
           {step === "mic" && <MicStep />}
           {step === "engine" && <EngineStep />}
@@ -99,19 +105,19 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         <button
           onClick={back}
           disabled={stepIdx === 0}
-          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] text-[var(--ink-muted)] transition hover:text-[var(--ink)] disabled:opacity-0"
+          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[14px] text-[var(--ink-muted)] transition hover:text-[var(--ink)] disabled:opacity-0"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Back
         </button>
         <button
           onClick={finish}
-          className="text-[11px] text-[var(--ink-faint)] transition hover:text-[var(--ink-muted)]"
+          className="text-[13px] text-[var(--ink-faint)] transition hover:text-[var(--ink-muted)]"
         >
           Skip setup
         </button>
         <button
           onClick={isLast ? finish : next}
-          className="btn-primary px-4 py-1.5 text-[12px]"
+          className="btn-primary px-4 py-1.5 text-[14px]"
         >
           {isLast ? "Finish" : "Continue"}
           {!isLast && <ArrowRight className="h-3.5 w-3.5" />}
@@ -125,9 +131,9 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
 function StepHeading({ title, sub }: { title: string; sub: string }) {
   return (
-    <div className="mb-5 text-center">
-      <h2 className="text-[20px] font-semibold tracking-tight">{title}</h2>
-      <p className="mx-auto mt-1.5 max-w-[360px] text-[13px] leading-snug text-[var(--ink-muted)]">
+    <div className="mb-7 text-center">
+      <h2 className="display text-[32px]">{title}</h2>
+      <p className="mx-auto mt-2.5 max-w-[380px] text-[15px] leading-relaxed text-[var(--ink-muted)]">
         {sub}
       </p>
     </div>
@@ -140,15 +146,16 @@ function WelcomeStep() {
       <div
         className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl"
         style={{
-          background: "linear-gradient(140deg, rgba(255,255,255,0.16), rgba(255,255,255,0.04))",
-          boxShadow: "0 12px 40px -8px rgba(91,141,239,0.5)",
+          background:
+            "linear-gradient(140deg, rgba(255,246,235,0.16), rgba(255,246,235,0.04))",
+          boxShadow: "0 12px 40px -8px rgba(0,0,0,0.6)",
         }}
       >
         <Sparkles className="h-7 w-7 text-white" />
       </div>
       <StepHeading
         title="Welcome to Echo"
-        sub="Your voice, typed into any app. Echo transcribes on your device by default — nothing leaves your machine unless you add a cloud key. Let's get you set up in a few quick steps."
+        sub="Your voice, typed into any app. A few quick steps and it's yours."
       />
       <div className="mx-auto max-w-[360px] space-y-2 text-left">
         {[
@@ -156,7 +163,7 @@ function WelcomeStep() {
           "Works in any app via your global shortcut",
           "Optional cloud engines for speed & accuracy",
         ].map((t) => (
-          <div key={t} className="flex items-center gap-2.5 text-[12.5px] text-[var(--ink-muted)]">
+          <div key={t} className="flex items-center gap-2.5 text-[14.5px] text-[var(--ink-muted)]">
             <Check className="h-4 w-4 shrink-0 text-[var(--ink)]" />
             {t}
           </div>
@@ -215,13 +222,13 @@ function MicStep() {
             {testing ? (
               <Waveform mode="listening" />
             ) : (
-              <span className="text-[12px] text-[var(--ink-faint)]">Meter idle</span>
+              <span className="text-[14px] text-[var(--ink-faint)]">Meter idle</span>
             )}
           </div>
           <button
             onClick={() => setTesting((t) => !t)}
             className={clsx(
-              "rounded-lg px-3 py-1.5 text-[12px] font-medium transition",
+              "rounded-lg px-3 py-1.5 text-[14px] font-medium transition",
               testing
                 ? "bg-[var(--rec)] text-white"
                 : "border border-[var(--hairline)] text-[var(--ink)] hover:bg-[var(--surface-2)]"
@@ -298,11 +305,11 @@ function EngineStep() {
     <div>
       <StepHeading
         title="Set up transcription"
-        sub="Echo runs Whisper locally by default. We'll download a small English model (~142 MB) once."
+        sub="Echo runs Whisper on your machine. This downloads a small English model, once."
       />
 
       {ready ? (
-        <div className="flex items-center gap-2.5 rounded-xl border border-[var(--hairline-strong)] bg-[var(--surface-2)] px-4 py-3 text-[13px] text-[var(--ink)]">
+        <div className="flex items-center gap-2.5 rounded-xl border border-[var(--hairline-strong)] bg-[var(--surface-2)] px-4 py-3 text-[15px] text-[var(--ink)]">
           <Check className="h-4 w-4" /> Local transcription is ready.
         </div>
       ) : (
@@ -310,7 +317,7 @@ function EngineStep() {
           <button
             onClick={provision}
             disabled={busy}
-            className="btn-primary w-full rounded-xl px-4 py-2.5 text-[13px]"
+            className="btn-primary w-full rounded-xl px-4 py-2.5 text-[15px]"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             {busy ? "Setting up…" : "Set up local Whisper"}
@@ -322,12 +329,12 @@ function EngineStep() {
           {modelProgress !== null && (
             <ProgressRow label="base.en model" value={modelProgress} />
           )}
-          {note && <p className="text-[11px] leading-snug text-[var(--ink-muted)]">{note}</p>}
+          {note && <p className="text-[13px] leading-snug text-[var(--ink-muted)]">{note}</p>}
         </div>
       )}
 
       <div className="mt-5 border-t border-[var(--hairline)] pt-4">
-        <p className="mb-2 text-[11px] uppercase tracking-wide text-[var(--ink-faint)]">
+        <p className="mb-3 text-[14px] font-medium text-[var(--ink-muted)]">
           Or use a cloud engine
         </p>
         <CloudProviders />
@@ -339,7 +346,7 @@ function EngineStep() {
 function ProgressRow({ label, value }: { label: string; value: number }) {
   return (
     <div className="space-y-1">
-      <div className="flex justify-between text-[11px] text-[var(--ink-muted)]">
+      <div className="flex justify-between text-[13px] text-[var(--ink-muted)]">
         <span>{label}</span>
         <span>{Math.round(value * 100)}%</span>
       </div>
@@ -368,17 +375,17 @@ function PermissionsStep() {
       />
       <div className="space-y-3">
         <div className="flex items-center justify-between rounded-xl glass px-4 py-3">
-          <span className="text-[12.5px] text-[var(--ink)]">Keyboard / accessibility access</span>
+          <span className="text-[14.5px] text-[var(--ink)]">Keyboard / accessibility access</span>
           <button
             onClick={async () => setStatus(await commands.checkAccessibilityPermission())}
-            className="btn-ghost px-2.5 py-1 text-[11px]"
+            className="btn-ghost px-2.5 py-1 text-[13px]"
           >
             {status === null ? "Check" : status ? "Granted ✓" : "Not granted"}
           </button>
         </div>
 
         <div className="rounded-xl glass px-4 py-3">
-          <p className="mb-2 text-[12px] text-[var(--ink-muted)]">
+          <p className="mb-2 text-[14px] text-[var(--ink-muted)]">
             Click into the box, then press Test — Echo will type into it.
           </p>
           <div className="flex gap-2">
@@ -391,22 +398,26 @@ function PermissionsStep() {
                 void commands.injectText("Hello from Echo ");
                 setInjected(true);
               }}
-              className="btn-primary px-3 py-1.5 text-[12px]"
+              className="btn-primary px-3 py-1.5 text-[14px]"
             >
               Test
             </button>
           </div>
           {injected && (
-            <p className="mt-2 text-[11px] text-[var(--ink)]">
+            <p className="mt-2 text-[13px] text-[var(--ink)]">
               Sent! If nothing appeared, grant the permission above.
             </p>
           )}
         </div>
 
-        <p className="text-[10.5px] leading-snug text-[var(--ink-faint)]">
-          macOS needs Accessibility permission (System Settings → Privacy). Linux needs{" "}
-          <code>xdotool</code> or <code>ydotool</code>. Windows works out of the box.
-        </p>
+        <div className="flex items-center gap-1.5 text-[13.5px] text-[var(--ink-faint)]">
+          Requirements differ by platform
+          <Hint label="Platform requirements">
+            macOS needs Accessibility permission, under System Settings → Privacy.
+            Linux needs <code>xdotool</code> or <code>ydotool</code> installed.
+            Windows works out of the box.
+          </Hint>
+        </div>
       </div>
     </div>
   );
@@ -430,7 +441,7 @@ function HotkeyStep() {
             .then(() => qc.invalidateQueries({ queryKey: ["hotkey"] }))
         }
       />
-      <p className="mt-3 text-center text-[12px] text-[var(--ink-muted)]">
+      <p className="mt-3 text-center text-[14px] text-[var(--ink-muted)]">
         That's the essentials. One optional extra on the next step.
       </p>
     </div>
@@ -442,13 +453,17 @@ function WakeStep() {
     <div>
       <StepHeading
         title="Start by voice (optional)"
-        sub="Skip this and the shortcut is all you need. Turn it on and Echo listens for a wake phrase so you never have to reach for the keyboard — useful if typing hurts, or your hands are busy."
+        sub="Turn this on and Echo starts listening when you say a phrase, so you never have to reach for the keyboard."
       />
       <WakeWordSettings />
-      <p className="mt-3 text-[11px] leading-snug text-[var(--ink-muted)]">
-        Leaving this off keeps the microphone closed until you press your
-        shortcut. You can turn it on any time in Settings.
-      </p>
+      <div className="mt-4 flex items-center justify-center gap-1.5 text-[13.5px] text-[var(--ink-faint)]">
+        Safe to skip
+        <Hint label="About skipping the wake word">
+          Leaving this off keeps the microphone closed until you press your
+          shortcut — the shortcut alone is a complete setup. You can turn a wake
+          word on at any time under Dictation.
+        </Hint>
+      </div>
     </div>
   );
 }

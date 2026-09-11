@@ -45,14 +45,14 @@ export function EgressLog() {
           <Globe className="mt-px h-4 w-4 shrink-0 text-[var(--ink-muted)]" />
         )}
         <div className="min-w-0 flex-1">
-          <p className="text-[12px] font-medium text-[var(--ink)]">
+          <p className="text-[14px] font-medium text-[var(--ink)]">
             {status?.offline_capable
               ? "Configured to work offline"
               : "This setup contacts the network"}
           </p>
           <ul className="mt-1 space-y-0.5">
             {(status?.reasons ?? []).map((r) => (
-              <li key={r} className="text-[10.5px] leading-snug text-[var(--ink-muted)]">
+              <li key={r} className="text-[12.5px] leading-snug text-[var(--ink-muted)]">
                 · {r}
               </li>
             ))}
@@ -63,7 +63,7 @@ export function EgressLog() {
       <div className="flex items-center justify-between gap-2">
         <button
           onClick={() => setOpen((o) => !o)}
-          className="btn-ghost px-2.5 py-1 text-[11px]"
+          className="btn-ghost px-2.5 py-1 text-[13px]"
         >
           {open ? "Hide" : "Show"} request log
           {status ? ` (${status.recent_count} in 24h)` : ""}
@@ -75,7 +75,7 @@ export function EgressLog() {
               qc.invalidateQueries({ queryKey: ["egress-log"] });
               qc.invalidateQueries({ queryKey: ["egress-status"] });
             }}
-            className="btn-ghost px-2.5 py-1 text-[11px] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+            className="btn-ghost px-2.5 py-1 text-[13px] text-[var(--ink-muted)] hover:text-[var(--ink)]"
           >
             <Trash2 className="h-3.5 w-3.5" />
             Clear
@@ -86,7 +86,7 @@ export function EgressLog() {
       {open && (
         <div className="glass max-h-56 overflow-y-auto rounded-lg p-2">
           {log.length === 0 ? (
-            <p className="px-1 py-1 text-[11px] text-[var(--ink-muted)]">
+            <p className="px-1 py-1 text-[13px] text-[var(--ink-muted)]">
               No requests logged.
             </p>
           ) : (
@@ -94,7 +94,7 @@ export function EgressLog() {
               {log.map((r) => (
                 <li
                   key={r.id}
-                  className="flex items-baseline gap-2 px-1 py-0.5 text-[11px]"
+                  className="flex items-baseline gap-2 px-1 py-0.5 text-[13px]"
                 >
                   <span className="font-mono text-[var(--ink)]">{r.host}</span>
                   <span className="truncate text-[var(--ink-muted)]">{r.purpose}</span>
@@ -108,11 +108,6 @@ export function EgressLog() {
         </div>
       )}
 
-      <p className="text-[10.5px] leading-snug text-[var(--ink-faint)]">
-        This lists requests Echo itself made. It is not proof that nothing else
-        left your machine — Echo can’t see traffic from other programs, and a
-        native plugin can make requests that bypass this log entirely.
-      </p>
     </div>
   );
 }

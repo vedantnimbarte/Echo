@@ -1,5 +1,7 @@
 use std::sync::{Mutex, MutexGuard};
 
+use unicode_segmentation::UnicodeSegmentation;
+
 use crate::error::{EchoError, Result};
 
 /// Platform-agnostic text injection trait.
@@ -242,26 +244,27 @@ pub(crate) fn linux_key_command(
 }
 
 /// The edit that turns the text currently on screen into `next`: how many
-/// characters to delete from the end, and what to type in their place.
+/// backspaces to send, and what to type in their place.
 ///
 /// Used by streaming injection, where each partial transcript replaces the one
 /// before it. Only the differing tail is rewritten, so a partial that merely
 /// grows — the common case — types the new words and deletes nothing.
 ///
-/// ponytail: a "character" here is a `char`, while a backspace deletes whatever
-/// the target app considers one unit. They agree for ordinary prose and differ
-/// for emoji and combining marks; a transcript is prose, and the fallback when
-/// they disagree is a visibly wrong partial that the final transcript corrects.
+/// Counted in grapheme clusters, because that is what a backspace deletes. A
+/// `char` count agrees for ASCII and disagrees exactly where it is most
+/// visible: "é" written as e + combining accent is two chars and one backspace,
+/// a family emoji is seven chars and one backspace, and a flag is two. Counting
+/// chars there under-deletes and leaves debris on screen that the next partial
+/// builds on top of.
 pub(crate) fn partial_edit(shown: &str, next: &str) -> (usize, String) {
+    let shown: Vec<&str> = shown.graphemes(true).collect();
+    let next: Vec<&str> = next.graphemes(true).collect();
     let common = shown
-        .chars()
-        .zip(next.chars())
+        .iter()
+        .zip(next.iter())
         .take_while(|(a, b)| a == b)
         .count();
-    (
-        shown.chars().count() - common,
-        next.chars().skip(common).collect(),
-    )
+    (shown.len() - common, next[common..].concat())
 }
 
 /// Scripts and punctuation blocks that do not separate words with spaces.
@@ -694,5 +697,34 @@ mod tests {
     #[test]
     fn partial_edit_counts_characters_not_bytes() {
         assert_eq!(partial_edit("café", "cafe"), (1, "e".to_string()));
+    }
+
+    /// One backspace deletes one grapheme cluster, so that is the unit here.
+    /// Counting `char`s under-deletes and leaves debris on screen that the next
+    /// partial then builds on top of.
+    #[test]
+    fn partial_edit_counts_what_a_backspace_deletes() {
+        // Decomposed "e" + combining acute is two chars and one cluster, so
+        // the accented letter is deleted whole and the plain one retyped.
+        // Counting chars found a four-char common prefix and asked for one
+        // backspace with nothing to type — which deletes the cluster and
+        // leaves "caf".
+        let decomposed = "cafe\u{301}";
+        assert_eq!(decomposed.chars().count(), 5);
+        assert_eq!(partial_edit(decomposed, "cafe"), (1, "e".to_string()));
+
+        // A ZWJ family is one cluster however many code points build it.
+        let family = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
+        assert!(family.chars().count() > 1);
+        assert_eq!(partial_edit(&format!("hi {family}"), "hi "), (1, String::new()));
+
+        // A regional-indicator flag is two code points and one backspace.
+        assert_eq!(partial_edit("go \u{1F1EE}\u{1F1F3}", "go "), (1, String::new()));
+
+        // Growing by an emoji types it whole and deletes nothing.
+        assert_eq!(
+            partial_edit("hi ", &format!("hi {family}")),
+            (0, family.to_string())
+        );
     }
 }

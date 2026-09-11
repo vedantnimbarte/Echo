@@ -65,7 +65,7 @@ export function PluginsPanel() {
       title="Plugins"
       description="Extra transcription engines, output targets and dictionaries, loaded from files you install."
       actions={
-        <button onClick={handleInstall} className="btn-primary px-3 py-1.5 text-[11.5px]">
+        <button onClick={handleInstall} className="btn-primary px-3 py-1.5 text-[13.5px]">
           <Puzzle className="w-3.5 h-3.5" /> Install from file
         </button>
       }
@@ -74,7 +74,7 @@ export function PluginsPanel() {
       <div className="space-y-6">
       <div className="glass flex items-start gap-2.5 rounded-lg px-3 py-2.5">
         <ShieldAlert className="mt-px h-4 w-4 shrink-0 text-[var(--ink)]" />
-        <p className="text-[11px] leading-snug text-[var(--ink-muted)]">
+        <p className="text-[13px] leading-snug text-[var(--ink-muted)]">
           <span className="font-medium text-[var(--ink)]">
             Plugins are not sandboxed.
           </span>{" "}
@@ -87,20 +87,20 @@ export function PluginsPanel() {
       </div>
 
       {error && (
-        <p className="text-[11px] font-medium text-[var(--ink)]">{error}</p>
+        <p className="text-[13px] font-medium text-[var(--ink)]">{error}</p>
       )}
 
       {pending && (
         <div className="glass space-y-2.5 rounded-lg p-3">
-          <p className="text-[12px] font-medium text-[var(--ink)]">
+          <p className="text-[14px] font-medium text-[var(--ink)]">
             Install “{pending.manifest.name}” v{pending.manifest.version}?
           </p>
           {pending.manifest.author && (
-            <p className="text-[11px] text-[var(--ink-muted)]">
+            <p className="text-[13px] text-[var(--ink-muted)]">
               by {pending.manifest.author}
             </p>
           )}
-          <p className="text-[11px] text-[var(--ink-muted)]">
+          <p className="text-[13px] text-[var(--ink-muted)]">
             Declares:{" "}
             {pending.manifest.permissions.length > 0
               ? pending.manifest.permissions.join(", ")

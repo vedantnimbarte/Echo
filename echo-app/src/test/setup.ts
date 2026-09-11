@@ -25,24 +25,77 @@ export const invoked: string[] = [];
  *
  * Only commands the panels actually call on mount need an entry; the rest exist
  * because a shape of `null` would crash a `.map`.
+ *
+ * Exported and mutable, like `settings`: a test that needs the machine to answer
+ * differently — no neural VAD, no GPU — overrides the one key and restores it,
+ * rather than re-mocking the whole backend.
  */
-const ANSWERS: Record<string, unknown> = {
+export const ANSWERS: Record<string, unknown> = {
   get_audio_devices: [{ name: "Test Microphone", is_default: true }],
   list_models: [
     { name: "base.en", downloaded: true, size_mb: 142, english_only: true },
     { name: "small", downloaded: false, size_mb: 466, english_only: false },
   ],
-  active_model: "base.en",
-  list_dictionary_entries: [],
-  list_history: [],
+  list_cloud_providers: [
+    {
+      id: "openai",
+      label: "OpenAI",
+      kind: "openai",
+      default_endpoint: "https://api.openai.com/v1",
+      models: ["whisper-1"],
+      needs_endpoint: false,
+      needs_region: false,
+      docs_url: "https://platform.openai.com/api-keys",
+      note: "Whisper on OpenAI's servers.",
+      key_set: false,
+      model: "whisper-1",
+      endpoint: "https://api.openai.com/v1",
+      region: null,
+      available: true,
+    },
+  ],
+  list_dictionary: [],
+  get_history: [],
   list_plugins: [],
   list_profiles: [],
   list_wake_words: [],
   get_egress_log: [],
   get_egress_status: { offline_capable: true, hosts: [] },
-  telemetry_summary: [],
-  dictation_stats: null,
+  get_telemetry_summary: [],
+  get_dictation_stats: null,
+  get_insights: {
+    transcripts: 3,
+    words: 42,
+    days: 2,
+    words_last_7_days: 42,
+    since: "2025-01-02T10:00:00Z",
+    spoken_ms: 21_000,
+    timed_words: 42,
+    timed_transcripts: 3,
+    dictionary_fixes: 1,
+    cleanup_fixes: 4,
+    streak: 2,
+    longest_streak: 2,
+    apps: [{ key: "code.exe", transcripts: 3, words: 42 }],
+    providers: [{ key: "local", transcripts: 3, words: 42 }],
+    languages: [{ key: "en", transcripts: 3, words: 42 }],
+    hours: Array.from({ length: 24 }, (_, h) => (h === 9 ? 3 : 0)),
+    daily: [
+      { date: "2025-01-02", words: 20, transcripts: 1 },
+      { date: "2025-01-03", words: 22, transcripts: 2 },
+    ],
+  },
   spoken_punctuation_languages: ["en", "es", "fr", "de", "it", "pt", "nl"],
+  diagnostics: "Echo 0.3.0\nOS: windows (x86_64)\nEngine: local\n",
+  // Shortened, but `auto` first and real codes, because the language `<select>`
+  // ticks against these and the punctuation hint looks labels up in them.
+  dictation_languages: [
+    { code: "auto", label: "Auto-detect" },
+    { code: "en", label: "English" },
+    { code: "es", label: "Spanish" },
+  ],
+  silero_available: true,
+  recovered_recordings: [],
   get_hotkey: "CommandOrControl+Shift+Space",
   secure_field_detection: true,
   wake_word_ready: false,
@@ -79,6 +132,12 @@ vi.mock("@tauri-apps/api/core", () => ({
       settings.set(args?.key as string, args?.value as string);
       return null;
     }
+    // Registers the provider *and* persists it, the way the real command does,
+    // so a test can read back which engine a click actually chose.
+    if (command === "set_asr_provider") {
+      settings.set("asr_provider", args?.name as string);
+      return null;
+    }
     return command in ANSWERS ? ANSWERS[command] : null;
   }),
 }));
@@ -98,7 +157,11 @@ const fakeWindow = {
   close: vi.fn(async () => {}),
   setSize: vi.fn(async () => {}),
   startDragging: vi.fn(async () => {}),
+  minimize: vi.fn(async () => {}),
+  toggleMaximize: vi.fn(async () => {}),
+  isMaximized: vi.fn(async () => false),
   onCloseRequested: vi.fn(async () => () => {}),
+  onResized: vi.fn(async () => () => {}),
   label: "main",
 };
 
@@ -122,6 +185,16 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({
   save: vi.fn(async () => null),
   message: vi.fn(async () => {}),
   confirm: vi.fn(async () => false),
+}));
+
+// Every external link leaves the webview through this, so a test that clicked
+// one would otherwise try to launch a browser on the machine running it.
+vi.mock("@tauri-apps/plugin-opener", () => ({
+  openUrl: vi.fn(async () => {}),
+}));
+
+vi.mock("@tauri-apps/api/app", () => ({
+  getVersion: vi.fn(async () => "0.3.0"),
 }));
 
 vi.mock("@tauri-apps/plugin-process", () => ({

@@ -232,6 +232,26 @@ pub fn run() {
                 }
             }
 
+            // Tell the screen when the engine the user chose stops being the
+            // one answering. The diversion is deliberately silent in the
+            // transcript — you still get your words, and history still credits
+            // the provider you picked — but the pill and the title bar name
+            // the active engine, and a name that has quietly stopped being
+            // true is worse than no name at all.
+            {
+                let handle = app.handle().clone();
+                let asr = asr_manager.clone();
+                tauri::async_runtime::block_on(async move {
+                    asr.set_fallback_notify(Arc::new(move |provider: &str| {
+                        let _ = handle.emit(
+                            "echo://asr-fell-back",
+                            serde_json::json!({ "provider": provider }),
+                        );
+                    }))
+                    .await;
+                });
+            }
+
             // Wake-word models live beside the Whisper models; nothing is
             // fetched until the user enables the feature.
             let wake_dir = data_dir.join("wake");
@@ -438,8 +458,47 @@ pub fn run() {
             // taskbar. Degraded rather than fatal: a desktop with no status
             // area can still dictate, and refusing to start would be the
             // worse trade.
+            // A spool still on disk means the last session did not end the way
+            // it should have. Before the tray, so a launch that fails later
+            // has still rescued the audio.
+            match crate::core::spool::recover(&data_dir) {
+                Ok(Some(path)) => {
+                    tracing::warn!("Recovered audio from an interrupted session: {}", path.display())
+                }
+                Ok(None) => {}
+                Err(e) => tracing::error!("Could not recover the interrupted session: {e}"),
+            }
+
             if let Err(e) = tray::init(app.handle()) {
                 tracing::warn!("Tray icon unavailable, Echo is reachable only via the pill: {e}");
+            }
+
+            // Echo draws its own title bar (see components/common/TitleBar.tsx),
+            // because the native one on Windows and Linux arrives in the OS's
+            // colours and reads as a strip of another app stapled to the top of
+            // a very dark window. macOS is left decorated on purpose: its
+            // traffic lights are muscle memory, and `titleBarStyle: "Overlay"`
+            // floats them inside our own strip.
+            //
+            // Done here rather than with `decorations: false` in the config
+            // because that key has no per-platform form — splitting it out into
+            // tauri.macos.conf.json would mean duplicating the whole `windows`
+            // array, which the merge replaces wholesale, and watching the two
+            // copies drift.
+            //
+            // Note for anyone changing the window size: this reclaims the
+            // caption strip into the client area while the outer size stays
+            // put, so the window renders ~30px taller than `height` in
+            // tauri.conf.json says. The config number is picked so the result
+            // still fits the ~720px work area of a 1366x768 laptop — overshoot
+            // it and `center: true` places the top at a negative Y, putting our
+            // own title bar (and its close button) off the top of the screen,
+            // with no native chrome left to recover from.
+            #[cfg(not(target_os = "macos"))]
+            if let Some(win) = app.get_webview_window("main") {
+                // Safe to do before the window is shown (`visible: false` in the
+                // config), so there is no frame to flicker away.
+                let _ = win.set_decorations(false);
             }
 
             // Surface the settings window on first launch so onboarding can run.
@@ -456,6 +515,7 @@ pub fn run() {
             commands::app::quit,
             commands::app::get_autostart,
             commands::app::set_autostart,
+            commands::app::account_name,
             commands::audio::get_audio_devices,
             commands::asr::list_models,
             commands::asr::download_model,
@@ -485,6 +545,7 @@ pub fn run() {
             commands::history::get_history,
             commands::history::clear_history,
             commands::history::get_dictation_stats,
+            commands::history::get_insights,
             commands::injection::check_accessibility_permission,
             commands::injection::inject_text,
             commands::injection::secure_field_detection,
@@ -537,6 +598,12 @@ pub fn run() {
             commands::settings::get_setting,
             commands::settings::set_setting,
             commands::settings::spoken_punctuation_languages,
+            commands::settings::dictation_languages,
+            commands::app::diagnostics,
+            commands::app::open_log,
+            commands::app::recovered_recordings,
+            commands::app::discard_recovered,
+            commands::audio::silero_available,
         ])
         .build(tauri::generate_context!())
         .expect("error while building echo")

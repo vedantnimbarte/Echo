@@ -8,6 +8,7 @@ pub mod catalog;
 pub mod decode_opts;
 pub mod fallback;
 pub mod http;
+pub mod languages;
 pub mod local;
 pub mod manager;
 pub mod model_manager;

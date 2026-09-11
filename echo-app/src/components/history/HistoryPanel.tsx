@@ -4,6 +4,7 @@ import { Trash2, Copy, CornerDownLeft, Search, Check, BookPlus, Download, Pencil
 import { save } from "@tauri-apps/plugin-dialog";
 import { commands, type TranscriptionRecord } from "../../ipc/commands";
 import { Page, Group } from "../common/Page";
+import { prettyHotkey } from "../common/HotkeyCapture";
 
 /* ---- time helpers --------------------------------------------------------- */
 
@@ -40,6 +41,139 @@ function wordCount(text: string): number {
   return text.trim() ? text.trim().split(/\s+/).length : 0;
 }
 
+/* ---- greeting -------------------------------------------------------------- */
+
+/**
+ * The page's heading, in place of the word "Dictation".
+ *
+ * The sidebar already says which page you are on, so spending the largest type
+ * on that label again says nothing. This says the one thing the window cannot
+ * do for you — which keys start dictation, and that they work outside this
+ * window, which is the whole point of Echo and the part people miss.
+ *
+ * The sentence names the action rather than describing a mood: "press these to
+ * dictate", not "get back into the flow with these". It reads the same on the
+ * first run as on the thousandth, which the earlier wording did not — there is
+ * no flow to get back into when you have never dictated. The name is a courtesy
+ * on top and the line is written to work without one, because the OS often has
+ * nothing worth using.
+ *
+ * Falls back to the page's name while the shortcut is still being read, and if
+ * none is ever set — an empty heading would leave the page with nothing to be
+ * found by, and "Dictation" is at least true.
+ */
+function Greeting() {
+  const { data: name } = useQuery({
+    queryKey: ["account-name"],
+    queryFn: commands.accountName,
+  });
+  const { data: hotkey } = useQuery({ queryKey: ["hotkey"], queryFn: commands.getHotkey });
+
+  // Set below the heading size the other pages use: a sentence this long at
+  // full title scale reads as shouting, and it is a greeting, not a banner.
+  return (
+    <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[22px]">
+      {!hotkey ? (
+        "Dictation"
+      ) : (
+        <>
+          {name ? `Hey ${name}, press` : "Press"}
+          {/* The keys keep the interface font — a keycap set in Garamond stops
+              looking like a key. */}
+          <span
+            className="flex items-baseline gap-1.5"
+            style={{ fontFamily: "var(--font-ui)" }}
+          >
+            {prettyHotkey(hotkey).map((k, i) => (
+              <kbd
+                key={`${k}-${i}`}
+                className="rounded-md border border-[var(--hairline)] bg-[var(--surface-2)] px-1.5 py-0.5 text-[15px] font-medium tracking-tight text-[var(--ink)]"
+              >
+                {k}
+              </kbd>
+            ))}
+          </span>
+          anywhere to dictate
+        </>
+      )}
+    </span>
+  );
+}
+
+/* ---- summary --------------------------------------------------------------- */
+
+/** Round numbers worth arriving at, for the bar under the Insights link. */
+const MILESTONES = [1_000, 5_000, 10_000, 25_000, 50_000, 100_000, 250_000, 500_000, 1_000_000];
+
+function Stat({ value, label }: { value: string; label: string }) {
+  return (
+    <div className="tabular flex items-baseline gap-1.5">
+      <span className="text-[26px] font-semibold leading-none tracking-[-0.03em] text-[var(--ink)]">
+        {value}
+      </span>
+      <span className="text-[13px] text-[var(--ink-muted)]">{label}</span>
+    </div>
+  );
+}
+
+/**
+ * The three figures worth knowing beside your transcripts, and a way into the
+ * page that has the rest.
+ *
+ * Deliberately not a second Insights: the same query backs both, so this shows
+ * the three that answer "how am I doing" and hands the other twenty to the page
+ * built for them. The bar measures progress to the next round number — it gates
+ * nothing, and the link works from the first word.
+ */
+function Summary({ onOpenInsights }: { onOpenInsights: () => void }) {
+  const { data } = useQuery({ queryKey: ["insights"], queryFn: commands.getInsights });
+  if (!data) return null;
+
+  const spokenMinutes = data.spoken_ms / 60_000;
+  const wpm = spokenMinutes > 0.05 ? Math.round(data.timed_words / spokenMinutes) : null;
+  const target = MILESTONES.find((m) => m > data.words) ?? data.words;
+  const share = target > 0 ? Math.min(1, data.words / target) : 0;
+
+  return (
+    <aside className="glass h-fit rounded-xl">
+      <div className="space-y-4 p-5">
+        {data.transcripts === 0 ? (
+          <p className="text-[13px] leading-relaxed text-[var(--ink-muted)]">
+            Nothing counted yet. Dictate something and this fills in.
+          </p>
+        ) : (
+          <>
+            <Stat value={data.words.toLocaleString()} label="total words" />
+            <Stat value={wpm ? wpm.toLocaleString() : "—"} label="wpm" />
+            <Stat value={data.streak.toLocaleString()} label="day streak" />
+          </>
+        )}
+      </div>
+
+      <button
+        onClick={onOpenInsights}
+        className="w-full space-y-2 border-t border-[var(--hairline)] p-5 text-left transition-colors hover:bg-[var(--surface-2)]"
+      >
+        <span className="block text-[14px] font-medium text-[var(--ink)]">Your Insights</span>
+        <span className="block text-[13px] leading-snug text-[var(--ink-muted)]">
+          See how you use your voice.
+        </span>
+        <span className="flex items-center gap-2.5 pt-1">
+          <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--surface-2)]">
+            <span
+              className="block h-full rounded-full bg-[var(--ink-muted)]"
+              style={{ width: `${share * 100}%` }}
+            />
+          </span>
+          <span className="tabular shrink-0 text-[12.5px] text-[var(--ink-faint)]">
+            {data.words.toLocaleString()} / {target.toLocaleString()}
+          </span>
+        </span>
+      </button>
+    </aside>
+  );
+}
+
 /* ---- row ------------------------------------------------------------------ */
 
 function HistoryRow({ record }: { record: TranscriptionRecord }) {
@@ -66,9 +200,9 @@ function HistoryRow({ record }: { record: TranscriptionRecord }) {
 
   return (
     <li className="group rounded-xl glass px-3.5 py-2.5 transition hover:border-[var(--hairline-strong)] hover:bg-[var(--surface-2)]">
-      <p className="text-[13px] leading-snug text-[var(--ink)]">{record.text}</p>
+      <p className="text-[15px] leading-snug text-[var(--ink)]">{record.text}</p>
       <div className="mt-1.5 flex items-center justify-between">
-        <p className="text-[10.5px] tracking-tight text-[var(--ink-faint)]">
+        <p className="text-[12.5px] tracking-tight text-[var(--ink-faint)]">
           {record.provider}
           {record.language ? ` · ${record.language}` : ""} · {wordCount(record.text)} words ·{" "}
           {relativeTime(when)}
@@ -170,20 +304,20 @@ function CorrectionForm({
 
   return (
     <div className="mt-2 space-y-1.5 border-t border-[var(--hairline)] pt-2">
-      <p className="text-[10.5px] text-[var(--ink-faint)]">
+      <p className="text-[12.5px] text-[var(--ink-faint)]">
         Replace what Echo heard with what you meant. Applies to every future
         transcript.
       </p>
       <div className="flex items-center gap-1.5">
         <input
-          className="field flex-1 text-[12px]"
+          className="field flex-1 text-[14px]"
           value={phrase}
           onChange={(e) => setPhrase(e.target.value)}
           placeholder="Echo heard…"
         />
         <span className="shrink-0 text-[var(--ink-faint)]">→</span>
         <input
-          className="field flex-1 text-[12px]"
+          className="field flex-1 text-[14px]"
           value={replacement}
           onChange={(e) => setReplacement(e.target.value)}
           placeholder="You meant…"
@@ -192,26 +326,31 @@ function CorrectionForm({
         <button
           onClick={submit}
           disabled={!phrase.trim() || !replacement.trim()}
-          className="btn-primary shrink-0 px-2.5 py-1 text-[11px]"
+          className="btn-primary shrink-0 px-2.5 py-1 text-[13px]"
         >
           Save
         </button>
       </div>
-      {error && <p className="text-[11px] font-medium text-[var(--ink)]">{error}</p>}
+      {error && <p className="text-[13px] font-medium text-[var(--ink)]">{error}</p>}
     </div>
   );
 }
 
 /* ---- panel ---------------------------------------------------------------- */
 
-export function HistoryPanel() {
+/** `onOpenInsights` is App's page state — the summary card links into it. */
+export function HistoryPanel({ onOpenInsights }: { onOpenInsights: () => void }) {
   const qc = useQueryClient();
   const [query, setQuery] = useState("");
 
-  const { data: records = [], isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["history"],
     queryFn: () => commands.getHistory(200),
   });
+  // `?? []` rather than a destructuring default: that only fires on undefined,
+  // so a backend answering null reached the grouping loop as null and took the
+  // whole window down with it.
+  const records = data ?? [];
 
   const clearMutation = useMutation({
     mutationFn: () => commands.clearHistory(),
@@ -233,37 +372,17 @@ export function HistoryPanel() {
 
   return (
     <Page
-      title="History"
-      description="Every transcript Echo has produced on this machine. Search it, send it to a file, or clear it out."
-      actions={
-        <>
-          <button
-            onClick={async () => {
-              const path = await save({
-                defaultPath: "echo-history.json",
-                filters: [{ name: "JSON", extensions: ["json"] }],
-              });
-              if (path) await commands.exportHistory(path);
-            }}
-            disabled={records.length === 0}
-            className="btn-ghost px-2.5 py-1 text-[11px] text-[var(--ink-muted)] hover:text-[var(--ink)]"
-          >
-            <Download className="h-3.5 w-3.5" />
-            Export
-          </button>
-          <button
-            onClick={() => clearMutation.mutate()}
-            disabled={records.length === 0 || clearMutation.isPending}
-            className="btn-ghost px-2.5 py-1 text-[11px] text-[var(--ink-muted)] hover:text-[var(--ink)]"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Clear all
-          </button>
-        </>
-      }
+      title={<Greeting />}
+      // Wider than the settings pages: this one carries a column beside its
+      // content, the same room Insights takes for the same reason.
+      width={920}
     >
       <Group>
-      <div className="space-y-4">
+        {/* The list is the page; the column beside it is a glance. `lg:` rather
+            than always, because below that width two columns would squeeze the
+            transcripts — the thing you came here to read — into a gutter. */}
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_248px]">
+      <div className="min-w-0 space-y-4">
         <div className="relative">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--ink-faint)]" />
         <input
@@ -275,16 +394,16 @@ export function HistoryPanel() {
       </div>
 
       {isLoading ? (
-        <p className="text-[13px] text-[var(--ink-muted)]">Loading…</p>
+        <p className="text-[15px] text-[var(--ink-muted)]">Loading…</p>
       ) : filtered.length === 0 ? (
-        <p className="text-[13px] text-[var(--ink-muted)]">
+        <p className="text-[15px] text-[var(--ink-muted)]">
           {query.trim() ? "No matching transcripts." : "No history yet."}
         </p>
       ) : (
         <div className="space-y-4">
           {groups.map((g) => (
             <section key={g.label} className="space-y-2">
-              <h3 className="px-0.5 text-[11px] font-medium uppercase tracking-wide text-[var(--ink-faint)]">
+              <h3 className="px-0.5 text-[13.5px] font-medium text-[var(--ink-muted)]">
                 {g.label}
               </h3>
               <ul className="space-y-2">
@@ -297,6 +416,52 @@ export function HistoryPanel() {
         </div>
       )}
       </div>
+          {/* The column, top to bottom: what your dictation adds up to, then
+              what you can do to the whole of it. Both are about the record as a
+              body rather than any one transcript, which is why they sit away
+              from the list and not in the page header over it — and why they
+              stay put while the list goes by. A running total that scrolls off
+              at the fourth transcript is a total of nothing in particular.
+
+              Pinned only in the two-column layout: stacked, this sits *under*
+              the list, and pinning it there would hold the buttons over the
+              transcripts you were reading. `self-start` is what makes it
+              possible at all — a grid item stretches to the row by default, so
+              it would be as tall as the list and have no room to slide.
+
+              ponytail: 90px clears the pinned page header, measured at 89.5 —
+              its own 48 + 8 of padding plus one line of greeting. Hard-coded
+              because reading it back would mean measuring another component on
+              every resize; wrong only if the greeting wraps, which needs a long
+              name in a window already too narrow for this column to exist. */}
+          <div className="space-y-3 lg:sticky lg:top-[90px] lg:self-start">
+            <Summary onOpenInsights={onOpenInsights} />
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  const path = await save({
+                    defaultPath: "echo-history.json",
+                    filters: [{ name: "JSON", extensions: ["json"] }],
+                  });
+                  if (path) await commands.exportHistory(path);
+                }}
+                disabled={records.length === 0}
+                className="btn-ghost flex-1 px-2.5 py-1.5 text-[13px] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Export
+              </button>
+              <button
+                onClick={() => clearMutation.mutate()}
+                disabled={records.length === 0 || clearMutation.isPending}
+                className="btn-ghost flex-1 px-2.5 py-1.5 text-[13px] text-[var(--ink-muted)] hover:text-[var(--ink)]"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Clear all
+              </button>
+            </div>
+          </div>
+        </div>
       </Group>
     </Page>
   );
@@ -348,40 +513,40 @@ function TranscriptFix({
 
   return (
     <div className="mt-2 space-y-1.5 border-t border-[var(--hairline)] pt-2">
-      <p className="text-[10.5px] text-[var(--ink-faint)]">
+      <p className="text-[12.5px] text-[var(--ink-faint)]">
         Correct the text. If the change looks like a fixed mishearing, Echo adds
         it to your dictionary so it stops happening.
       </p>
       <textarea
-        className="field w-full resize-y text-[12px] leading-snug"
+        className="field w-full resize-y text-[14px] leading-snug"
         rows={3}
         value={text}
         onChange={(e) => setText(e.target.value)}
       />
       <div className="flex items-center justify-end gap-1.5">
-        <button onClick={onDone} className="btn-ghost px-2.5 py-1 text-[11px]">
+        <button onClick={onDone} className="btn-ghost px-2.5 py-1 text-[13px]">
           Cancel
         </button>
         <button
           onClick={save}
           disabled={!text.trim()}
-          className="btn-primary shrink-0 px-2.5 py-1 text-[11px]"
+          className="btn-primary shrink-0 px-2.5 py-1 text-[13px]"
         >
           Save
         </button>
       </div>
       {learned && learned.length > 0 && (
         <div className="space-y-1 pt-0.5">
-          <p className="text-[10.5px] text-[var(--ink-muted)]">Learned:</p>
+          <p className="text-[12.5px] text-[var(--ink-muted)]">Learned:</p>
           {learned.map((l) => (
-            <p key={l.phrase} className="text-[11px] text-[var(--ink)]">
+            <p key={l.phrase} className="text-[13px] text-[var(--ink)]">
               {l.phrase} <span className="text-[var(--ink-faint)]">&rarr;</span>{" "}
               {l.replacement}
             </p>
           ))}
         </div>
       )}
-      {error && <p className="text-[11px] text-[var(--ink)]">{error}</p>}
+      {error && <p className="text-[13px] text-[var(--ink)]">{error}</p>}
     </div>
   );
 }

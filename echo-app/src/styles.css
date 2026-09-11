@@ -1,16 +1,38 @@
 @import "tailwindcss";
 
+/* Bundled, not fetched. Both faces ship inside the app, so a machine that has
+   never touched the internet renders the same page as one that has and the
+   strict CSP stays closed.
+
+   Garamond is latin-only on purpose: it sets page titles and nothing else, and
+   Echo ships English, Spanish, German and French — every glyph those need is in
+   the latin subset. Adding latin-ext would cost 148 KB to cover languages the
+   app has no catalogue for. Add it back the day a locale needs it. */
+@import "@fontsource/eb-garamond/latin-500.css";
+@import "@fontsource-variable/figtree/wght.css";
+
 /*
-  Echo — "Monolith" design language.
+  Echo — "Monolith" design language, warm cast.
 
-  Black, gray and white only. With hue gone, hierarchy has to come from
-  elevation instead: each surface is a translucent white wash over the near-black
-  base, lit along its top edge and dropped onto a layered shadow, so stacking
-  them reads as glass on glass. One accent survives — the record red — because a
-  live microphone is the single state that must be unmistakable across a room.
+  Hierarchy comes from elevation rather than hue: each surface is a translucent
+  wash over the near-black base, lit along its top edge and dropped onto a
+  layered shadow, so stacking them reads as glass on glass. One accent survives
+  — the record red — because a live microphone is the single state that must be
+  unmistakable across a room. It is spent on the record dot and nothing else:
+  one small solid mark, not a glow over everything near it.
 
-  No external font/asset fetches (offline + strict CSP), so we lean on a refined
-  system stack with deliberate tracking and tabular numerals.
+  Echo turns speech into set text, so the window that configures it is set like
+  a page. EB Garamond, a face cut for books, carries the title of each page and
+  nothing else; Figtree does every job that involves operating rather than
+  reading — labels, controls, numbers. Two families, no overlap.
+
+  The base is warm brown-black rather than the old blue-black and the white is
+  paper-white rather than screen-white, because a serif on a cold ground reads
+  clinical.
+
+  Explanation does not sit on the page. Every "why" lives behind an info icon
+  and appears on hover or keyboard focus, so a page shows what you can change
+  and stays quiet about the rest.
 */
 
 :root {
@@ -23,39 +45,49 @@
      explicitly, so this does not paint the canvas. */
   color-scheme: dark;
 
-  --font-ui: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system,
-    "SF Pro Display", sans-serif;
+  /* Two families, sharply divided by role. Nothing is set in both. */
+  --font-display: "EB Garamond", "Iowan Old Style", Palatino, Georgia, serif;
+  --font-ui: "Figtree Variable", Figtree, "Segoe UI Variable Text", "Segoe UI",
+    system-ui, -apple-system, sans-serif;
 
   /* The only chromatic value in the app. */
   --rec: #ff453a;
 
-  /* Window base. Not pure black — a hair of blue keeps it from looking dead
-     next to the OS chrome, and gives the glass something to tint. */
-  --surface-0: #0a0a0c;
+  /* Window base. Warm brown-black: it gives the glass something to tint and
+     keeps the serif from reading like a hospital chart. */
+  --surface-0: #100e0c;
 
-  /* Elevation scale: translucent white over the base. Higher = closer to you. */
-  --surface-1: rgba(255, 255, 255, 0.035);
-  --surface-2: rgba(255, 255, 255, 0.065);
-  --surface-3: rgba(255, 255, 255, 0.105);
+  /* Elevation scale: a translucent warm wash over the base. Higher = closer to
+     you. Tinted rather than pure white, so stacked surfaces warm as they rise
+     instead of going grey. */
+  --surface-1: rgba(255, 246, 235, 0.035);
+  --surface-2: rgba(255, 246, 235, 0.065);
+  --surface-3: rgba(255, 246, 235, 0.105);
 
   /* Glass panes float over the desktop rather than over the window base, so
      they carry their own darkness instead of relying on what's behind them. */
-  --glass: rgba(16, 16, 19, 0.62);
-  --glass-strong: rgba(20, 20, 24, 0.8);
+  --glass: rgba(22, 19, 16, 0.64);
+  --glass-strong: rgba(26, 23, 19, 0.82);
+
+  /* The page header, which floats over the window base rather than over the
+     desktop — so it tints `--surface-0` rather than carrying its own darkness
+     the way `--glass` does. Opaque enough that a 30px serif title stays clean
+     over whatever is passing underneath, sheer enough that you can see it pass. */
+  --glass-base: rgba(16, 14, 12, 0.78);
 
   /* The dropdown popup can't be translucent — it's an OS window with nothing
      of ours behind it — so it needs a solid stand-in for the glass surfaces. */
-  --popup: #17171b;
+  --popup: #1c1916;
 
-  --hairline: rgba(255, 255, 255, 0.09);
-  --hairline-strong: rgba(255, 255, 255, 0.24);
+  --hairline: rgba(255, 246, 235, 0.09);
+  --hairline-strong: rgba(255, 246, 235, 0.24);
 
-  --ink: #f7f7f8;
-  --ink-muted: #9b9ba4;
-  /* Lifted from #62626b: at 4.6:1 on the surfaces it actually sits on this
-     clears WCAG AA for the 10.5px helper text it's used for. The old value
-     was 3.1:1 and only got away with it while hue carried some meaning. */
-  --ink-faint: #82828c;
+  /* Paper white, not screen white. */
+  --ink: #f6f2ec;
+  --ink-muted: #a9a199;
+  /* Kept at ≥4.5:1 on the surfaces it actually sits on, which matters because
+     it sets the smallest text in the app. */
+  --ink-faint: #8b8279;
 
   /* Each shadow is a pair: a tight contact shadow that anchors the edge, and a
      wide ambient one that gives it depth. A single blur reads flat. */
@@ -65,8 +97,8 @@
 
   /* The lit top edge. This one line is what makes a flat panel read as a slab
      of glass catching light from above. */
-  --edge-light: inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  --edge-light-strong: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  --edge-light: inset 0 1px 0 rgba(255, 246, 235, 0.09);
+  --edge-light-strong: inset 0 1px 0 rgba(255, 246, 235, 0.16);
 }
 
 /* Both webview windows share one bundle. Keep the canvas transparent so the
@@ -91,6 +123,17 @@ body {
   font-feature-settings: "tnum" 1;
 }
 
+/* Page and step titles — the only thing Garamond is allowed to set. Its small
+   x-height means a size that looks right for the sans looks timid here, so
+   display type starts where the sans would already have stopped. A hair of
+   negative tracking is what a serif at this size both needs and can carry. */
+.display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
 /* ---- Shared surfaces ------------------------------------------------------ */
 /*
   In @layer components so Tailwind utilities still win: a component can write
@@ -113,6 +156,17 @@ body {
     box-shadow: var(--shadow-md), var(--edge-light);
   }
 
+  /* The page title, pinned while its page — description included — scrolls
+     under it. `-mx-12 px-12` in the markup pushes the wash out to the column's
+     own padding, so nothing passes through at the edges, and the header keeps
+     the gap beneath the title inside its own padding rather than as a margin
+     under it, or a line would surface in that gap before reaching the blur. */
+  .page-header {
+    background: var(--glass-base);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    backdrop-filter: blur(20px) saturate(140%);
+  }
+
   /* Inputs and selects. Focus brightens the hairline and lifts the surface —
      the monochrome replacement for the old azure focus border. */
   .field {
@@ -120,8 +174,8 @@ body {
     border-radius: 0.5rem;
     border: 1px solid var(--hairline);
     background: var(--surface-1);
-    padding: 0.375rem 0.625rem;
-    font-size: 13px;
+    padding: 0.5rem 0.75rem;
+    font-size: 15px;
     color: var(--ink);
     outline: none;
     transition:
@@ -138,7 +192,7 @@ body {
   .field:focus {
     border-color: var(--hairline-strong);
     background: var(--surface-2);
-    box-shadow: var(--edge-light), 0 0 0 3px rgba(255, 255, 255, 0.06);
+    box-shadow: var(--edge-light), 0 0 0 3px rgba(255, 246, 235, 0.06);
   }
 
   /* The strongest affordance monochrome allows: full white against near-black. */
@@ -158,7 +212,7 @@ body {
       opacity 0.15s ease;
   }
   .btn-primary:hover:not(:disabled) {
-    background: #ffffff;
+    background: #fffdfa;
   }
   .btn-primary:active:not(:disabled) {
     transform: scale(0.98);
@@ -231,9 +285,9 @@ optgroup {
   padding: 1px;
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.28),
-    rgba(255, 255, 255, 0.06) 45%,
-    rgba(255, 255, 255, 0.02)
+    rgba(255, 246, 235, 0.28),
+    rgba(255, 246, 235, 0.06) 45%,
+    rgba(255, 246, 235, 0.02)
   );
   -webkit-mask:
     linear-gradient(#000 0 0) content-box,
@@ -243,21 +297,10 @@ optgroup {
   pointer-events: none;
 }
 
-/* The one place color is spent: a red bloom while the microphone is live. */
-.pill-shell::after {
-  content: "";
-  position: absolute;
-  inset: -2px;
-  border-radius: inherit;
-  background: var(--rec);
-  filter: blur(20px);
-  opacity: 0;
-  transition: opacity 0.5s ease;
-  z-index: -1;
-}
-.pill-shell.is-live::after {
-  opacity: 0.3;
-}
+/* No bloom behind the pill while it is live. The record dot already says
+   "listening" and says it precisely; a red wash bleeding off the whole shell
+   said the same thing again, louder and less exactly, and it tinted the glass
+   edge the `::before` rim is there to keep clean. */
 
 /* ---- Animations ----------------------------------------------------------- */
 
@@ -275,19 +318,25 @@ optgroup {
   animation: pill-rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* Keep these rgba values in step with --rec; keyframes can't interpolate a
-   var() inside rgba(). */
-@keyframes rec-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(255, 69, 58, 0.55);
-  }
-  50% {
-    box-shadow: 0 0 0 6px rgba(255, 69, 58, 0);
+/* Insights' speed arc drawing itself once, on first paint. The length differs
+   per gauge, so the start offset comes in as a custom property rather than
+   being baked in here. */
+@keyframes arc-draw {
+  from {
+    stroke-dashoffset: var(--arc-len);
   }
 }
-.animate-rec {
-  animation: rec-pulse 1.6s ease-out infinite;
+
+/* A tooltip answering a hover is motion that shows what changed, so it gets a
+   short fade rather than appearing hard. */
+@keyframes hint-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}
+.animate-hint {
+  animation: hint-in 0.12s ease-out both;
 }
 
 @keyframes shimmer {
@@ -318,8 +367,11 @@ optgroup {
    waveform separately falls back to a static meter (see Waveform.tsx). */
 @media (prefers-reduced-motion: reduce) {
   .animate-rise,
-  .animate-rec,
+  .animate-hint,
   .text-shimmer {
+    animation: none !important;
+  }
+  [style*="arc-draw"] {
     animation: none !important;
   }
   .text-shimmer {
@@ -335,12 +387,12 @@ optgroup {
   height: 10px;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 246, 235, 0.1);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 246, 235, 0.18);
   background-clip: content-box;
 }

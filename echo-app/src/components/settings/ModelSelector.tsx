@@ -8,10 +8,14 @@ import { echoEvents } from "../../ipc/events";
  * Local Whisper models: download, choose, and remove.
  *
  * These are the largest files Echo puts on disk — the catalog spans 75 MB to
- * 1.5 GB — so the list is drawn as a shelf rather than a menu. Each downloaded
- * model carries a bar showing what it costs relative to the biggest one, and
- * the header totals it. That turns "which model?" and "what is this costing
- * me?" into the same glance, and gives Remove something to be measured against.
+ * 1.5 GB — so the models are drawn as a shelf of cards rather than a menu. A
+ * grid gives the catalog its real shape: two families, English-only and
+ * multilingual, each climbing the same size ladder, so the trade you are
+ * actually making is visible in one look instead of read row by row.
+ *
+ * Every card carries a bar along its bottom edge showing what it costs relative
+ * to the biggest model in the catalog, and the header totals it. The same bar
+ * fills as a model downloads — it is the same quantity arriving.
  *
  * Model choice is stored separately from the provider: choosing one sets
  * `whisper_model` and switches the active provider to `local`.
@@ -91,6 +95,9 @@ export function ModelSelector() {
     await commands.setAsrProvider("local");
     queryClient.invalidateQueries({ queryKey: ["setting", "whisper_model"] });
     queryClient.invalidateQueries({ queryKey: ["setting", "asr_provider"] });
+    queryClient.invalidateQueries({ queryKey: ["whisper-ready"] });
+    // The pill reports the engine too, and it is a separate webview.
+    void echoEvents.emitEngineChanged();
   }
 
   // Default to base.en in the highlight when nothing is explicitly chosen yet.
@@ -99,139 +106,162 @@ export function ModelSelector() {
   const usedMb = downloaded.reduce((sum, m) => sum + m.size_mb, 0);
   const scale = largestSize(models);
 
+  // Split by language family rather than a badge on every card: it is the one
+  // thing that changes which model is right for you, and it is the axis the
+  // grid can carry for free. Derived from the catalog, so a model added to the
+  // backend lands in the right half on its own.
+  const families = [
+    { label: "English only", models: models.filter((m) => m.english_only) },
+    { label: "All languages", models: models.filter((m) => !m.english_only) },
+  ].filter((f) => f.models.length > 0);
+
+  function card(m: ModelInfo) {
+    const downloading = m.name in progress;
+    const isActive = effectiveModel === m.name;
+    // The model in use can't be removed: doing so would break transcription
+    // with nothing on screen explaining why.
+    const inUse = isActive && activeProvider === "local";
+    const pendingRemoval = confirming === m.name;
+    const removing = deleteMutation.isPending && deleteMutation.variables === m.name;
+    // The bar means disk: how much this model costs once it is here, or how
+    // much of it has arrived while it is still downloading.
+    const fill = downloading
+      ? (progress[m.name] ?? 0) * 100
+      : m.downloaded
+        ? Math.max(4, (m.size_mb / scale) * 100)
+        : 0;
+
+    return (
+      <div
+        key={m.name}
+        className={
+          "relative overflow-hidden rounded-lg border px-3 py-2.5 transition " +
+          (inUse
+            ? "border-[var(--hairline-strong)] bg-[var(--surface-2)] shadow-[var(--edge-light)]"
+            : "border-[var(--hairline)] bg-[var(--surface-1)]")
+        }
+      >
+        {/* Confirming takes over the card rather than growing it: at this size
+            there is no room for a prompt beside the name, and a destructive
+            step deserves the whole surface anyway. */}
+        {pendingRemoval ? (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[13px] text-[var(--ink-muted)]">
+              Remove {formatSize(m.size_mb)}?
+            </span>
+            <span className="flex items-center gap-1.5">
+              <button
+                onClick={() => deleteMutation.mutate(m.name)}
+                disabled={removing}
+                className="btn-primary px-2 py-0.5 text-[13px]"
+              >
+                {removing ? "Removing…" : "Remove"}
+              </button>
+              <button
+                onClick={() => setConfirming(null)}
+                className="btn-ghost px-2 py-0.5 text-[13px]"
+              >
+                Keep
+              </button>
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-2">
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate text-[14px] font-medium text-[var(--ink)]">{m.name}</span>
+              <span className="tabular text-[12.5px] text-[var(--ink-faint)]">
+                {formatSize(m.size_mb)}
+                {m.downloaded && " on disk"}
+              </span>
+            </span>
+
+            <span className="flex shrink-0 items-center gap-1">
+              {downloading ? (
+                <span className="flex items-center gap-1.5 text-[13px] text-[var(--ink-muted)]">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span className="tabular">{Math.round((progress[m.name] ?? 0) * 100)}%</span>
+                </span>
+              ) : !m.downloaded ? (
+                <button
+                  onClick={() => download(m.name)}
+                  title={`Download ${m.name} (${formatSize(m.size_mb)})`}
+                  aria-label={`Download ${m.name}`}
+                  className="btn-ghost p-1.5"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </button>
+              ) : (
+                <>
+                  {inUse ? (
+                    // A state, not a control: the card is already lit, and a
+                    // button you cannot press is just something else to read.
+                    <Check className="h-3.5 w-3.5 text-[var(--ink)]" aria-label="In use" />
+                  ) : (
+                    <button
+                      onClick={() => select(m.name)}
+                      className="btn-primary px-2 py-0.5 text-[13px]"
+                    >
+                      Use
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      deleteMutation.reset();
+                      setConfirming(m.name);
+                    }}
+                    disabled={inUse}
+                    title={
+                      inUse
+                        ? "Echo is using this model. Switch to another one first."
+                        : `Remove ${m.name} from this machine`
+                    }
+                    aria-label={`Remove ${m.name}`}
+                    className="btn-ghost p-1.5 text-[var(--ink-muted)] hover:text-[var(--ink)] disabled:opacity-35"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </>
+              )}
+            </span>
+          </div>
+        )}
+
+        {fill > 0 && (
+          <span
+            aria-hidden
+            className="absolute bottom-0 left-0 h-[3px] rounded-r-full transition-[width] duration-300 ease-out motion-reduce:transition-none"
+            style={{ width: `${fill}%`, background: "rgba(255,246,235,0.32)" }}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-3">
-      <p className="text-[11px] text-[var(--ink-muted)]">
+    <div className="space-y-5">
+      <p className="text-[13px] text-[var(--ink-muted)]">
         {downloaded.length === 0 ? (
           "Nothing downloaded yet."
         ) : (
           <>
-            {downloaded.length} downloaded ·{" "}
+            {downloaded.length} downloaded, taking{" "}
             <span className="tabular text-[var(--ink)]">{formatSize(usedMb)}</span> on disk
           </>
         )}
       </p>
 
-      <div className="space-y-1.5">
-        {models.map((m) => {
-          const downloading = m.name in progress;
-          const isActive = effectiveModel === m.name;
-          // The model in use can't be removed: doing so would break
-          // transcription with nothing on screen explaining why.
-          const inUse = isActive && activeProvider === "local";
-          const pendingRemoval = confirming === m.name;
-          const removing = deleteMutation.isPending && deleteMutation.variables === m.name;
-
-          return (
-            <div
-              key={m.name}
-              className="relative overflow-hidden rounded-lg glass px-3.5 py-2.5"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-                <div className="flex min-w-0 flex-col gap-0.5">
-                  <span className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--ink)]">
-                    {m.name}
-                    <span className="rounded bg-[var(--surface-2)] px-1 py-px text-[9px] uppercase tracking-wide text-[var(--ink-muted)]">
-                      {m.english_only ? "EN" : "multi"}
-                    </span>
-                  </span>
-                  <span className="tabular text-[10.5px] text-[var(--ink-faint)]">
-                    {formatSize(m.size_mb)}
-                    {m.downloaded && " on disk"}
-                  </span>
-                </div>
-
-                {downloading ? (
-                  <span className="flex items-center gap-1.5 text-[11px] text-[var(--ink-muted)]">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    <span className="tabular">
-                      {Math.round((progress[m.name] ?? 0) * 100)}%
-                    </span>
-                  </span>
-                ) : pendingRemoval ? (
-                  <span className="flex items-center gap-2">
-                    <span className="text-[11px] text-[var(--ink-muted)]">
-                      Remove {formatSize(m.size_mb)}?
-                    </span>
-                    <button
-                      onClick={() => deleteMutation.mutate(m.name)}
-                      disabled={removing}
-                      className="btn-primary px-2.5 py-1 text-[11px]"
-                    >
-                      {removing ? "Removing…" : "Remove"}
-                    </button>
-                    <button
-                      onClick={() => setConfirming(null)}
-                      className="btn-ghost px-2.5 py-1 text-[11px]"
-                    >
-                      Keep
-                    </button>
-                  </span>
-                ) : m.downloaded ? (
-                  <span className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => select(m.name)}
-                      disabled={inUse}
-                      className={
-                        "flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-medium transition disabled:opacity-100 " +
-                        (inUse ? "bg-[var(--surface-3)] text-[var(--ink)]" : "btn-primary")
-                      }
-                    >
-                      {inUse ? (
-                        <>
-                          <Check className="h-3.5 w-3.5" /> In use
-                        </>
-                      ) : (
-                        "Use"
-                      )}
-                    </button>
-                    <button
-                      onClick={() => {
-                        deleteMutation.reset();
-                        setConfirming(m.name);
-                      }}
-                      disabled={inUse}
-                      title={
-                        inUse
-                          ? "Echo is using this model. Switch to another one first."
-                          : `Remove ${m.name} from this machine`
-                      }
-                      aria-label={`Remove ${m.name}`}
-                      className="btn-ghost px-2 py-1 text-[var(--ink-muted)] hover:text-[var(--ink)] disabled:opacity-35"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </span>
-                ) : (
-                  <button
-                    onClick={() => download(m.name)}
-                    className="btn-ghost gap-1 px-2.5 py-1 text-[11px]"
-                  >
-                    <Download className="h-3.5 w-3.5" /> Download
-                  </button>
-                )}
-              </div>
-
-              {/* What this model costs, drawn against the largest in the
-                  catalog. Only downloaded models get a bar — it measures disk
-                  actually spent, which is what Remove gives back. */}
-              {m.downloaded && (
-                <span
-                  aria-hidden
-                  className="absolute bottom-0 left-0 h-[3px] rounded-r-full"
-                  style={{
-                    width: `${Math.max(4, (m.size_mb / scale) * 100)}%`,
-                    background: "rgba(255,255,255,0.32)",
-                  }}
-                />
-              )}
-            </div>
-          );
-        })}
-      </div>
+      {families.map((family) => (
+        <div key={family.label} className="space-y-2">
+          <h4 className="text-[13px] font-medium text-[var(--ink-faint)]">{family.label}</h4>
+          {/* Three across: the English family is exactly one row of the size
+              ladder, and medium — the outlier at 1.5 GB — ends up alone, which
+              is what it is. */}
+          <div className="grid grid-cols-3 gap-2">{family.models.map(card)}</div>
+        </div>
+      ))}
 
       {deleteMutation.isError && (
-        <span className="flex items-start gap-1.5 text-[11px] font-medium leading-snug text-[var(--ink)]">
+        <span className="flex items-start gap-1.5 text-[13px] font-medium leading-snug text-[var(--ink)]">
           <AlertTriangle className="mt-px h-3 w-3 shrink-0" />
           {String(deleteMutation.error)}
         </span>

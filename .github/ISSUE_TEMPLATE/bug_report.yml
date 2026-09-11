@@ -1,0 +1,46 @@
+name: Bug report
+description: Something in Echo does not do what it says it does.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. If you got here from **Settings → Report an issue**
+        inside Echo, the description and diagnostics below are already filled in —
+        read them over, edit anything you would rather not publish, and submit.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what Echo did instead.
+      placeholder: |
+        I pressed Ctrl+Shift+Space in Notepad and spoke a sentence.
+        I expected the text to appear. Nothing was typed, and the pill stayed grey.
+    validations:
+      required: true
+
+  - type: input
+    id: reproduce
+    attributes:
+      label: Does it happen every time?
+      placeholder: Every time / only in this one app / only since I changed the model
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: >
+        Echo fills this in from Settings → Report an issue. It carries the version,
+        platform, engine and hotkey state — no username, no paths, no API keys.
+        Edit or clear it freely.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Anything in the log
+      description: Optional. Paste any lines that looked relevant.
+      render: text

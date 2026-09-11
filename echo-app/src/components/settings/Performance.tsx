@@ -7,6 +7,10 @@ import { Group, Field, Check } from "../common/Page";
 /**
  * Compute settings for the offline engine.
  *
+ * Only rendered on the local lane, which is why nothing that applies to cloud
+ * dictation may live here — keeping the microphone warm used to, and was
+ * unreachable for anyone on a cloud provider. It is under Microphone now.
+ *
  * Echo already prefers the GPU on its own, so this page is not where the user
  * turns acceleration on — it is where they find out *why* it is or is not
  * happening. That is the question a settings screen can actually answer:
@@ -21,11 +25,6 @@ export function Performance() {
   const { data: gpu } = useQuery({
     queryKey: ["gpu-status"],
     queryFn: commands.gpuStatus,
-  });
-
-  const { data: warm } = useQuery({
-    queryKey: ["setting", "warm_mic"],
-    queryFn: () => commands.getSetting("warm_mic"),
   });
 
   useEffect(() => {
@@ -56,13 +55,6 @@ export function Performance() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["gpu-status"] }),
   });
 
-  const setWarm = useMutation({
-    mutationFn: (v: boolean) =>
-      commands.setSetting("warm_mic", v ? "true" : "false"),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["setting", "warm_mic"] }),
-  });
-
   const canAccelerate = Boolean(gpu?.available_pack);
   const busy = download.isPending || progress !== null;
 
@@ -81,16 +73,16 @@ export function Performance() {
       >
         <div className="rounded-lg border border-[var(--hairline)] bg-[var(--surface-1)] px-3.5 py-3">
           <div className="flex items-baseline justify-between gap-4">
-            <span className="text-[12px] font-medium text-[var(--ink)]">
+            <span className="text-[14px] font-medium text-[var(--ink)]">
               {gpu?.detected ?? "Checking…"}
             </span>
-            <span className="text-[10.5px] text-[var(--ink-faint)]">
+            <span className="text-[12.5px] text-[var(--ink-faint)]">
               {statusLabel(gpu)}
             </span>
           </div>
 
           {gpu?.failed && (
-            <p className="mt-2 text-[10.5px] leading-relaxed text-[var(--ink-muted)]">
+            <p className="mt-2 text-[12.5px] leading-relaxed text-[var(--ink-muted)]">
               The accelerated build failed to run, so Echo switched to the CPU
               for this session. Toggling GPU acceleration off and on tries it
               again.
@@ -99,7 +91,7 @@ export function Performance() {
 
           {canAccelerate && !gpu?.pack_installed && (
             <div className="mt-2.5 space-y-2">
-              <p className="text-[10.5px] leading-relaxed text-[var(--ink-muted)]">
+              <p className="text-[12.5px] leading-relaxed text-[var(--ink-muted)]">
                 A build for your GPU is available and will make local
                 transcription substantially faster.
                 {gpu?.available_pack_mb
@@ -108,7 +100,7 @@ export function Performance() {
               </p>
               <button
                 type="button"
-                className="btn-primary text-[11px]"
+                className="btn-primary text-[13px]"
                 disabled={busy}
                 onClick={() => download.mutate()}
               >
@@ -119,7 +111,7 @@ export function Performance() {
                   : "Download GPU build"}
               </button>
               {download.error != null && (
-                <p className="text-[10.5px] leading-relaxed text-[var(--ink)]">
+                <p className="text-[12.5px] leading-relaxed text-[var(--ink)]">
                   {String(download.error)}
                 </p>
               )}
@@ -148,22 +140,6 @@ export function Performance() {
             ))}
           </select>
         </Field>
-      </Group>
-
-      <Group
-        title="Responsiveness"
-        hint={
-          <>
-            Keeping the microphone open for a few seconds after you stop lets
-            the next sentence start instantly, and captures the moment just
-            before you press the key — so a word begun early is not cut off.
-            While it is open, your system will show the microphone as in use.
-          </>
-        }
-      >
-        <Check checked={warm !== "false"} onChange={(v) => setWarm.mutate(v)}>
-          Keep the microphone ready between dictations
-        </Check>
       </Group>
     </>
   );

@@ -2,12 +2,16 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 
+use super::fallback::FallbackNotify;
 use super::{AsrProvider, TranscriptSegment};
 use crate::error::{EchoError, Result};
 
 pub struct AsrManager {
     providers: RwLock<HashMap<String, Arc<dyn AsrProvider>>>,
     active_provider: RwLock<String>,
+    /// Set once at startup by whoever can reach a window. `None` in tests and
+    /// in the CLI, where there is no screen to tell.
+    on_fallback: RwLock<Option<FallbackNotify>>,
 }
 
 impl AsrManager {
@@ -15,7 +19,14 @@ impl AsrManager {
         Self {
             providers: RwLock::new(HashMap::new()),
             active_provider: RwLock::new(default_provider),
+            on_fallback: RwLock::new(None),
         }
+    }
+
+    /// Register the sink told whenever an utterance is diverted to the offline
+    /// engine.
+    pub async fn set_fallback_notify(&self, notify: FallbackNotify) {
+        *self.on_fallback.write().await = Some(notify);
     }
 
     pub async fn register(&self, provider: Arc<dyn AsrProvider>) {
@@ -120,6 +131,7 @@ impl AsrManager {
         let local = providers.get("local").cloned();
         drop(providers);
 
-        Ok(super::fallback::FallbackProvider::wrap(provider, local))
+        let notify = self.on_fallback.read().await.clone();
+        Ok(super::fallback::FallbackProvider::wrap(provider, local, notify))
     }
 }

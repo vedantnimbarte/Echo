@@ -24,7 +24,7 @@ Built with **Rust · Tauri v2 · React 19 · TypeScript · TailwindCSS v4 · SQL
 - 🔁 **Retry the last utterance** on a stronger model without saying it again
 - ⚡ **Live text** (opt-in, per app) — words appear as you speak them, offline or in the cloud
 - 🧹 **Drops “um” and stuttered words** — and, optionally, fixes self-corrections with a local model
-- 📊 **Dictation stats** — words, days, and an honest estimate of time against typing
+- 📊 **Insights** — speaking speed, the fixes Echo made, which apps you dictate into, a streak calendar and an on-device-vs-cloud split, all counted from your own History and never sent anywhere
 - ✍️ **Spoken punctuation** (opt-in) — "comma", "new paragraph", "question mark"; English, Spanish, French, German, Italian, Portuguese, Dutch
 - 🔢 **Numbers, times and units** written properly (English) — "twenty five" → 25, "five percent" → 5%
 - 🔒 **Never types into a password field** (Windows/macOS; Linux can't detect it — see below)
@@ -276,9 +276,10 @@ the app data directory (see [Where things live](#where-things-live)).
 
 ### Cloud providers (no native build needed)
 
-In **Settings → Cloud API keys**, paste a key and click **Save** (stored in your
-OS keychain), then **Test** to check it before you rely on it. The provider then
-appears in the **Speech engine** list.
+In **Settings → Engine**, choose **A cloud provider**, then open the provider you
+want. Paste a key and click **Save key** (it goes to your OS keychain), **Test
+the key** to check it before you rely on it, and **Dictate with …** to send audio
+there instead of to the offline engine.
 
 | Provider | Get a key | Notes |
 |---|---|---|

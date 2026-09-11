@@ -5,6 +5,11 @@ export interface AudioDevice {
   is_default: boolean;
 }
 
+export interface Language {
+  code: string;
+  label: string;
+}
+
 export interface DictionaryEntry {
   id: number | null;
   phrase: string;
@@ -151,6 +156,45 @@ export interface DictationStats {
   words_last_7_days: number;
   /** Earliest transcript still stored; retention trims old rows. */
   since: string | null;
+}
+
+/** One row of a "how much of it was X" breakdown: an app, a provider, a language. */
+export interface Tally {
+  key: string;
+  transcripts: number;
+  words: number;
+}
+
+/** A day that had dictation in it. Days with none are simply absent. */
+export interface DayWords {
+  /** ISO `YYYY-MM-DD`. */
+  date: string;
+  words: number;
+  transcripts: number;
+}
+
+/** Everything the Insights page shows. Derived from History, like the stats above. */
+export interface Insights {
+  transcripts: number;
+  words: number;
+  days: number;
+  words_last_7_days: number;
+  since: string | null;
+  /** Speech time and the words spoken in it — the two halves of words-per-minute. */
+  spoken_ms: number;
+  timed_words: number;
+  timed_transcripts: number;
+  dictionary_fixes: number;
+  cleanup_fixes: number;
+  streak: number;
+  longest_streak: number;
+  apps: Tally[];
+  providers: Tally[];
+  languages: Tally[];
+  /** Transcripts per hour of the day, 24 entries starting at midnight. */
+  hours: number[];
+  /** The last 365 days that had dictation, oldest first. */
+  daily: DayWords[];
 }
 
 export interface EgressRecord {
@@ -303,6 +347,9 @@ export const commands = {
   /** Read from the OS each time, not from echo.db — the registration is not ours. */
   getAutostart: () => invoke<boolean>("get_autostart"),
 
+  /** The logged-in account's given name, or null when the OS offers nothing usable. */
+  accountName: () => invoke<string | null>("account_name"),
+
   setAutostart: (enabled: boolean) =>
     invoke<void>("set_autostart", { enabled }),
 
@@ -407,5 +454,37 @@ export const commands = {
   spokenPunctuationLanguages: () =>
     invoke<string[]>("spoken_punctuation_languages"),
 
+  /**
+   * The dictation languages Echo offers. Lives in Rust because the tray menu
+   * renders the same list, and two copies drift.
+   */
+  dictationLanguages: () => invoke<Language[]>("dictation_languages"),
+
+  /**
+   * The version, platform, engine and hotkey state a bug report needs, as the
+   * block Echo pastes into one. Shown to the user before it goes anywhere.
+   */
+  diagnostics: () => invoke<string>("diagnostics"),
+
+  /** Show `echo.log` in the system file manager. */
+  openLog: () => invoke<void>("open_log"),
+
+  /**
+   * Audio rescued from a session that ended without finishing. Absolute paths,
+   * newest first; empty is the normal answer.
+   */
+  recoveredRecordings: () => invoke<string[]>("recovered_recordings"),
+
+  /** Delete one recovered recording once the user is done with it. */
+  discardRecovered: (path: string) => invoke<void>("discard_recovered", { path }),
+
+  /**
+   * Whether the neural voice-activity model loaded. False means the energy
+   * detector is running whatever the `vad_engine` setting says.
+   */
+  sileroAvailable: () => invoke<boolean>("silero_available"),
+
   getDictationStats: () => invoke<DictationStats>("get_dictation_stats"),
+
+  getInsights: () => invoke<Insights>("get_insights"),
 };

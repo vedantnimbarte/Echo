@@ -33,9 +33,9 @@ export function TelemetrySettings() {
   });
 
   return (
-    <div className="space-y-3 border-t border-[var(--hairline)] pt-4">
-      <span className="text-sm text-[var(--ink-muted)]">Usage data (local only)</span>
-
+    // No rule and no heading of its own: the Page already draws a rule between
+    // groups, and the group it sits in is already called Telemetry.
+    <div className="space-y-3">
       <label className="flex items-center gap-3 cursor-pointer">
         <input
           type="checkbox"

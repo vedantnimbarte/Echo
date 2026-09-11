@@ -33,6 +33,9 @@ tauri-build = { version = "2", features = [] }
 # way back into Echo (see src/tray.rs).
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
+# Already in the tree via the toolkits below; named here because `partial_edit`
+# depends on it directly — a backspace deletes a grapheme cluster, not a char.
+unicode-segmentation = "1"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-store = "2"

@@ -4,6 +4,7 @@ import { Trash2, Plus, Download, Upload } from "lucide-react";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { commands } from "../../ipc/commands";
 import { Page, Group } from "../common/Page";
+import { Hint } from "../common/Hint";
 
 export function DictionaryPanel() {
   const qc = useQueryClient();
@@ -130,7 +131,7 @@ export function DictionaryPanel() {
         <textarea
           className="field min-h-[38px] flex-1 resize-y px-3 py-2 text-sm"
           rows={1}
-          placeholder="Replacement (Shift+Enter for a new line)"
+          placeholder="Replacement"
           value={replacement}
           onChange={(e) => setReplacement(e.target.value)}
           onKeyDown={(e) => {
@@ -148,19 +149,26 @@ export function DictionaryPanel() {
           <Plus className="w-4 h-4" />
           Add
         </button>
+        <Hint label="About replacements">
+          Enter adds the entry; Shift+Enter starts a new line, so a replacement
+          can be a whole block — a signature, an address, a boilerplate
+          paragraph.
+        </Hint>
       </form>
 
       {/* Profiles: groups that a per-app profile can switch on */}
       <div className="glass space-y-2 rounded-lg p-3">
-        <p className="text-[12px] font-medium text-[var(--ink)]">Profiles</p>
-        <p className="text-[10.5px] leading-snug text-[var(--ink-faint)]">
-          Entries with no profile always apply. Put an entry in a profile and it
-          only applies while an app using that profile is focused — set that up
-          in Settings → Per-app profiles.
-        </p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-[14px] font-medium text-[var(--ink)]">Profiles</p>
+          <Hint label="About profiles">
+            Entries with no profile always apply. Put an entry in a profile and
+            it only applies while an app using that profile is focused — set
+            that up under Settings → Per-app profiles.
+          </Hint>
+        </div>
         <div className="flex gap-1.5">
           <input
-            className="field flex-1 text-[12px]"
+            className="field flex-1 text-[14px]"
             placeholder="New profile name"
             value={newProfile}
             onChange={(e) => setNewProfile(e.target.value)}
@@ -171,7 +179,7 @@ export function DictionaryPanel() {
           <button
             onClick={() => addProfileMutation.mutate()}
             disabled={!newProfile.trim()}
-            className="btn-primary shrink-0 px-2.5 py-1 text-[11px]"
+            className="btn-primary shrink-0 px-2.5 py-1 text-[13px]"
           >
             <Plus className="h-3.5 w-3.5" />
             Add
@@ -182,7 +190,7 @@ export function DictionaryPanel() {
             {profiles.map((p) => (
               <li
                 key={p.id}
-                className="flex items-center gap-1.5 rounded-md border border-[var(--hairline)] bg-[var(--surface-1)] px-2 py-0.5 text-[11px]"
+                className="flex items-center gap-1.5 rounded-md border border-[var(--hairline)] bg-[var(--surface-1)] px-2 py-0.5 text-[13px]"
               >
                 {p.name}
                 <button
@@ -243,7 +251,7 @@ export function DictionaryPanel() {
               </span>
               {profiles.length > 0 && (
                 <select
-                  className="field w-32 shrink-0 text-[11px]"
+                  className="field w-32 shrink-0 text-[13px]"
                   value={entry.profile_id == null ? "global" : String(entry.profile_id)}
                   disabled={entry.id == null}
                   onChange={(e) =>

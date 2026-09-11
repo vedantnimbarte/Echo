@@ -75,9 +75,18 @@ pub fn set_dictionary_entry_enabled(conn: &Connection, id: i64, enabled: bool) -
 
 pub fn insert_history(conn: &Connection, record: &TranscriptionRecord) -> Result<i64> {
     conn.execute(
-        "INSERT INTO transcription_history (text, language, provider)
-         VALUES (?1, ?2, ?3)",
-        params![record.text, record.language, record.provider],
+        "INSERT INTO transcription_history
+            (text, language, provider, duration_ms, app, dictionary_fixes, cleanup_fixes)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            record.text,
+            record.language,
+            record.provider,
+            record.duration_ms,
+            record.app,
+            record.dictionary_fixes,
+            record.cleanup_fixes,
+        ],
     )?;
     Ok(conn.last_insert_rowid())
 }
@@ -88,7 +97,8 @@ pub fn list_history(conn: &Connection, limit: i64) -> Result<Vec<TranscriptionRe
     // oldest-first, the exact opposite of what History shows. `id DESC` breaks
     // the tie by insertion order, matching `list_egress`.
     let mut stmt = conn.prepare(
-        "SELECT id, text, language, provider, created_at
+        "SELECT id, text, language, provider, created_at,
+                duration_ms, app, dictionary_fixes, cleanup_fixes
          FROM transcription_history ORDER BY created_at DESC, id DESC LIMIT ?1",
     )?;
     let records = stmt
@@ -99,6 +109,10 @@ pub fn list_history(conn: &Connection, limit: i64) -> Result<Vec<TranscriptionRe
                 language: r.get(2)?,
                 provider: r.get(3)?,
                 created_at: r.get(4)?,
+                duration_ms: r.get(5)?,
+                app: r.get(6)?,
+                dictionary_fixes: r.get(7)?,
+                cleanup_fixes: r.get(8)?,
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -324,6 +338,191 @@ pub fn dictation_stats(conn: &Connection) -> Result<DictationStats> {
     Ok(DictationStats { transcripts, words, days, words_last_7_days, since })
 }
 
+// ── Insights ─────────────────────────────────────────────────────────────────
+
+/// One row of a "how much of it was X" breakdown — an app, a provider, a
+/// language. Three questions with the same shape, so they share one answer.
+#[derive(Debug, serde::Serialize)]
+pub struct Tally {
+    pub key: String,
+    pub transcripts: i64,
+    pub words: i64,
+}
+
+/// A single day's dictation, for the calendar.
+#[derive(Debug, serde::Serialize)]
+pub struct DayWords {
+    /// ISO `YYYY-MM-DD`, local to whatever SQLite considers "now".
+    pub date: String,
+    pub words: i64,
+    pub transcripts: i64,
+}
+
+/// Everything the Insights page shows, in one round trip.
+///
+/// Same source as [`dictation_stats`] — History — and the same consequence:
+/// with History off there is nothing to count, and the page says so rather
+/// than inventing numbers from a second tally nobody can inspect or delete.
+#[derive(Debug, serde::Serialize)]
+pub struct Insights {
+    pub transcripts: i64,
+    pub words: i64,
+    pub days: i64,
+    pub words_last_7_days: i64,
+    pub since: Option<String>,
+
+    /// Speech time and the words spoken in it, counted only over rows that
+    /// actually carry a duration. Words per minute is their ratio, and doing
+    /// it this way keeps rows recorded before durations existed from dragging
+    /// the rate down to nothing.
+    pub spoken_ms: i64,
+    pub timed_words: i64,
+    pub timed_transcripts: i64,
+
+    pub dictionary_fixes: i64,
+    pub cleanup_fixes: i64,
+
+    /// Consecutive days up to today (or yesterday, if today is still empty).
+    pub streak: i64,
+    pub longest_streak: i64,
+
+    /// Busiest first, and only what is known: apps go unrecorded on a machine
+    /// where Echo cannot see the focused window.
+    pub apps: Vec<Tally>,
+    pub providers: Vec<Tally>,
+    pub languages: Vec<Tally>,
+
+    /// Transcripts per hour of the day, 24 buckets starting at midnight.
+    pub hours: Vec<i64>,
+
+    /// The last 365 days that had any dictation, oldest first.
+    pub daily: Vec<DayWords>,
+}
+
+/// Group by one column, busiest first. `NULL` keys are left out — "unknown" is
+/// not a category the user can act on, and counting it as one would put a
+/// fictional app at the top of the list on Linux.
+fn tally(conn: &Connection, column: &str) -> Result<Vec<Tally>> {
+    let sql = format!(
+        "SELECT {column}, count(*), COALESCE(sum({WORDS}), 0)
+         FROM transcription_history
+         WHERE {column} IS NOT NULL AND trim({column}) <> ''
+         GROUP BY {column} ORDER BY count(*) DESC, {column} LIMIT 12"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok(Tally { key: r.get(0)?, transcripts: r.get(1)?, words: r.get(2)? })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// Current and longest run of consecutive days, from day numbers ascending.
+///
+/// `today` is passed in rather than read here so the calculation is a pure
+/// function of its inputs — which is the only way to test the "you dictated
+/// yesterday but not yet today" case, the one a naive version gets wrong by
+/// resetting a long streak at midnight.
+fn streaks(days: &[i64], today: i64) -> (i64, i64) {
+    let mut longest = 0i64;
+    let mut run = 0i64;
+    let mut current = 0i64;
+
+    for (i, day) in days.iter().enumerate() {
+        run = if i > 0 && day - days[i - 1] == 1 { run + 1 } else { 1 };
+        longest = longest.max(run);
+        // A run counts as live if it reaches today or stopped at yesterday;
+        // anything older has been broken by a day with nothing in it.
+        if today - day <= 1 {
+            current = run;
+        }
+    }
+    (current, longest)
+}
+
+pub fn insights(conn: &Connection) -> Result<Insights> {
+    let base = dictation_stats(conn)?;
+
+    let totals = format!(
+        "SELECT COALESCE(sum(duration_ms), 0),
+                COALESCE(sum(CASE WHEN duration_ms IS NULL THEN 0 ELSE {WORDS} END), 0),
+                COALESCE(sum(CASE WHEN duration_ms IS NULL THEN 0 ELSE 1 END), 0),
+                COALESCE(sum(dictionary_fixes), 0),
+                COALESCE(sum(cleanup_fixes), 0)
+         FROM transcription_history"
+    );
+    let (spoken_ms, timed_words, timed_transcripts, dictionary_fixes, cleanup_fixes) = conn
+        .query_row(&totals, [], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+        })?;
+
+    // Day numbers come from SQLite rather than being parsed back out of the
+    // date string: julianday already knows how many days apart two dates are,
+    // including across months and leap years.
+    let daily_sql = format!(
+        "SELECT date(created_at),
+                CAST(julianday(date(created_at)) AS INTEGER),
+                COALESCE(sum({WORDS}), 0),
+                count(*)
+         FROM transcription_history
+         WHERE created_at >= datetime('now', '-365 days')
+         GROUP BY date(created_at) ORDER BY date(created_at)"
+    );
+    let mut stmt = conn.prepare(&daily_sql)?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get(2)?, r.get(3)?))
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+
+    let day_numbers: Vec<i64> = rows.iter().map(|(_, n, _, _)| *n).collect();
+    let today: i64 = conn.query_row(
+        "SELECT CAST(julianday(date('now')) AS INTEGER)",
+        [],
+        |r| r.get(0),
+    )?;
+    let (streak, longest_streak) = streaks(&day_numbers, today);
+
+    let daily = rows
+        .into_iter()
+        .map(|(date, _, words, transcripts)| DayWords { date, words, transcripts })
+        .collect();
+
+    let mut hours = vec![0i64; 24];
+    let mut stmt = conn.prepare(
+        "SELECT CAST(strftime('%H', created_at) AS INTEGER), count(*)
+         FROM transcription_history GROUP BY 1",
+    )?;
+    for row in stmt.query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)))? {
+        let (hour, n) = row?;
+        if let Some(slot) = hours.get_mut(hour as usize) {
+            *slot = n;
+        }
+    }
+
+    Ok(Insights {
+        transcripts: base.transcripts,
+        words: base.words,
+        days: base.days,
+        words_last_7_days: base.words_last_7_days,
+        since: base.since,
+        spoken_ms,
+        timed_words,
+        timed_transcripts,
+        dictionary_fixes,
+        cleanup_fixes,
+        streak,
+        longest_streak,
+        apps: tally(conn, "app")?,
+        providers: tally(conn, "provider")?,
+        languages: tally(conn, "language")?,
+        hours,
+        daily,
+    })
+}
+
+
 // ── Egress log ───────────────────────────────────────────────────────────────
 
 pub fn insert_egress(conn: &Connection, host: &str, purpose: &str) -> Result<()> {
@@ -437,4 +636,29 @@ pub fn set_plugin_enabled(conn: &Connection, name: &str, enabled: bool) -> Resul
 pub fn delete_plugin(conn: &Connection, name: &str) -> Result<()> {
     conn.execute("DELETE FROM plugins WHERE name = ?1", params![name])?;
     Ok(())
+}
+
+#[cfg(test)]
+mod streak_tests {
+    use super::streaks;
+
+    #[test]
+    fn a_run_that_ends_yesterday_is_still_live() {
+        // Days 8, 9, 10 with "today" = 11: three days, unbroken, not yet
+        // dictated into today.
+        assert_eq!(streaks(&[8, 9, 10], 11), (3, 3));
+    }
+
+    #[test]
+    fn a_gap_breaks_the_current_streak_but_keeps_the_record() {
+        // A four-day run in the past, then a single day today.
+        assert_eq!(streaks(&[1, 2, 3, 4, 10], 10), (1, 4));
+    }
+
+    #[test]
+    fn nothing_recorded_is_no_streak() {
+        assert_eq!(streaks(&[], 10), (0, 0));
+        // Last dictation was three days ago.
+        assert_eq!(streaks(&[5, 6, 7], 10), (0, 3));
+    }
 }

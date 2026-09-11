@@ -62,7 +62,7 @@ export function FixUps() {
           />
           {undoKey !== UNBOUND && (
             <button
-              className="btn-ghost px-2.5 py-1.5 text-[11px]"
+              className="btn-ghost px-2.5 py-1.5 text-[13px]"
               onClick={() => setHotkey.mutate({ which: "undo", shortcut: UNBOUND })}
             >
               Unbind
@@ -92,7 +92,7 @@ export function FixUps() {
               />
               {retryKey !== UNBOUND && (
                 <button
-                  className="btn-ghost px-2.5 py-1.5 text-[11px]"
+                  className="btn-ghost px-2.5 py-1.5 text-[13px]"
                   onClick={() => setHotkey.mutate({ which: "retry", shortcut: UNBOUND })}
                 >
                   Unbind
@@ -119,18 +119,10 @@ export function FixUps() {
       )}
 
       {setHotkey.isError && (
-        <p className="text-[11px] font-medium text-[var(--ink)]">
+        <p className="text-[13px] font-medium text-[var(--ink)]">
           {String(setHotkey.error)}
         </p>
       )}
-
-      <p className="max-w-[56ch] text-[10.5px] leading-relaxed text-[var(--ink-faint)]">
-        Undo sends the focused app its own undo shortcut, so it works wherever
-        that does — and can’t delete text you typed yourself afterwards. Retry
-        re-runs the audio Echo already has: nothing leaves this machine unless
-        you pick a cloud provider above. The audio is held in memory only, one
-        utterance at a time, and never written to disk.
-      </p>
     </div>
   );
 }

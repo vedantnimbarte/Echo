@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus, Trash2, Crosshair } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { commands, type AppProfile } from "../../ipc/commands";
+import { Hint } from "../common/Hint";
 
 /**
  * Per-app overrides. Each field can be left on "Global", which inherits the
@@ -79,7 +80,7 @@ export function AppProfiles() {
 
   return (
     <div className="space-y-3">
-      <p className="text-[10.5px] leading-snug text-[var(--ink-faint)]">
+      <p className="text-[12.5px] leading-snug text-[var(--ink-faint)]">
         Override how Echo behaves in specific apps. Anything left on “Global”
         follows the settings above.
       </p>
@@ -93,7 +94,7 @@ export function AppProfiles() {
         />
         <button
           onClick={detectCurrent}
-          className="btn-ghost shrink-0 px-2.5 text-[12px]"
+          className="btn-ghost shrink-0 px-2.5 text-[14px]"
           title="Use whichever app is focused right now"
         >
           <Crosshair className="h-3.5 w-3.5" />
@@ -102,7 +103,7 @@ export function AppProfiles() {
         <button
           onClick={addPending}
           disabled={!pending?.trim()}
-          className="btn-primary shrink-0 px-2.5 text-[12px]"
+          className="btn-primary shrink-0 px-2.5 text-[14px]"
         >
           <Plus className="h-3.5 w-3.5" />
           Add
@@ -110,7 +111,7 @@ export function AppProfiles() {
       </div>
 
       {profiles.length === 0 ? (
-        <p className="text-[11px] text-[var(--ink-muted)]">No app profiles yet.</p>
+        <p className="text-[13px] text-[var(--ink-muted)]">No app profiles yet.</p>
       ) : (
         <ul className="space-y-1.5">
           {profiles.map((p) => (
@@ -123,7 +124,7 @@ export function AppProfiles() {
                   className="h-3.5 w-3.5 accent-white"
                   title="Enable this profile"
                 />
-                <span className="flex-1 truncate font-mono text-[12px] text-[var(--ink)]">
+                <span className="flex-1 truncate font-mono text-[14px] text-[var(--ink)]">
                   {p.app_match}
                 </span>
                 <button
@@ -135,13 +136,13 @@ export function AppProfiles() {
                 </button>
               </div>
 
-              <div className="mt-2 grid grid-cols-3 gap-1.5">
+              <div className="mt-2.5 grid grid-cols-3 gap-2">
                 <label className="block">
-                  <span className="mb-0.5 block text-[9.5px] uppercase tracking-wide text-[var(--ink-faint)]">
+                  <span className="mb-1 block text-[13px] text-[var(--ink-muted)]">
                     Insert text
                   </span>
                   <select
-                    className="field text-[11px]"
+                    className="field text-[13px]"
                     value={
                       p.auto_inject === null ? "global" : p.auto_inject ? "on" : "off"
                     }
@@ -159,11 +160,11 @@ export function AppProfiles() {
                 </label>
 
                 <label className="block">
-                  <span className="mb-0.5 block text-[9.5px] uppercase tracking-wide text-[var(--ink-faint)]">
+                  <span className="mb-1 block text-[13px] text-[var(--ink-muted)]">
                     Method
                   </span>
                   <select
-                    className="field text-[11px]"
+                    className="field text-[13px]"
                     value={p.injection_method ?? "global"}
                     onChange={(e) =>
                       update(p, {
@@ -178,12 +179,13 @@ export function AppProfiles() {
                   </select>
                 </label>
 
-                <label className="block">
-                  <span className="mb-0.5 block text-[9.5px] uppercase tracking-wide text-[var(--ink-faint)]">
+                <div>
+                  <ColumnLabel htmlFor={`${p.id}-live`} hint="Types words as you speak them, correcting as the decoder revises itself. It rewrites text already in the app, which is why it is set per app rather than globally.">
                     Live text
-                  </span>
+                  </ColumnLabel>
                   <select
-                    className="field text-[11px]"
+                    id={`${p.id}-live`}
+                    className="field text-[13px]"
                     value={
                       p.stream_partials === null
                         ? "global"
@@ -197,20 +199,20 @@ export function AppProfiles() {
                           e.target.value === "global" ? null : e.target.value === "on",
                       })
                     }
-                    title="Type words as you speak them, correcting as the decoder revises. Rewrites text in this app, so turn it on per app."
                   >
                     <option value="global">Global</option>
                     <option value="on">Stream</option>
                     <option value="off">Wait</option>
                   </select>
-                </label>
+                </div>
 
-                <label className="block">
-                  <span className="mb-0.5 block text-[9.5px] uppercase tracking-wide text-[var(--ink-faint)]">
+                <div>
+                  <ColumnLabel htmlFor={`${p.id}-fmt`} hint="Spoken punctuation, numbers and tidy-up. Turn it off where you want the words exactly as spoken — a terminal, for instance.">
                     Formatting
-                  </span>
+                  </ColumnLabel>
                   <select
-                    className="field text-[11px]"
+                    id={`${p.id}-fmt`}
+                    className="field text-[13px]"
                     value={
                       p.formatting === null ? "global" : p.formatting ? "on" : "off"
                     }
@@ -220,20 +222,19 @@ export function AppProfiles() {
                           e.target.value === "global" ? null : e.target.value === "on",
                       })
                     }
-                    title="Spoken punctuation, numbers and tidy-up. Turn it off where you want the words exactly as spoken — a terminal, for instance."
                   >
                     <option value="global">Global</option>
                     <option value="on">Format</option>
                     <option value="off">Raw</option>
                   </select>
-                </label>
+                </div>
 
                 <label className="block">
-                  <span className="mb-0.5 block text-[9.5px] uppercase tracking-wide text-[var(--ink-faint)]">
+                  <span className="mb-1 block text-[13px] text-[var(--ink-muted)]">
                     Dictionary
                   </span>
                   <select
-                    className="field text-[11px]"
+                    className="field text-[13px]"
                     value={p.profile_id === null ? "global" : String(p.profile_id)}
                     onChange={(e) =>
                       update(p, {
@@ -256,7 +257,33 @@ export function AppProfiles() {
         </ul>
       )}
 
-      {error && <p className="text-[11px] font-medium text-[var(--ink)]">{error}</p>}
+      {error && <p className="text-[13px] font-medium text-[var(--ink)]">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * A grid column's heading, optionally carrying its explanation.
+ *
+ * These columns are three abbreviations in a row — "Live text", "Formatting" —
+ * and the abbreviation is the point: the row stays scannable. What each one
+ * actually does goes behind the icon.
+ */
+function ColumnLabel({
+  htmlFor,
+  hint,
+  children,
+}: {
+  htmlFor: string;
+  hint?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mb-1 flex items-center gap-1">
+      <label htmlFor={htmlFor} className="text-[13px] text-[var(--ink-muted)]">
+        {children}
+      </label>
+      {hint && <Hint>{hint}</Hint>}
     </div>
   );
 }

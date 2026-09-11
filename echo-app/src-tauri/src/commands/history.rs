@@ -25,6 +25,18 @@ pub fn get_dictation_stats(
     crate::storage::repositories::dictation_stats(&conn)
 }
 
+/// The Insights page, in one call.
+///
+/// Same source and the same caveat as [`get_dictation_stats`]: it is History,
+/// so it is empty when History is off.
+#[tauri::command]
+pub fn get_insights(
+    state: State<'_, AppState>,
+) -> Result<crate::storage::repositories::Insights> {
+    let conn = state.db.lock().unwrap();
+    crate::storage::repositories::insights(&conn)
+}
+
 #[tauri::command]
 pub fn clear_history(state: State<'_, AppState>) -> Result<()> {
     let conn = state.db.lock().unwrap();

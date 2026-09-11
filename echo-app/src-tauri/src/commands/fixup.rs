@@ -71,10 +71,23 @@ pub async fn retry_last(app: AppHandle) -> Result<Option<String>> {
         (audio, state.injector.clone(), language)
     };
 
-    let Some(audio) = audio.filter(|a| !a.is_empty()) else {
-        return Err(EchoError::NotFound(
-            "There's no recent dictation to retry.".into(),
-        ));
+    use crate::commands::recording::{Retained, MAX_RETAINED_SECONDS};
+    let audio = match audio {
+        Some(Retained::Audio(a)) if !a.is_empty() => a,
+        // Worth saying plainly: the user just spoke for minutes, and "there's
+        // no recent dictation" would read as Echo having missed all of it.
+        Some(Retained::TooLong) => {
+            return Err(EchoError::NotFound(format!(
+                "That dictation ran past {} minutes without a pause, so Echo didn't \
+                 keep the audio to retry with. The transcript is still in History.",
+                MAX_RETAINED_SECONDS / 60
+            )))
+        }
+        _ => {
+            return Err(EchoError::NotFound(
+                "There's no recent dictation to retry.".into(),
+            ))
+        }
     };
 
     let text = transcribe_again(&app, audio, language.as_deref()).await?;

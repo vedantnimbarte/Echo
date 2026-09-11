@@ -154,5 +154,28 @@ fn migrate(conn: &Connection) -> Result<()> {
         ")?;
     }
 
+    if version < 6 {
+        conn.execute_batch("
+            -- What a dictation cost and what Echo did to it. Insights is built
+            -- from History rather than a counter of its own, so the facts it
+            -- needs have to live on the row: how long you spoke, where the
+            -- words went, and how many of them Echo changed on the way.
+            --
+            -- All four inherit History's switch and its retention window. Turn
+            -- History off and none of this is written; trim it and this goes
+            -- with it. The app name is the same identifier per-app profiles
+            -- already match on, stored lowercased.
+            ALTER TABLE transcription_history ADD COLUMN duration_ms INTEGER;
+            ALTER TABLE transcription_history ADD COLUMN app TEXT;
+            ALTER TABLE transcription_history ADD COLUMN dictionary_fixes INTEGER NOT NULL DEFAULT 0;
+            ALTER TABLE transcription_history ADD COLUMN cleanup_fixes INTEGER NOT NULL DEFAULT 0;
+
+            CREATE INDEX IF NOT EXISTS idx_history_created
+                ON transcription_history (created_at);
+
+            INSERT INTO schema_migrations (version) VALUES (6);
+        ")?;
+    }
+
     Ok(())
 }

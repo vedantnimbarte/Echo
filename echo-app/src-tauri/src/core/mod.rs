@@ -16,6 +16,7 @@ pub mod plugins;
 pub mod procinfo;
 pub mod runtime_deps;
 pub mod session;
+pub mod spool;
 pub mod telemetry;
 pub mod undo;
 pub mod vad;

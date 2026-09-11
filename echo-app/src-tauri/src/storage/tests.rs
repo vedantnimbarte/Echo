@@ -29,11 +29,9 @@ use rusqlite::Connection;
 fn retention_reads_its_window_from_settings() {
     let conn = open();
     let old = TranscriptionRecord {
-        id: None,
         text: "said a long time ago".into(),
-        language: None,
         provider: "test".into(),
-        created_at: String::new(),
+        ..Default::default()
     };
     repo::insert_history(&conn, &old).expect("insert");
     conn.execute(
@@ -94,11 +92,9 @@ fn entry(phrase: &str, profile_id: Option<i64>) -> DictionaryEntry {
 
 fn transcript(text: &str) -> TranscriptionRecord {
     TranscriptionRecord {
-        id: None,
         text: text.into(),
-        language: None,
         provider: "test".into(),
-        created_at: String::new(),
+        ..Default::default()
     }
 }
 
@@ -134,7 +130,7 @@ fn a_fresh_database_has_every_table_the_app_uses() {
     ] {
         assert!(table_exists(&conn, table), "{table} is missing");
     }
-    assert_eq!(schema_version(&conn), 5);
+    assert_eq!(schema_version(&conn), 6);
 }
 
 /// Every launch runs `migrate`. Applying a migration twice must be harmless,
@@ -147,11 +143,11 @@ fn migrating_an_already_current_database_changes_nothing() {
     db::migrate_for_test(&conn).unwrap();
     db::migrate_for_test(&conn).unwrap();
 
-    assert_eq!(schema_version(&conn), 5);
+    assert_eq!(schema_version(&conn), 6);
     let rows: i64 = conn
         .query_row("SELECT count(*) FROM schema_migrations", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(rows, 5, "one row per version, not one per launch");
+    assert_eq!(rows, 6, "one row per version, not one per launch");
     assert_eq!(repo::get_setting(&conn, "keep").unwrap().as_deref(), Some("me"));
 }
 
@@ -185,6 +181,21 @@ fn an_old_database_upgrades_without_losing_data() {
              manifest    TEXT NOT NULL,
              installed_at TEXT NOT NULL DEFAULT (datetime('now'))
          );
+         -- Same rewind for migration 6's columns, carrying the row that was
+         -- already there across: the point of the test is that an upgrade
+         -- keeps existing transcripts.
+         ALTER TABLE transcription_history RENAME TO history_v1_backup;
+         CREATE TABLE transcription_history (
+             id          INTEGER PRIMARY KEY AUTOINCREMENT,
+             text        TEXT NOT NULL,
+             language    TEXT,
+             provider    TEXT NOT NULL,
+             created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+         );
+         INSERT INTO transcription_history (id, text, language, provider, created_at)
+             SELECT id, text, language, provider, created_at FROM history_v1_backup;
+         DROP TABLE history_v1_backup;
+         DROP INDEX IF EXISTS idx_history_created;
          DELETE FROM schema_migrations WHERE version >= 2;",
     )
     .unwrap();
@@ -192,7 +203,7 @@ fn an_old_database_upgrades_without_losing_data() {
 
     db::migrate_for_test(&conn).unwrap();
 
-    assert_eq!(schema_version(&conn), 5);
+    assert_eq!(schema_version(&conn), 6);
     assert!(table_exists(&conn, "app_profiles"));
     assert!(table_exists(&conn, "egress_log"));
     // Migration 3's column has to survive being applied on top of a table

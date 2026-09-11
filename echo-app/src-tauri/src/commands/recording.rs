@@ -1,4 +1,8 @@
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, Mutex,
+};
+use std::time::Instant;
 
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::mpsc;
@@ -97,6 +101,20 @@ pub async fn begin_recording(
 
     let (vad_tx, vad_rx) = mpsc::channel::<Vec<f32>>(256);
     let level_app = app.clone();
+    // How long the microphone actually heard speech, milliseconds, since the
+    // last transcript was written. Words per minute needs a denominator, and
+    // the only honest one is speech time — not how long the hotkey was held,
+    // which includes every pause while you thought about the next sentence.
+    //
+    // ponytail: measured from the VAD's own rising and falling edges rather
+    // than by counting samples, so it is wall-clock over live capture. Good to
+    // a frame or two, which is well inside what a words-per-minute figure can
+    // claim. Counting forwarded samples would be exact, but only the retry
+    // path sees them, and that path is optional.
+    let spoken_ms = Arc::new(AtomicU64::new(0));
+    let spoken_for_vad = spoken_ms.clone();
+    let since_for_vad: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
+
     tokio::spawn(async move {
         let vad: Box<dyn Vad> = match silero_model {
             Some(model) if vad_engine != "energy" => Box::new(SileroVad::new(model)),
@@ -109,10 +127,15 @@ pub async fn begin_recording(
             }
             // Rising edge: drives the pill's listening state in voice-activated mode.
             VadEvent::SpeechStarted => {
+                *since_for_vad.lock_live() = Some(Instant::now());
                 let _ = level_app.emit("echo://speech-started", ());
             }
             // Falling edge: the pill switches to "transcribing".
             VadEvent::SpeechEnded => {
+                if let Some(started) = since_for_vad.lock_live().take() {
+                    spoken_for_vad
+                        .fetch_add(started.elapsed().as_millis() as u64, Ordering::Relaxed);
+                }
                 let _ = level_app.emit("echo://speech-ended", ());
             }
         })
@@ -143,14 +166,22 @@ pub async fn begin_recording(
             .map(|v| v != "false")
             .unwrap_or(true)
     };
-    let asr_rx = if retain {
-        let (keep_tx, keep_rx) = mpsc::channel::<Vec<f32>>(256);
-        let slot = state.last_utterance.clone();
-        tokio::spawn(retain_utterances(vad_rx, keep_tx, slot));
-        keep_rx
-    } else {
+    // The crash spool runs whether or not retry does: retry is a convenience
+    // the user may switch off, and this is the difference between losing a
+    // sentence and losing nothing.
+    let spool = app
+        .path()
+        .app_data_dir()
+        .ok()
+        .and_then(|dir| crate::core::spool::Spool::create(&dir));
+    if !retain {
         *state.last_utterance.lock_live() = None;
-        vad_rx
+    }
+    let asr_rx = {
+        let (keep_tx, keep_rx) = mpsc::channel::<Vec<f32>>(256);
+        let slot = retain.then(|| state.last_utterance.clone());
+        tokio::spawn(retain_utterances(vad_rx, keep_tx, slot, spool));
+        keep_rx
     };
 
     // Never type a dictated password into the box that is masking it. Checked
@@ -298,7 +329,7 @@ pub async fn begin_recording(
                 // Dictionary first, then formatting: a dictionary rule is the
                 // user's own correction and should be able to produce text the
                 // formatter then spaces and capitalises properly.
-                let processed = dictionary
+                let corrected = dictionary
                     .read()
                     .await
                     .process_for(&segment.text, delivery.dictionary_profile);
@@ -310,7 +341,7 @@ pub async fn begin_recording(
                     .as_deref()
                     .or(lang_for_format.as_deref());
                 let processed =
-                    crate::core::format::apply(&processed, delivery.format, spoken);
+                    crate::core::format::apply(&corrected, delivery.format, spoken);
 
                 // "Scratch that" is a correction, not dictation: take back the
                 // last delivery instead of typing the words. Checked before
@@ -344,11 +375,23 @@ pub async fn begin_recording(
                     let state = app_clone.state::<AppState>();
                     let conn = state.db.lock_live();
                     let record = crate::storage::models::TranscriptionRecord {
-                        id: None,
                         text: processed.clone(),
                         language: segment.language.clone(),
                         provider: provider.clone(),
-                        created_at: String::new(),
+                        // Zero means the speech edges never fired — a provider
+                        // that streams its own finals, say. Store nothing
+                        // rather than a zero that would read as "instant".
+                        duration_ms: match spoken_ms.swap(0, Ordering::Relaxed) {
+                            0 => None,
+                            ms => Some(ms as i64),
+                        },
+                        app: focused.clone(),
+                        // Two passes, counted separately, because they answer
+                        // different questions: the dictionary is your own
+                        // correction working, the clean-up is Echo's.
+                        dictionary_fixes: word_edits(segment.text.trim(), &corrected),
+                        cleanup_fixes: word_edits(&corrected, &processed),
+                        ..Default::default()
                     };
                     if let Err(e) = crate::storage::repositories::insert_history(&conn, &record) {
                         error!("Failed to record history: {e}");
@@ -667,10 +710,44 @@ pub(crate) async fn vad_gate<F>(
     let _ = vad_tx.send(Vec::new()).await;
 }
 
-/// Cap on retained audio: 30 seconds at 16 kHz mono f32, about 1.9 MB.
+/// Roughly how many words changed between two versions of the same sentence.
 ///
-/// Long enough for anything said in one breath, which is what a retry is for.
-const MAX_RETAINED_SAMPLES: usize = 30 * 16_000;
+/// Deliberately not a diff. A real alignment would tell you an inserted word
+/// shifted everything after it, and then Insights would have to explain what
+/// an edit distance is. Position-by-position plus the length difference
+/// answers the only question being asked — "about how many words did Echo
+/// change?" — and it never claims more edits than there are words.
+fn word_edits(before: &str, after: &str) -> i64 {
+    let a: Vec<&str> = before.split_whitespace().collect();
+    let b: Vec<&str> = after.split_whitespace().collect();
+    let changed = a.iter().zip(b.iter()).filter(|(x, y)| x != y).count();
+    (changed + a.len().abs_diff(b.len())) as i64
+}
+
+
+/// Cap on retained audio: three minutes at 16 kHz mono f32, about 11.5 MB.
+///
+/// Was thirty seconds, which is one breath — but an utterance ends at a pause,
+/// not at a breath, and someone reading a prepared paragraph runs well past it.
+/// Losing retry there is the case retry exists for. One buffer at a time, held
+/// only until the next utterance replaces it, so the memory is worth the cover.
+pub(crate) const MAX_RETAINED_SAMPLES: usize = 180 * 16_000;
+
+/// Seconds of audio [`MAX_RETAINED_SAMPLES`] stands for, for saying so.
+pub(crate) const MAX_RETAINED_SECONDS: usize = MAX_RETAINED_SAMPLES / 16_000;
+
+/// What is being held for a re-decode of the last utterance.
+///
+/// Not an `Option<Vec<f32>>`: "nothing was recorded" and "what was recorded ran
+/// past the cap" are different answers, and collapsing them told a user who had
+/// just dictated for four minutes that there was no recent dictation.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Retained {
+    /// Audio, ready to decode again.
+    Audio(Vec<f32>),
+    /// The utterance ran past [`MAX_RETAINED_SAMPLES`], so none was kept.
+    TooLong,
+}
 
 /// Forward the VAD's output to the ASR unchanged, keeping a copy of the most
 /// recent complete utterance so it can be re-decoded without being re-spoken.
@@ -679,6 +756,11 @@ const MAX_RETAINED_SAMPLES: usize = 30 * 16_000;
 /// already assembled here, and every provider — including one from a plugin —
 /// gets the behaviour without implementing anything.
 ///
+/// Also where the crash spool is written, for the same reason: this is the one
+/// stage that already sees every speech chunk and every utterance boundary.
+/// `slot` is `None` when the user has turned retry off; the spool is not,
+/// because losing a sentence to a crash is not a preference.
+///
 /// An utterance longer than [`MAX_RETAINED_SAMPLES`] is dropped rather than
 /// truncated. Retrying the first thirty seconds of a longer sentence would
 /// silently return a shorter transcript than the one it replaced, which looks
@@ -686,18 +768,26 @@ const MAX_RETAINED_SAMPLES: usize = 30 * 16_000;
 pub(crate) async fn retain_utterances(
     mut rx: mpsc::Receiver<Vec<f32>>,
     tx: mpsc::Sender<Vec<f32>>,
-    slot: Arc<std::sync::Mutex<Option<Vec<f32>>>>,
+    slot: Option<Arc<std::sync::Mutex<Option<Retained>>>>,
+    mut spool: Option<crate::core::spool::Spool>,
 ) {
     let mut current: Vec<f32> = Vec::new();
     let mut overflowed = false;
 
     while let Some(chunk) = rx.recv().await {
+        if let (Some(spool), false) = (spool.as_mut(), chunk.is_empty()) {
+            spool.write(&chunk);
+        }
         if chunk.is_empty() {
             // Utterance boundary: publish what was collected, or clear the slot
             // if it was too long to keep honestly.
             let finished = std::mem::take(&mut current);
-            if !finished.is_empty() || overflowed {
-                *slot.lock_live() = (!overflowed).then_some(finished);
+            if let Some(slot) = &slot {
+                if overflowed {
+                    *slot.lock_live() = Some(Retained::TooLong);
+                } else if !finished.is_empty() {
+                    *slot.lock_live() = Some(Retained::Audio(finished));
+                }
             }
             overflowed = false;
         } else if !overflowed {
@@ -710,8 +800,15 @@ pub(crate) async fn retain_utterances(
         }
 
         if tx.send(chunk).await.is_err() {
-            return;
+            break;
         }
+    }
+
+    // Capture ended and every chunk reached the ASR stage, so nothing is left
+    // that a crash could have taken. Dropping the spool instead would leave the
+    // file behind and stage a recovery of audio that was already transcribed.
+    if let Some(spool) = spool {
+        spool.finish();
     }
 }
 
@@ -866,4 +963,28 @@ async fn run_command(
     .map_err(|e| EchoError::Injection(format!("selection task panicked: {e}")))??;
 
     crate::core::command::run(cfg, api_key, instruction, selection.as_deref()).await
+}
+
+#[cfg(test)]
+mod word_edit_tests {
+    use super::word_edits;
+
+    #[test]
+    fn unchanged_text_counts_nothing() {
+        assert_eq!(word_edits("ship it on friday", "ship it on friday"), 0);
+        assert_eq!(word_edits("", ""), 0);
+    }
+
+    #[test]
+    fn a_replaced_word_counts_once() {
+        // What a dictionary entry does: one word in, one word out.
+        assert_eq!(word_edits("send it to jeera", "send it to Jira"), 1);
+    }
+
+    #[test]
+    fn dropped_and_added_words_count() {
+        // What the clean-up pass does: fillers out, punctuation in.
+        assert_eq!(word_edits("um so we ship", "so we ship"), 4);
+        assert_eq!(word_edits("ship it", "Ship it."), 2);
+    }
 }

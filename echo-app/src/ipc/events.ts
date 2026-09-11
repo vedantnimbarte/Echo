@@ -1,5 +1,6 @@
 import { listen, emit } from "@tauri-apps/api/event";
 import type { RecordingMode } from "../store/recordingStore";
+import type { PillSize } from "../components/pill/Pill";
 
 export interface TranscriptPartialPayload {
   type: "TranscriptPartial";
@@ -82,11 +83,33 @@ export const echoEvents = {
     listen<RecordingMode>("echo://mode-changed", (e) => cb(e.payload)),
   emitModeChanged: (mode: RecordingMode) => emit("echo://mode-changed", mode),
 
+  // The chosen engine failed an utterance and the offline engine answered
+  // instead. Fired before the retry, so the screen stops naming a provider
+  // that is no longer doing the work. Carries the provider that was dropped.
+  onAsrFellBack: (cb: (provider: string) => void) =>
+    listen<{ provider: string }>("echo://asr-fell-back", (e) =>
+      cb(e.payload.provider)
+    ),
+
+  // Which engine is in use is chosen in the settings window and reported by
+  // both windows, so the change is broadcast for the same reason pill size is.
+  // A setting changed outside this window — the tray menu can set the
+  // dictation language and the microphone. Carries the settings key, so the
+  // listener invalidates one cached read rather than all of them.
+  onSettingChanged: (cb: (key: string) => void) =>
+    listen<string>("echo://setting-changed", (e) => cb(e.payload)),
+
+  // "Check for Updates…" in the tray menu. The updater is a frontend plugin,
+  // so the tray can only ask the window to do it.
+  onCheckForUpdates: (cb: () => void) => listen("echo://check-for-updates", cb),
+
+  onEngineChanged: (cb: () => void) => listen("echo://engine-changed", cb),
+  emitEngineChanged: () => emit("echo://engine-changed"),
+
   // Pill size lives in the settings window but is rendered by the pill, and the
   // two are separate webviews with separate stores — so the change is
   // broadcast rather than read back on a timer.
-  onPillSizeChanged: (cb: (size: "large" | "small") => void) =>
-    listen<"large" | "small">("echo://pill-size-changed", (e) => cb(e.payload)),
-  emitPillSizeChanged: (size: "large" | "small") =>
-    emit("echo://pill-size-changed", size),
+  onPillSizeChanged: (cb: (size: PillSize) => void) =>
+    listen<PillSize>("echo://pill-size-changed", (e) => cb(e.payload)),
+  emitPillSizeChanged: (size: PillSize) => emit("echo://pill-size-changed", size),
 };

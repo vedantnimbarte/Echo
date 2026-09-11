@@ -30,8 +30,10 @@
       {
         "label": "main",
         "title": "Echo Settings",
-        "width": 820,
-        "height": 640,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "width": 1080,
+        "height": 680,
         "minWidth": 560,
         "minHeight": 480,
         "decorations": true,
