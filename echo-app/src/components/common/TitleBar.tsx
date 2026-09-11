@@ -14,10 +14,11 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
  * left slot is padded out of their way there, and everywhere else it starts at
  * the edge.
  *
- * Three zones: what the window contains on the left, what the window *is* in
- * the centre, what the window does to itself on the right. The wordmark is
- * centred rather than set left because the centre is the one position that
- * doesn't move when a platform adds or removes controls at either end.
+ * Two zones: what the window contains on the left, what the window does to
+ * itself on the right. The brand used to sit between them; it lives at the head
+ * of the sidebar now, where it reads as the app the pages belong to rather than
+ * as a label on the frame. Onboarding has no sidebar to put it in, but its
+ * first screen says "Welcome to Echo" in type this bar could never match.
  */
 
 /* WKWebView is the only place traffic lights exist, so the user agent is a
@@ -63,34 +64,6 @@ const PANE_WITH_COLUMN = (
   </>
 );
 const PANE_ALONE = <rect x="0.5" y="0.5" width="9" height="9" rx="1.5" />;
-
-/**
- * The Echo mark, in `currentColor` so the title bar tints it like the rest of
- * the frame.
- *
- * The logo is a spoken spike decaying into the flat parallel lines of typed
- * output, and it is drawn three units wide for every one tall. At the height a
- * 36px bar allows, all of that would be about 40px across and the lines merge
- * into a grey smudge — so this is the same crop the app icon carries, the spike
- * end, which is the part that survives being small. The wordmark beside it is
- * already saying the name.
- */
-function EchoMark() {
-  return (
-    <svg
-      viewBox="0 0 40 40"
-      className="h-[18px] w-[18px]"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M2 21 C4 21 5 19.5 7 19.5 C9 19.5 9.5 22 11 22 L13 20.5 L16.5 5 L19 35 L21.5 11 L24 27 C26 19 27.5 23.5 30 20.5 C33 17.5 35 23 38 20.5" />
-    </svg>
-  );
-}
 
 function Control({
   label,
@@ -162,14 +135,6 @@ export function TitleBar({
           />
         )}
       </div>
-
-      {/* Centred on the window, not between the two control clusters, so it
-          doesn't shift when the sidebar toggle appears. `pointer-events-none`
-          keeps it part of the drag region rather than a hole in it. */}
-      <span className="pointer-events-none absolute left-1/2 flex -translate-x-1/2 items-center gap-2 text-[var(--ink)]">
-        <EchoMark />
-        <span className="display text-[14px]">Echo</span>
-      </span>
 
       <div className="ml-auto flex items-center">
         {!isMac && (

@@ -52,10 +52,15 @@ const SETTINGS_ITEM: NavItem = {
   Icon: SlidersHorizontal,
 };
 
-/** Content you accumulate by using Echo, rather than settings you choose. */
+/**
+ * Content you accumulate by using Echo, rather than settings you choose — and
+ * the top of the sidebar, because it is what you open the window to look at.
+ * Configuration is the thing you do once and then leave alone, so it sits
+ * underneath.
+ */
 const LIBRARY_NAV: NavItem[] = [
-  { id: "insights", label: "Insights", Icon: BarChart3 },
   { id: "dictation", label: "Dictation", Icon: Mic },
+  { id: "insights", label: "Insights", Icon: BarChart3 },
   { id: "dictionary", label: "Dictionary", Icon: BookOpen },
   { id: "plugins", label: "Plugins", Icon: Puzzle },
 ];
@@ -78,6 +83,52 @@ function isSettingsPage(page: Page): page is SettingsPage {
   return (SETTINGS_IDS as Page[]).includes(page);
 }
 
+/**
+ * The Echo mark, at the head of the sidebar.
+ *
+ * The logo is a spoken spike decaying into the flat parallel lines of typed
+ * output, three units wide for every one tall. Drawn whole at this size the
+ * lines merge into a grey smudge, so this is the crop the app icon carries —
+ * the spike end, the part that survives being small — and the wordmark beside
+ * it says the name anyway.
+ *
+ * The mark sits in a box as wide as the collapsed rail's usable width — 59px
+ * less the nav's own padding — rather than being padded to the nav icons' left
+ * edge. That box's centre line is the icons' centre line, so the mark stays
+ * both centred in the rail and square above the icon column however large it is
+ * drawn, and the wordmark starts exactly where the nav labels do.
+ */
+const MARK_BOX = 35;
+
+function Brand({ collapsed }: { collapsed: boolean }) {
+  return (
+    <div className="mb-4 flex items-center overflow-hidden whitespace-nowrap text-[var(--ink)]">
+      <span
+        style={{ width: MARK_BOX }}
+        className="flex shrink-0 items-center justify-center"
+      >
+        <svg
+          viewBox="0 0 40 40"
+          className="h-[26px] w-[26px]"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M2 21 C4 21 5 19.5 7 19.5 C9 19.5 9.5 22 11 22 L13 20.5 L16.5 5 L19 35 L21.5 11 L24 27 C26 19 27.5 23.5 30 20.5 C33 17.5 35 23 38 20.5" />
+        </svg>
+      </span>
+      {/* Hidden from the accessibility tree when the rail has clipped it, so a
+          screen reader isn't read a wordmark that is not on screen. */}
+      <span aria-hidden={collapsed} className="display text-[19px]">
+        Echo
+      </span>
+    </div>
+  );
+}
+
 function NavButton({
   item,
   active,
@@ -97,7 +148,7 @@ function NavButton({
       // Only worth a tooltip once the rail has hidden the label it would repeat.
       title={collapsed ? label : undefined}
       className={clsx(
-        "flex w-full items-center gap-2.5 overflow-hidden whitespace-nowrap rounded-lg px-2.5 py-[7px] text-[12.5px] tracking-tight transition-colors",
+        "flex w-full items-center gap-2.5 overflow-hidden whitespace-nowrap rounded-lg px-2.5 py-[7px] text-[14.5px] tracking-tight transition-colors",
         active
           ? "bg-[var(--surface-2)] text-[var(--ink)] shadow-[var(--edge-light)]"
           : "text-[var(--ink-muted)] hover:bg-[var(--surface-1)] hover:text-[var(--ink)]"
@@ -109,24 +160,14 @@ function NavButton({
   );
 }
 
-function NavGroup({ label, collapsed }: { label: string; collapsed: boolean }) {
-  return (
-    <span
-      aria-hidden={collapsed}
-      className={clsx(
-        "whitespace-nowrap px-2.5 pb-2 pt-1 text-[11px] font-medium text-[var(--ink-faint)] transition-opacity duration-150 motion-reduce:transition-none",
-        collapsed && "opacity-0"
-      )}
-    >
-      {label}
-    </span>
-  );
-}
-
 export default function App() {
   // The settings window observes state only — the pill owns the hotkey toggle.
   useEchoEvents();
-  const [page, setPage] = useState<Page>("settings");
+  // Dictation, not Settings: the window is opened to see what you dictated far
+  // more often than to change how it works, and configuration is the thing you
+  // do once. It is also the first item in the sidebar, so the landing page and
+  // the top of the list agree.
+  const [page, setPage] = useState<Page>("dictation");
   // A view preference, not a setting — it belongs to this machine's window, so
   // it stays out of the settings database.
   const [collapsed, setCollapsed] = useState(
@@ -190,23 +231,14 @@ export default function App() {
           style={{ width: collapsed ? RAIL : COLUMN }}
           className="flex flex-shrink-0 flex-col overflow-hidden border-r border-[var(--hairline)] p-3 transition-[width] duration-200 ease-out motion-reduce:transition-none"
         >
-          <div className="flex flex-col gap-0.5">
-            <NavGroup label="Configure" collapsed={collapsed} />
-            {SETTINGS_NAV.map((item) => (
-              <NavButton
-                key={item.id}
-                item={item}
-                active={page === item.id}
-                collapsed={collapsed}
-                onClick={() => setPage(item.id)}
-              />
-            ))}
-          </div>
+          <Brand collapsed={collapsed} />
 
-          <div className="mx-2.5 my-5 border-t border-[var(--hairline)]" />
-
+          {/* One list. The heading and the rule that used to split these in two
+              were labelling a distinction — what you look at, what you set —
+              that the page names already make, and they cost a reader two stops
+              on the way down seven items. */}
           <div className="flex flex-col gap-0.5">
-            {LIBRARY_NAV.map((item) => (
+            {[...LIBRARY_NAV, ...SETTINGS_NAV].map((item) => (
               <NavButton
                 key={item.id}
                 item={item}
@@ -236,7 +268,7 @@ export default function App() {
             <button
               onClick={() => void commands.quit()}
               title={collapsed ? "Quit Echo" : undefined}
-              className="flex items-center gap-2.5 overflow-hidden whitespace-nowrap rounded-lg px-2.5 py-[7px] text-[12.5px] tracking-tight text-[var(--ink-muted)] transition-colors hover:bg-[var(--surface-1)] hover:text-[var(--ink)]"
+              className="flex items-center gap-2.5 overflow-hidden whitespace-nowrap rounded-lg px-2.5 py-[7px] text-[14.5px] tracking-tight text-[var(--ink-muted)] transition-colors hover:bg-[var(--surface-1)] hover:text-[var(--ink)]"
             >
               <Power className="h-[15px] w-[15px] shrink-0" />
               Quit Echo
