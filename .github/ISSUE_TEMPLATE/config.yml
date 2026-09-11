@@ -1,0 +1,10 @@
+# Blank issues stay on: a report that fits neither form is still a report, and
+# turning them off mostly teaches people to file the wrong one.
+blank_issues_enabled: true
+contact_links:
+  - name: Question or idea
+    url: https://github.com/vedantnimbarte/Echo/discussions
+    about: For anything that is not yet a bug or a specific request.
+  - name: Contributing guide
+    url: https://github.com/vedantnimbarte/Echo/blob/main/CONTRIBUTING.md
+    about: How to build Echo and what a good pull request looks like.
