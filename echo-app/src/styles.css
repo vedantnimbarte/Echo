@@ -68,6 +68,12 @@
   --glass: rgba(22, 19, 16, 0.64);
   --glass-strong: rgba(26, 23, 19, 0.82);
 
+  /* The page header, which floats over the window base rather than over the
+     desktop — so it tints `--surface-0` rather than carrying its own darkness
+     the way `--glass` does. Opaque enough that a 30px serif title stays clean
+     over whatever is passing underneath, sheer enough that you can see it pass. */
+  --glass-base: rgba(16, 14, 12, 0.78);
+
   /* The dropdown popup can't be translucent — it's an OS window with nothing
      of ours behind it — so it needs a solid stand-in for the glass surfaces. */
   --popup: #1c1916;
@@ -147,6 +153,17 @@ body {
     backdrop-filter: blur(20px) saturate(140%);
     border: 1px solid var(--hairline);
     box-shadow: var(--shadow-md), var(--edge-light);
+  }
+
+  /* The page header, pinned while its page scrolls under it.
+     `-mx-12 px-12` in the markup pushes the wash out to the column's own
+     padding, so nothing passes through at the edges, and the gap below the
+     description is inside the padded box rather than under it — otherwise
+     content would surface in the gap before reaching the blur. */
+  .page-header {
+    background: var(--glass-base);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    backdrop-filter: blur(20px) saturate(140%);
   }
 
   /* Inputs and selects. Focus brightens the hairline and lifts the surface —

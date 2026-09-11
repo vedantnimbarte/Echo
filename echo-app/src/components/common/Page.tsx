@@ -46,8 +46,14 @@ export function Page({
   children: React.ReactNode;
 }) {
   return (
-    <div className="mx-auto w-full px-12 py-12" style={{ maxWidth: width }}>
-      <header className="mb-9 flex items-start justify-between gap-6">
+    <div className="mx-auto w-full px-12 pb-12" style={{ maxWidth: width }}>
+      {/* Pinned: the name of the page you are on, and the sentence saying what
+          it is for, are the two things worth being able to read from anywhere
+          in a long page. The vertical rhythm moved inside the header — its own
+          top and bottom padding rather than the container's `py` and a margin —
+          because the wash has to reach all the way to where the content starts.
+          A gap outside it would let a line of text surface before the blur. */}
+      <header className="page-header sticky top-0 z-10 -mx-12 flex items-start justify-between gap-6 px-12 pb-9 pt-12">
         <div className="min-w-0">
           <h2 className="display text-[30px] text-[var(--ink)]">{title}</h2>
           {description && (
