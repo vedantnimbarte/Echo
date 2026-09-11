@@ -395,15 +395,16 @@ function PillMinimal({
   const speaking = view === "active" || view === "transcribing";
   const open = hovered || view === "error";
 
-  // Three heights, one capsule: a line, a meter, a control. Deliberately
-  // small — at rest this should read as a mark on the screen rather than a
-  // window, and every open state is the smallest that still fits its content.
-  const height = open ? 26 : speaking ? 16 : 10;
+  // Three heights, one capsule: a line, a meter, a control. At rest it stays
+  // a mark on the screen; open, it has to be big enough that the microphone
+  // and the gear read as the controls they are, which is the whole reason to
+  // open it at all.
+  const height = open ? 32 : speaking ? 16 : 10;
   // The middle is the meter's slot. It only has to be wide enough for bars
   // while you are actually speaking; open and silent, it is just the gap
   // between the two controls, and a wide empty gap reads as something
   // missing rather than as breathing room.
-  const meterWidth = speaking ? 40 : open ? 8 : 20;
+  const meterWidth = speaking ? 40 : open ? 10 : 20;
 
   const title =
     view === "error"
@@ -429,7 +430,7 @@ function PillMinimal({
             "cursor-grab transition-[height,padding] duration-200 ease-out active:cursor-grabbing",
             view === "active" && "is-live"
           )}
-          style={{ height, padding: open ? "0 3px" : 0, color: "var(--ink)" }}
+          style={{ height, padding: open ? "0 4px" : 0, color: "var(--ink)" }}
         >
           <button
             onClick={view === "error" ? retry : toggle}
@@ -444,21 +445,21 @@ function PillMinimal({
                 at rest its job is done by the line itself. */}
             <span
               className="overflow-hidden transition-[width,opacity] duration-200 ease-out"
-              style={{ width: open ? 12 : 0, opacity: open ? 1 : 0 }}
+              style={{ width: open ? 18 : 0, opacity: open ? 1 : 0 }}
             >
               {view === "error" ? (
-                <AlertTriangle className="h-3 w-3" />
+                <AlertTriangle className="h-[18px] w-[18px]" />
               ) : view === "done" ? (
-                <Check className="h-3 w-3" />
+                <Check className="h-[18px] w-[18px]" />
               ) : isRecording ? (
                 <Square
                   className={clsx(
-                    "h-2 w-2 fill-current",
+                    "h-3 w-3 fill-current",
                     live && "text-[var(--rec)]"
                   )}
                 />
               ) : (
-                <Mic className="h-3 w-3" />
+                <Mic className="h-[18px] w-[18px]" />
               )}
             </span>
 
@@ -486,15 +487,15 @@ function PillMinimal({
               and stays out of the tab order while closed. */}
           <div
             className="overflow-hidden transition-[width] duration-200 ease-out"
-            style={{ width: open ? 18 : 0 }}
+            style={{ width: open ? 26 : 0 }}
           >
             <button
               onClick={() => void openSettings()}
               aria-label={t("pill.openSettings")}
               tabIndex={open ? 0 : -1}
-              className="flex h-[18px] w-[18px] items-center justify-center rounded-full text-[var(--ink-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--ink)]"
+              className="flex h-[26px] w-[26px] items-center justify-center rounded-full text-[var(--ink-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--ink)]"
             >
-              <Settings className="h-2.5 w-2.5" />
+              <Settings className="h-4 w-4" />
             </button>
           </div>
         </div>

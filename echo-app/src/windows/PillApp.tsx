@@ -27,7 +27,7 @@ const FOOTPRINT: Record<PillSize, { width: number; height: number }> = {
   // Shorter than the others: the Minimal variant is a few pixels tall at rest and
   // a transparent window is still a window — anything it covers cannot be
   // clicked through, so it claims only the room its open state needs.
-  line: { width: 130, height: 40 },
+  line: { width: 140, height: 52 },
 };
 
 /** Gap between the pill and the bottom of the screen, in logical px. */
