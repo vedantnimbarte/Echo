@@ -19,7 +19,7 @@ import type { PillSize } from "../pill/Pill";
 import { Page, Group, Field, Check } from "../common/Page";
 import { t, LOCALES, setLocale } from "../../i18n";
 
-export type SettingsPage = "dictation" | "engine" | "output" | "privacy";
+export type SettingsPage = "settings" | "engine" | "output" | "privacy";
 
 // Read through `t` at call time rather than baked into a constant, so a
 // language change takes effect on the next render instead of the next launch.
@@ -336,9 +336,9 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
       actions={search}
     >
       {/* ---- Dictation ---------------------------------------------------- */}
-      {on("dictation", ["mode", "push to talk", "voice activated", "dictation", "recording"]) && (
+      {on("settings", ["mode", "push to talk", "voice activated", "dictation", "recording"]) && (
         <Group
-          title={label("dictation", "Mode")}
+          title={label("settings", "Mode")}
           hint="Hold to talk waits a beat before opening the microphone, so a shortcut like Ctrl still works in the combinations you type. Tap to toggle leaves the microphone open until you press the hotkey again."
         >
           <div className="grid grid-cols-3 gap-2.5">
@@ -392,9 +392,9 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
-      {on("dictation", ["pill", "size", "small", "large", "minimal", "line", "capsule", "compact", "overlay", "floating", "drag", "move", "position"]) && (
+      {on("settings", ["pill", "size", "small", "large", "minimal", "line", "capsule", "compact", "overlay", "floating", "drag", "move", "position"]) && (
         <Group
-          title={label("dictation", "Pill")}
+          title={label("settings", "Pill")}
           hint="The floating control you dictate from — drag it anywhere on screen and Echo puts it back there next launch. All three show the same live level, with less and less of the pill around it: along a bar, around the button's edge, or inside a capsule barely bigger than the meter."
         >
           <div className="grid grid-cols-3 gap-2.5">
@@ -457,9 +457,9 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
-      {on("dictation", ["launch", "login", "startup", "start", "boot", "autostart", "auto-start", "background", "tray", "quick access", "notification area", "menu bar"]) && (
+      {on("settings", ["launch", "login", "startup", "start", "boot", "autostart", "auto-start", "background", "tray", "quick access", "notification area", "menu bar"]) && (
         <Group
-          title={label("dictation", "Starting Echo")}
+          title={label("settings", "Starting Echo")}
           hint="Echo lives in the tray — the notification area on Windows, the menu bar on macOS, the status area on Linux. Click it to reach these settings or to quit. A hotkey can only answer if Echo is already running, so starting it at login is what makes it feel like part of the keyboard rather than an app you remember to open."
         >
           <Check
@@ -477,8 +477,8 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
-      {on("dictation", ["microphone", "mic", "input", "device", "audio"]) && (
-        <Group title={label("dictation", "Microphone")}>
+      {on("settings", ["microphone", "mic", "input", "device", "audio"]) && (
+        <Group title={label("settings", "Microphone")}>
           <select
             className="field"
             aria-label="Microphone"
@@ -496,9 +496,9 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
-      {on("dictation", ["language", "interface", "translation", "locale", "english", "español", "deutsch", "français"]) && (
+      {on("settings", ["language", "interface", "translation", "locale", "english", "español", "deutsch", "français"]) && (
         <Group
-          title={label("dictation", "Interface language")}
+          title={label("settings", "Interface language")}
           hint="This is the language Echo's own buttons and labels use. It has no effect on which language it transcribes — that is set under Engine."
         >
           {/* No Field label: the group is already called Interface language,
@@ -519,9 +519,9 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
-      {on("dictation", ["sound", "sounds", "cue", "cues", "tone", "beep", "audio feedback", "chime"]) && (
+      {on("settings", ["sound", "sounds", "cue", "cues", "tone", "beep", "audio feedback", "chime"]) && (
         <Group
-          title={label("dictation", "Sound")}
+          title={label("settings", "Sound")}
           hint="A short rising tone when Echo starts listening and a falling one when it stops. Useful when the pill is behind the window you are dictating into."
         >
           <Check
@@ -533,9 +533,9 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
-      {on("dictation", ["hotkey", "shortcut", "keyboard", "chord", "global", "ctrl", "alt", "shift", "modifier"]) && (
+      {on("settings", ["hotkey", "shortcut", "keyboard", "chord", "global", "ctrl", "alt", "shift", "modifier"]) && (
         <Group
-          title={label("dictation", "Global hotkey")}
+          title={label("settings", "Global hotkey")}
           hint="A modifier on its own works too — tap Ctrl, Alt or Shift and release it without pressing anything else. Held as part of a combination it behaves normally, so Ctrl+C is untouched. Fn can't be used: your keyboard handles it in firmware and the key never reaches Echo."
         >
           <HotkeyCapture
@@ -553,9 +553,9 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
-      {on("dictation", ["wake", "wake word", "hands free", "hey", "phrase", "always on"]) && (
+      {on("settings", ["wake", "wake word", "hands free", "hey", "phrase", "always on"]) && (
         <Group
-          title={label("dictation", "Wake word")}
+          title={label("settings", "Wake word")}
           hint="Off by default. When on, Echo listens for the phrase and starts dictating without the hotkey."
         >
           <WakeWordSettings />

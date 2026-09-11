@@ -39,7 +39,7 @@ describe("the app shell", () => {
     // The four pages Settings is split into. If any throws on mount, this fails.
     // `findAllBy` because a page name appears in the nav *and* as a heading once
     // that page is open — the assertion is that the shell rendered them at all.
-    for (const page of ["Dictation", "Engine", "Output", "Privacy"]) {
+    for (const page of ["Settings", "Engine", "Output", "Privacy"]) {
       expect((await screen.findAllByText(page)).length).toBeGreaterThan(0);
     }
   });
@@ -56,7 +56,7 @@ describe("the app shell", () => {
 });
 
 describe("every settings page", () => {
-  const PAGES: SettingsPage[] = ["dictation", "engine", "output", "privacy"];
+  const PAGES: SettingsPage[] = ["settings", "engine", "output", "privacy"];
 
   // The original defect was a panel that threw while rendering. A loop over the
   // real page list catches a new page added without being exercised, which a
@@ -68,13 +68,13 @@ describe("every settings page", () => {
     });
   });
 
-  it("offers the launch-at-login toggle on the dictation page", async () => {
-    mount(<SettingsPanel page="dictation" />);
+  it("offers the launch-at-login toggle on the settings page", async () => {
+    mount(<SettingsPanel page="settings" />);
     expect(await screen.findByText(/Start Echo when I log in/i)).toBeTruthy();
   });
 
   it("lists the microphone the backend reported", async () => {
-    mount(<SettingsPanel page="dictation" />);
+    mount(<SettingsPanel page="settings" />);
     expect(await screen.findByText(/Test Microphone/)).toBeTruthy();
   });
 });
@@ -82,7 +82,7 @@ describe("every settings page", () => {
 describe("the other panels", () => {
   it.each([
     ["dictionary", <DictionaryPanel key="d" />],
-    ["history", <HistoryPanel key="h" />],
+    ["dictation", <HistoryPanel key="h" />],
     ["insights", <InsightsPanel key="i" />],
     ["plugins", <PluginsPanel key="p" />],
   ])("renders without throwing: %s", async (_name, ui) => {

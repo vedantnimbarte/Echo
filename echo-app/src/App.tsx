@@ -3,7 +3,7 @@ import clsx from "clsx";
 import {
   BarChart3,
   BookOpen,
-  Clock,
+  SlidersHorizontal,
   Puzzle,
   Mic,
   Cpu,
@@ -25,7 +25,7 @@ import { SettingsPanel, type SettingsPage } from "./components/settings/Settings
 import { PluginsPanel } from "./components/plugins/PluginsPanel";
 import { Onboarding } from "./components/onboarding/Onboarding";
 
-type Page = SettingsPage | "insights" | "dictionary" | "history" | "plugins";
+type Page = SettingsPage | "insights" | "dictionary" | "dictation" | "plugins";
 
 type NavItem = { id: Page; label: string; Icon: React.ElementType };
 
@@ -36,7 +36,7 @@ type NavItem = { id: Page; label: string; Icon: React.ElementType };
  * instead of one long scroll — you land on the topic you came for.
  */
 const SETTINGS_NAV: NavItem[] = [
-  { id: "dictation", label: "Dictation", Icon: Mic },
+  { id: "settings", label: "Settings", Icon: SlidersHorizontal },
   { id: "engine", label: "Engine", Icon: Cpu },
   { id: "output", label: "Output", Icon: TextCursorInput },
   { id: "privacy", label: "Privacy", Icon: ShieldCheck },
@@ -45,8 +45,8 @@ const SETTINGS_NAV: NavItem[] = [
 /** Content you accumulate by using Echo, rather than settings you choose. */
 const LIBRARY_NAV: NavItem[] = [
   { id: "insights", label: "Insights", Icon: BarChart3 },
+  { id: "dictation", label: "Dictation", Icon: Mic },
   { id: "dictionary", label: "Dictionary", Icon: BookOpen },
-  { id: "history", label: "History", Icon: Clock },
   { id: "plugins", label: "Plugins", Icon: Puzzle },
 ];
 
@@ -116,7 +116,7 @@ function NavGroup({ label, collapsed }: { label: string; collapsed: boolean }) {
 export default function App() {
   // The settings window observes state only — the pill owns the hotkey toggle.
   useEchoEvents();
-  const [page, setPage] = useState<Page>("dictation");
+  const [page, setPage] = useState<Page>("settings");
   // A view preference, not a setting — it belongs to this machine's window, so
   // it stays out of the settings database.
   const [collapsed, setCollapsed] = useState(
@@ -181,7 +181,7 @@ export default function App() {
           className="flex flex-shrink-0 flex-col overflow-hidden border-r border-[var(--hairline)] p-3 transition-[width] duration-200 ease-out motion-reduce:transition-none"
         >
           <div className="flex flex-col gap-0.5">
-            <NavGroup label="Settings" collapsed={collapsed} />
+            <NavGroup label="Configure" collapsed={collapsed} />
             {SETTINGS_NAV.map((item) => (
               <NavButton
                 key={item.id}
@@ -223,7 +223,7 @@ export default function App() {
           {isSettingsPage(page) && <SettingsPanel page={page} />}
           {page === "insights" && <InsightsPanel />}
           {page === "dictionary" && <DictionaryPanel />}
-          {page === "history" && <HistoryPanel />}
+          {page === "dictation" && <HistoryPanel />}
           {page === "plugins" && <PluginsPanel />}
         </main>
       </div>

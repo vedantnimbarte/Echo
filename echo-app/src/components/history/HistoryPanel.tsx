@@ -233,7 +233,7 @@ export function HistoryPanel() {
 
   return (
     <Page
-      title="History"
+      title="Dictation"
       description="Every transcript Echo has produced on this machine. Search it, send it to a file, or clear it out."
       actions={
         <>
