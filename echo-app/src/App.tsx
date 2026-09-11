@@ -224,7 +224,10 @@ export default function App() {
         }}
       />
 
-      <TitleBar sidebar={{ collapsed, onToggle: toggleSidebar }} />
+      <TitleBar
+        sidebar={{ collapsed, onToggle: toggleSidebar }}
+        onOpenEngine={() => setPage("engine")}
+      />
 
       <div className="relative flex min-h-0 flex-1">
         <nav
