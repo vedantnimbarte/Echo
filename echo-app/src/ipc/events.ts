@@ -1,5 +1,6 @@
 import { listen, emit } from "@tauri-apps/api/event";
 import type { RecordingMode } from "../store/recordingStore";
+import type { PillSize } from "../components/pill/Pill";
 
 export interface TranscriptPartialPayload {
   type: "TranscriptPartial";
@@ -85,8 +86,7 @@ export const echoEvents = {
   // Pill size lives in the settings window but is rendered by the pill, and the
   // two are separate webviews with separate stores — so the change is
   // broadcast rather than read back on a timer.
-  onPillSizeChanged: (cb: (size: "large" | "small") => void) =>
-    listen<"large" | "small">("echo://pill-size-changed", (e) => cb(e.payload)),
-  emitPillSizeChanged: (size: "large" | "small") =>
-    emit("echo://pill-size-changed", size),
+  onPillSizeChanged: (cb: (size: PillSize) => void) =>
+    listen<PillSize>("echo://pill-size-changed", (e) => cb(e.payload)),
+  emitPillSizeChanged: (size: PillSize) => emit("echo://pill-size-changed", size),
 };

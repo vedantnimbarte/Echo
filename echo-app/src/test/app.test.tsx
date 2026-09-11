@@ -17,6 +17,7 @@ import App from "../App";
 import { SettingsPanel, type SettingsPage } from "../components/settings/SettingsPanel";
 import { DictionaryPanel } from "../components/dictionary/DictionaryPanel";
 import { HistoryPanel } from "../components/history/HistoryPanel";
+import { InsightsPanel } from "../components/insights/InsightsPanel";
 import { PluginsPanel } from "../components/plugins/PluginsPanel";
 
 /** A fresh client per test: retries off, so a rejected query fails fast here. */
@@ -82,11 +83,22 @@ describe("the other panels", () => {
   it.each([
     ["dictionary", <DictionaryPanel key="d" />],
     ["history", <HistoryPanel key="h" />],
+    ["insights", <InsightsPanel key="i" />],
     ["plugins", <PluginsPanel key="p" />],
   ])("renders without throwing: %s", async (_name, ui) => {
     const { container } = mount(ui);
     await waitFor(() => {
       expect(container.textContent?.length ?? 0).toBeGreaterThan(0);
     });
+  });
+
+  // The charts are the part that can throw on a shape it did not expect — an
+  // empty day list, a provider with no rows — so this asserts they drew, not
+  // just that the page produced some text.
+  it("draws the figures Insights exists for", async () => {
+    mount(<InsightsPanel key="insights" />);
+    expect(await screen.findByText(/words dictated in total/)).toBeTruthy();
+    expect(await screen.findByText("2-day streak")).toBeTruthy();
+    expect(await screen.findByText(/On this machine/)).toBeTruthy();
   });
 });

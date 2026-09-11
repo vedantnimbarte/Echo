@@ -54,11 +54,28 @@ pub struct EgressRecord {
     pub created_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TranscriptionRecord {
     pub id: Option<i64>,
     pub text: String,
     pub language: Option<String>,
     pub provider: String,
     pub created_at: String,
+    /// How long you spoke, from the speech the VAD actually forwarded. `None`
+    /// for rows written before this was measured, and for any utterance whose
+    /// duration could not be established — a missing number, not a zero.
+    #[serde(default)]
+    pub duration_ms: Option<i64>,
+    /// The app that was focused when the text was delivered, lowercased, in
+    /// the same form per-app profiles match on.
+    #[serde(default)]
+    pub app: Option<String>,
+    /// Words the dictionary rewrote.
+    #[serde(default)]
+    pub dictionary_fixes: i64,
+    /// Words the clean-up pass changed — fillers dropped, punctuation spoken,
+    /// numbers written as digits.
+    #[serde(default)]
+    pub cleanup_fixes: i64,
 }
+

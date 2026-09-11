@@ -11,7 +11,6 @@ import { WakeWordSettings } from "./WakeWordSettings";
 import { CommandMode } from "./CommandMode";
 import { AppProfiles } from "./AppProfiles";
 import { FixUps } from "./FixUps";
-import { DictationStats } from "./DictationStats";
 import { EgressLog } from "./EgressLog";
 import { Performance } from "./Performance";
 import { AudioImport } from "./AudioImport";
@@ -145,7 +144,8 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["setting", "pill_size"] }),
   });
-  const activePill: PillSize = pillSize === "small" ? "small" : "large";
+  const activePill: PillSize =
+    pillSize === "small" || pillSize === "line" ? pillSize : "large";
 
   /* ---- engine ----------------------------------------------------------- */
   const { data: cloudProviders } = useQuery({
@@ -392,12 +392,12 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
-      {on("dictation", ["pill", "size", "small", "large", "compact", "overlay", "floating", "drag", "move", "position"]) && (
+      {on("dictation", ["pill", "size", "small", "large", "minimal", "line", "capsule", "compact", "overlay", "floating", "drag", "move", "position"]) && (
         <Group
           title={label("dictation", "Pill")}
-          hint="The floating control you dictate from — drag it anywhere on screen and Echo puts it back there next launch. Both sizes show the same live level: the large one along a bar, the small one around its edge."
+          hint="The floating control you dictate from — drag it anywhere on screen and Echo puts it back there next launch. All three show the same live level, with less and less of the pill around it: along a bar, around the button's edge, or inside a capsule barely bigger than the meter."
         >
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-3 gap-2.5">
             {(
               [
                 {
@@ -413,6 +413,12 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
                   title: "Small",
                   sub: "Just the microphone; settings appear when you point at it",
                   glyph: "h-3.5 w-3.5",
+                },
+                {
+                  id: "line" as const,
+                  title: "Minimal",
+                  sub: "A bare capsule until you speak; controls appear when you point at it",
+                  glyph: "h-1.5 w-8",
                 },
               ]
             ).map(({ id, title, sub, glyph }) => {
@@ -903,15 +909,6 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
       {on("privacy", ["telemetry", "usage", "events", "analytics"]) && (
         <Group title={label("privacy", "Telemetry")}>
           <TelemetrySettings />
-        </Group>
-      )}
-
-      {on("privacy", ["history", "transcripts", "save", "store"]) && (
-        <Group
-          title={label("privacy", "Your dictation")}
-          hint="Worked out from History, so it empties when History does."
-        >
-          <DictationStats />
         </Group>
       )}
 

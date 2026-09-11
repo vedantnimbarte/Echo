@@ -15,16 +15,23 @@ export function Page({
   title,
   description,
   actions,
+  /**
+   * Measure, in px. Settings pages are a column of controls and read best
+   * narrow; a page of charts needs the room, and cramming one into 620 would
+   * stack cards that are meant to be compared side by side.
+   */
+  width = 620,
   children,
 }: {
   title: string;
   description?: string;
   /** Page-level controls, aligned to the title's baseline. */
   actions?: React.ReactNode;
+  width?: number;
   children: React.ReactNode;
 }) {
   return (
-    <div className="mx-auto w-full max-w-[620px] px-10 py-9">
+    <div className="mx-auto w-full px-10 py-9" style={{ maxWidth: width }}>
       <header className="mb-7 flex items-start justify-between gap-6">
         <div className="min-w-0">
           <h2 className="text-[15px] font-semibold tracking-tight text-[var(--ink)]">

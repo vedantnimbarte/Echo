@@ -290,6 +290,15 @@ optgroup {
   animation: rec-pulse 1.6s ease-out infinite;
 }
 
+/* Insights' speed arc drawing itself once, on first paint. The length differs
+   per gauge, so the start offset comes in as a custom property rather than
+   being baked in here. */
+@keyframes arc-draw {
+  from {
+    stroke-dashoffset: var(--arc-len);
+  }
+}
+
 @keyframes shimmer {
   0% {
     background-position: -120% 0;
@@ -320,6 +329,9 @@ optgroup {
   .animate-rise,
   .animate-rec,
   .text-shimmer {
+    animation: none !important;
+  }
+  [style*="arc-draw"] {
     animation: none !important;
   }
   .text-shimmer {

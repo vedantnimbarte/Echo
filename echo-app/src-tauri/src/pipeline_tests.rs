@@ -525,11 +525,10 @@ async fn pipeline_delivers_dictionary_corrected_text_to_the_focused_app() {
             repo::insert_history(
                 &conn,
                 &crate::storage::models::TranscriptionRecord {
-                    id: None,
                     text: processed.clone(),
                     language: segment.language.clone(),
                     provider: "fake".into(),
-                    created_at: String::new(),
+                    ..Default::default()
                 },
             )
             .unwrap();

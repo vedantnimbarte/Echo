@@ -10,7 +10,11 @@ import { commands } from "../../ipc/commands";
 import { Waveform, type WaveMode } from "./Waveform";
 import { RingMeter } from "./RingMeter";
 
-export type PillSize = "large" | "small";
+/**
+ * `"line"` is the Minimal variant. The stored value keeps its original name so
+ * an existing preference is not reset by a label change.
+ */
+export type PillSize = "large" | "small" | "line";
 
 /** Movement, in px, before a press on a control counts as a drag not a click. */
 const DRAG_THRESHOLD = 4;
@@ -21,7 +25,12 @@ async function openSettings() {
   const wins = await getAllWebviewWindows();
   const main = wins.find((w) => w.label === "main");
   if (main) {
+    // All three, in this order, for the same reason the tray handler does it
+    // (see `tray.rs`): the window can be hidden, or visible-but-minimised, or
+    // visible behind something else. `show()` alone left the gear doing
+    // nothing once Settings had been minimised.
     await main.show();
+    await main.unminimize();
     await main.setFocus();
   }
 }
@@ -212,7 +221,13 @@ export function Pill({
         e.stopPropagation();
       }}
     >
-      {size === "small" ? <PillSmall {...state} /> : <PillLarge {...state} />}
+      {size === "line" ? (
+        <PillMinimal {...state} />
+      ) : size === "small" ? (
+        <PillSmall {...state} />
+      ) : (
+        <PillLarge {...state} />
+      )}
     </div>
   );
 }
@@ -344,6 +359,144 @@ function PillLarge({
           >
             <Settings className="h-[14px] w-[14px]" />
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---- Minimal --------------------------------------------------------------- */
+
+/**
+ * The quiet one: a hairline lying across the bottom of the screen.
+ *
+ * At rest it is an empty capsule — no line, no glyph, no label, nothing that
+ * reads as a control, because a voice keyboard you are not using should not be
+ * a thing on your screen. It answers by growing: speech fills it with a meter,
+ * and pointing at it opens it far enough to hold the microphone and the gear.
+ * Nothing is hidden that you cannot reach — it is the same two controls the
+ * other variants have, revealed by the only gesture that means "I want them".
+ *
+ * The transitions are on width and height, so the capsule appears to swell
+ * from its own centre rather than swapping between three different pills.
+ */
+function PillMinimal({
+  view,
+  live,
+  isRecording,
+  elapsed,
+  mode,
+  error,
+  toggle,
+  retry,
+}: PillState) {
+  const [hovered, setHovered] = useState(false);
+
+  const speaking = view === "active" || view === "transcribing";
+  const open = hovered || view === "error";
+
+  // Three heights, one capsule: a line, a meter, a control. Deliberately
+  // small — at rest this should read as a mark on the screen rather than a
+  // window, and every open state is the smallest that still fits its content.
+  const height = open ? 26 : speaking ? 16 : 10;
+  // The middle is the meter's slot. It only has to be wide enough for bars
+  // while you are actually speaking; open and silent, it is just the gap
+  // between the two controls, and a wide empty gap reads as something
+  // missing rather than as breathing room.
+  const meterWidth = speaking ? 40 : open ? 8 : 20;
+
+  const title =
+    view === "error"
+      ? (error ?? t("pill.genericError"))
+      : isRecording
+        ? t("pill.stopRecording")
+        : t("pill.startRecording");
+
+  return (
+    <div className="relative h-full w-full select-none overflow-hidden">
+      {/* The padding is an invisible halo: at rest the capsule is eight pixels
+          tall, and asking someone to land a cursor on eight pixels to reach
+          the controls would undo the point of the variant. Approaching it is
+          enough. */}
+      <div
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 p-2.5"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        <div
+          className={clsx(
+            "pill-shell animate-rise flex items-center rounded-full",
+            "cursor-grab transition-[height,padding] duration-200 ease-out active:cursor-grabbing",
+            view === "active" && "is-live"
+          )}
+          style={{ height, padding: open ? "0 3px" : 0, color: "var(--ink)" }}
+        >
+          <button
+            onClick={view === "error" ? retry : toggle}
+            onPointerEnter={() => {
+              if (!isRecording) void commands.warmMicrophone();
+            }}
+            aria-label={title}
+            title={title}
+            className="flex h-full items-center gap-1 rounded-full px-1 transition-colors hover:bg-[var(--surface-2)]"
+          >
+            {/* The microphone only exists while you are pointing at the pill —
+                at rest its job is done by the line itself. */}
+            <span
+              className="overflow-hidden transition-[width,opacity] duration-200 ease-out"
+              style={{ width: open ? 12 : 0, opacity: open ? 1 : 0 }}
+            >
+              {view === "error" ? (
+                <AlertTriangle className="h-3 w-3" />
+              ) : view === "done" ? (
+                <Check className="h-3 w-3" />
+              ) : isRecording ? (
+                <Square
+                  className={clsx(
+                    "h-2 w-2 fill-current",
+                    live && "text-[var(--rec)]"
+                  )}
+                />
+              ) : (
+                <Mic className="h-3 w-3" />
+              )}
+            </span>
+
+            <span
+              className="flex items-center justify-center transition-[width] duration-200 ease-out"
+              style={{ width: meterWidth }}
+            >
+              {speaking && (
+                <Waveform
+                  mode={view === "transcribing" ? "transcribing" : "listening"}
+                  bars={9}
+                  className="h-2.5"
+                />
+              )}
+            </span>
+
+            {view === "active" && mode !== "auto" && open && (
+              <span className="tabular pl-0.5 text-[9.5px] tracking-tight text-[var(--ink-muted)]">
+                {formatElapsed(elapsed)}
+              </span>
+            )}
+          </button>
+
+          {/* Same reveal as the small pill: width, not display, so it slides —
+              and stays out of the tab order while closed. */}
+          <div
+            className="overflow-hidden transition-[width] duration-200 ease-out"
+            style={{ width: open ? 18 : 0 }}
+          >
+            <button
+              onClick={() => void openSettings()}
+              aria-label={t("pill.openSettings")}
+              tabIndex={open ? 0 : -1}
+              className="flex h-[18px] w-[18px] items-center justify-center rounded-full text-[var(--ink-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--ink)]"
+            >
+              <Settings className="h-2.5 w-2.5" />
+            </button>
+          </div>
         </div>
       </div>
     </div>

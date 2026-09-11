@@ -3,15 +3,25 @@ import { useAudioLevel } from "../../hooks/useAudioLevel";
 
 export type WaveMode = "idle" | "listening" | "transcribing";
 
-const BARS = 22;
-
 /**
  * A row of vertical bars driven by a single rAF loop. In `listening` mode the
  * bars track the live captured-audio ring buffer; `transcribing` plays a
- * traveling pulse; `idle` breathes gently. Heights are eased toward their
- * target each frame and written straight to the DOM (no React churn).
+ * traveling pulse; `idle` holds flat. Heights are eased toward their target
+ * each frame and written straight to the DOM (no React churn).
+ *
+ * `bars` and `className` exist for the Minimal pill, which is a fraction of the
+ * large one's width and would otherwise show a meter wider than the capsule
+ * holding it. Both are fixed for the life of the component.
  */
-export function Waveform({ mode }: { mode: WaveMode }) {
+export function Waveform({
+  mode,
+  bars: BARS = 22,
+  className = "h-5",
+}: {
+  mode: WaveMode;
+  bars?: number;
+  className?: string;
+}) {
   const levels = useAudioLevel(BARS);
   const containerRef = useRef<HTMLDivElement>(null);
   const heights = useRef<Float32Array>(new Float32Array(BARS).fill(0.12));
@@ -73,7 +83,7 @@ export function Waveform({ mode }: { mode: WaveMode }) {
   return (
     <div
       ref={containerRef}
-      className="flex h-5 items-center gap-[2px]"
+      className={`flex items-center gap-[2px] ${className}`}
       aria-hidden
     >
       {Array.from({ length: BARS }).map((_, i) => (

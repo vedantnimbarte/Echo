@@ -485,6 +485,7 @@ pub fn run() {
             commands::history::get_history,
             commands::history::clear_history,
             commands::history::get_dictation_stats,
+            commands::history::get_insights,
             commands::injection::check_accessibility_permission,
             commands::injection::inject_text,
             commands::injection::secure_field_detection,

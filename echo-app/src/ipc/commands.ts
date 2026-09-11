@@ -153,6 +153,45 @@ export interface DictationStats {
   since: string | null;
 }
 
+/** One row of a "how much of it was X" breakdown: an app, a provider, a language. */
+export interface Tally {
+  key: string;
+  transcripts: number;
+  words: number;
+}
+
+/** A day that had dictation in it. Days with none are simply absent. */
+export interface DayWords {
+  /** ISO `YYYY-MM-DD`. */
+  date: string;
+  words: number;
+  transcripts: number;
+}
+
+/** Everything the Insights page shows. Derived from History, like the stats above. */
+export interface Insights {
+  transcripts: number;
+  words: number;
+  days: number;
+  words_last_7_days: number;
+  since: string | null;
+  /** Speech time and the words spoken in it — the two halves of words-per-minute. */
+  spoken_ms: number;
+  timed_words: number;
+  timed_transcripts: number;
+  dictionary_fixes: number;
+  cleanup_fixes: number;
+  streak: number;
+  longest_streak: number;
+  apps: Tally[];
+  providers: Tally[];
+  languages: Tally[];
+  /** Transcripts per hour of the day, 24 entries starting at midnight. */
+  hours: number[];
+  /** The last 365 days that had dictation, oldest first. */
+  daily: DayWords[];
+}
+
 export interface EgressRecord {
   id: number | null;
   host: string;
@@ -408,4 +447,6 @@ export const commands = {
     invoke<string[]>("spoken_punctuation_languages"),
 
   getDictationStats: () => invoke<DictationStats>("get_dictation_stats"),
+
+  getInsights: () => invoke<Insights>("get_insights"),
 };

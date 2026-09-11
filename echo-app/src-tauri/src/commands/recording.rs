@@ -1,4 +1,8 @@
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, Mutex,
+};
+use std::time::Instant;
 
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::mpsc;
@@ -97,6 +101,20 @@ pub async fn begin_recording(
 
     let (vad_tx, vad_rx) = mpsc::channel::<Vec<f32>>(256);
     let level_app = app.clone();
+    // How long the microphone actually heard speech, milliseconds, since the
+    // last transcript was written. Words per minute needs a denominator, and
+    // the only honest one is speech time — not how long the hotkey was held,
+    // which includes every pause while you thought about the next sentence.
+    //
+    // ponytail: measured from the VAD's own rising and falling edges rather
+    // than by counting samples, so it is wall-clock over live capture. Good to
+    // a frame or two, which is well inside what a words-per-minute figure can
+    // claim. Counting forwarded samples would be exact, but only the retry
+    // path sees them, and that path is optional.
+    let spoken_ms = Arc::new(AtomicU64::new(0));
+    let spoken_for_vad = spoken_ms.clone();
+    let since_for_vad: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
+
     tokio::spawn(async move {
         let vad: Box<dyn Vad> = match silero_model {
             Some(model) if vad_engine != "energy" => Box::new(SileroVad::new(model)),
@@ -109,10 +127,15 @@ pub async fn begin_recording(
             }
             // Rising edge: drives the pill's listening state in voice-activated mode.
             VadEvent::SpeechStarted => {
+                *since_for_vad.lock_live() = Some(Instant::now());
                 let _ = level_app.emit("echo://speech-started", ());
             }
             // Falling edge: the pill switches to "transcribing".
             VadEvent::SpeechEnded => {
+                if let Some(started) = since_for_vad.lock_live().take() {
+                    spoken_for_vad
+                        .fetch_add(started.elapsed().as_millis() as u64, Ordering::Relaxed);
+                }
                 let _ = level_app.emit("echo://speech-ended", ());
             }
         })
@@ -298,7 +321,7 @@ pub async fn begin_recording(
                 // Dictionary first, then formatting: a dictionary rule is the
                 // user's own correction and should be able to produce text the
                 // formatter then spaces and capitalises properly.
-                let processed = dictionary
+                let corrected = dictionary
                     .read()
                     .await
                     .process_for(&segment.text, delivery.dictionary_profile);
@@ -310,7 +333,7 @@ pub async fn begin_recording(
                     .as_deref()
                     .or(lang_for_format.as_deref());
                 let processed =
-                    crate::core::format::apply(&processed, delivery.format, spoken);
+                    crate::core::format::apply(&corrected, delivery.format, spoken);
 
                 // "Scratch that" is a correction, not dictation: take back the
                 // last delivery instead of typing the words. Checked before
@@ -344,11 +367,23 @@ pub async fn begin_recording(
                     let state = app_clone.state::<AppState>();
                     let conn = state.db.lock_live();
                     let record = crate::storage::models::TranscriptionRecord {
-                        id: None,
                         text: processed.clone(),
                         language: segment.language.clone(),
                         provider: provider.clone(),
-                        created_at: String::new(),
+                        // Zero means the speech edges never fired — a provider
+                        // that streams its own finals, say. Store nothing
+                        // rather than a zero that would read as "instant".
+                        duration_ms: match spoken_ms.swap(0, Ordering::Relaxed) {
+                            0 => None,
+                            ms => Some(ms as i64),
+                        },
+                        app: focused.clone(),
+                        // Two passes, counted separately, because they answer
+                        // different questions: the dictionary is your own
+                        // correction working, the clean-up is Echo's.
+                        dictionary_fixes: word_edits(segment.text.trim(), &corrected),
+                        cleanup_fixes: word_edits(&corrected, &processed),
+                        ..Default::default()
                     };
                     if let Err(e) = crate::storage::repositories::insert_history(&conn, &record) {
                         error!("Failed to record history: {e}");
@@ -667,6 +702,21 @@ pub(crate) async fn vad_gate<F>(
     let _ = vad_tx.send(Vec::new()).await;
 }
 
+/// Roughly how many words changed between two versions of the same sentence.
+///
+/// Deliberately not a diff. A real alignment would tell you an inserted word
+/// shifted everything after it, and then Insights would have to explain what
+/// an edit distance is. Position-by-position plus the length difference
+/// answers the only question being asked — "about how many words did Echo
+/// change?" — and it never claims more edits than there are words.
+fn word_edits(before: &str, after: &str) -> i64 {
+    let a: Vec<&str> = before.split_whitespace().collect();
+    let b: Vec<&str> = after.split_whitespace().collect();
+    let changed = a.iter().zip(b.iter()).filter(|(x, y)| x != y).count();
+    (changed + a.len().abs_diff(b.len())) as i64
+}
+
+
 /// Cap on retained audio: 30 seconds at 16 kHz mono f32, about 1.9 MB.
 ///
 /// Long enough for anything said in one breath, which is what a retry is for.
@@ -866,4 +916,28 @@ async fn run_command(
     .map_err(|e| EchoError::Injection(format!("selection task panicked: {e}")))??;
 
     crate::core::command::run(cfg, api_key, instruction, selection.as_deref()).await
+}
+
+#[cfg(test)]
+mod word_edit_tests {
+    use super::word_edits;
+
+    #[test]
+    fn unchanged_text_counts_nothing() {
+        assert_eq!(word_edits("ship it on friday", "ship it on friday"), 0);
+        assert_eq!(word_edits("", ""), 0);
+    }
+
+    #[test]
+    fn a_replaced_word_counts_once() {
+        // What a dictionary entry does: one word in, one word out.
+        assert_eq!(word_edits("send it to jeera", "send it to Jira"), 1);
+    }
+
+    #[test]
+    fn dropped_and_added_words_count() {
+        // What the clean-up pass does: fillers out, punctuation in.
+        assert_eq!(word_edits("um so we ship", "so we ship"), 4);
+        assert_eq!(word_edits("ship it", "Ship it."), 2);
+    }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import clsx from "clsx";
 import {
+  BarChart3,
   BookOpen,
   Clock,
   Puzzle,
@@ -18,11 +19,12 @@ import { commands } from "./ipc/commands";
 import { checkForUpdate } from "./update";
 import { DictionaryPanel } from "./components/dictionary/DictionaryPanel";
 import { HistoryPanel } from "./components/history/HistoryPanel";
+import { InsightsPanel } from "./components/insights/InsightsPanel";
 import { SettingsPanel, type SettingsPage } from "./components/settings/SettingsPanel";
 import { PluginsPanel } from "./components/plugins/PluginsPanel";
 import { Onboarding } from "./components/onboarding/Onboarding";
 
-type Page = SettingsPage | "dictionary" | "history" | "plugins";
+type Page = SettingsPage | "insights" | "dictionary" | "history" | "plugins";
 
 type NavItem = { id: Page; label: string; Icon: React.ElementType };
 
@@ -41,6 +43,7 @@ const SETTINGS_NAV: NavItem[] = [
 
 /** Content you accumulate by using Echo, rather than settings you choose. */
 const LIBRARY_NAV: NavItem[] = [
+  { id: "insights", label: "Insights", Icon: BarChart3 },
   { id: "dictionary", label: "Dictionary", Icon: BookOpen },
   { id: "history", label: "History", Icon: Clock },
   { id: "plugins", label: "Plugins", Icon: Puzzle },
@@ -186,6 +189,7 @@ export default function App() {
 
         <main className="min-w-0 flex-1 overflow-y-auto">
           {isSettingsPage(page) && <SettingsPanel page={page} />}
+          {page === "insights" && <InsightsPanel />}
           {page === "dictionary" && <DictionaryPanel />}
           {page === "history" && <HistoryPanel />}
           {page === "plugins" && <PluginsPanel />}
