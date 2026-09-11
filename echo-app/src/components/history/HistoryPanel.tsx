@@ -419,8 +419,22 @@ export function HistoryPanel({ onOpenInsights }: { onOpenInsights: () => void })
           {/* The column, top to bottom: what your dictation adds up to, then
               what you can do to the whole of it. Both are about the record as a
               body rather than any one transcript, which is why they sit away
-              from the list and not in the page header over it. */}
-          <div className="space-y-3">
+              from the list and not in the page header over it — and why they
+              stay put while the list goes by. A running total that scrolls off
+              at the fourth transcript is a total of nothing in particular.
+
+              Pinned only in the two-column layout: stacked, this sits *under*
+              the list, and pinning it there would hold the buttons over the
+              transcripts you were reading. `self-start` is what makes it
+              possible at all — a grid item stretches to the row by default, so
+              it would be as tall as the list and have no room to slide.
+
+              ponytail: 90px clears the pinned page header, measured at 89.5 —
+              its own 48 + 8 of padding plus one line of greeting. Hard-coded
+              because reading it back would mean measuring another component on
+              every resize; wrong only if the greeting wraps, which needs a long
+              name in a window already too narrow for this column to exist. */}
+          <div className="space-y-3 lg:sticky lg:top-[90px] lg:self-start">
             <Summary onOpenInsights={onOpenInsights} />
             <div className="flex gap-2">
               <button
