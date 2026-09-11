@@ -7,6 +7,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useRecordingStore } from "../../store/recordingStore";
 import { t } from "../../i18n";
 import { commands } from "../../ipc/commands";
+import { EngineTag, useEngineStatus } from "../common/EngineTag";
 import { Waveform, type WaveMode } from "./Waveform";
 import { RingMeter } from "./RingMeter";
 
@@ -60,6 +61,10 @@ function usePillState() {
     setError,
     setTranscribing,
   } = useRecordingStore();
+
+  // Which engine is answering. Every variant gets it in a tooltip; only Large
+  // has the room to draw it.
+  const engine = useEngineStatus();
 
   const [elapsed, setElapsed] = useState(0);
   const [flash, setFlash] = useState(false);
@@ -135,6 +140,7 @@ function usePillState() {
     view,
     live,
     mode,
+    engine,
     isRecording,
     elapsed,
     error,
@@ -252,6 +258,7 @@ function PillLarge({
   toggle,
   retry,
 }: PillState) {
+  const [hovered, setHovered] = useState(false);
   const waveMode: WaveMode =
     view === "transcribing" ? "transcribing" : view === "active" ? "listening" : "idle";
   // The red bloom means one thing only: the microphone is capturing. Whisper
@@ -259,7 +266,11 @@ function PillLarge({
   const hot = view === "active";
 
   return (
-    <div className="flex h-full w-full items-center justify-center overflow-hidden">
+    <div
+      className="flex h-full w-full items-center justify-center overflow-hidden"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
       <div
         className={clsx(
           "pill-shell animate-rise flex select-none items-center gap-1 rounded-full p-1.5",
@@ -316,6 +327,17 @@ function PillLarge({
         <div className="flex min-w-0 items-center gap-2.5 px-2">
           {(view === "idle" || view === "active" || view === "transcribing") && (
             <Waveform mode={waveMode} />
+          )}
+
+          {/* Only at rest: mid-dictation the centre is already carrying the
+              words, and two things competing there is worse than one thing
+              arriving a moment later. Approaching the pill is what asks for
+              it — an engine that needs fixing says so without being asked. */}
+          {/* ponytail: opens Settings on whatever page it was left on, not
+              Engine — landing on a page would need a third cross-window event.
+              Worth adding if anyone reports hunting for it. */}
+          {view === "idle" && (
+            <EngineTag bare revealed={hovered} onOpen={() => void openSettings()} />
           )}
 
           {view === "active" && partialTranscript && (
@@ -386,6 +408,7 @@ function PillMinimal({
   isRecording,
   elapsed,
   mode,
+  engine,
   error,
   toggle,
   retry,
@@ -406,12 +429,20 @@ function PillMinimal({
   // missing rather than as breathing room.
   const meterWidth = speaking ? 40 : open ? 10 : 20;
 
-  const title =
+  // The variant is a few pixels of hairline; there is no room to draw the
+  // engine and no version of this pill that should grow one. The fact still
+  // has to be reachable, so it rides the control's own tooltip — the same
+  // place you already look to find out what pressing it does.
+  const title = [
     view === "error"
       ? (error ?? t("pill.genericError"))
       : isRecording
         ? t("pill.stopRecording")
-        : t("pill.startRecording");
+        : t("pill.startRecording"),
+    engine?.summary,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   return (
     <div className="relative h-full w-full select-none overflow-hidden">
@@ -516,7 +547,7 @@ function PillMinimal({
  * having one. The button is pinned so its centre never moves — the gear grows
  * out to the right instead of the pill re-centering under your cursor.
  */
-function PillSmall({ view, live, isRecording, error, toggle, retry }: PillState) {
+function PillSmall({ view, live, isRecording, engine, error, toggle, retry }: PillState) {
   const [hovered, setHovered] = useState(false);
 
   const ringMode =
@@ -533,12 +564,19 @@ function PillSmall({ view, live, isRecording, error, toggle, retry }: PillState)
       <Mic className="h-4 w-4" />
     );
 
-  const title =
+  // Same as Minimal: one 44px button has no room for a second fact, so the
+  // engine rides the tooltip rather than growing the variant that exists not
+  // to be grown.
+  const title = [
     view === "error"
       ? (error ?? t("pill.genericError"))
       : isRecording
         ? t("pill.stopRecording")
-        : t("pill.startRecording");
+        : t("pill.startRecording"),
+    engine?.summary,
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   return (
     <div className="relative h-full w-full select-none overflow-hidden">

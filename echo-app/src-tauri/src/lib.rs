@@ -232,6 +232,26 @@ pub fn run() {
                 }
             }
 
+            // Tell the screen when the engine the user chose stops being the
+            // one answering. The diversion is deliberately silent in the
+            // transcript — you still get your words, and history still credits
+            // the provider you picked — but the pill and the title bar name
+            // the active engine, and a name that has quietly stopped being
+            // true is worse than no name at all.
+            {
+                let handle = app.handle().clone();
+                let asr = asr_manager.clone();
+                tauri::async_runtime::block_on(async move {
+                    asr.set_fallback_notify(Arc::new(move |provider: &str| {
+                        let _ = handle.emit(
+                            "echo://asr-fell-back",
+                            serde_json::json!({ "provider": provider }),
+                        );
+                    }))
+                    .await;
+                });
+            }
+
             // Wake-word models live beside the Whisper models; nothing is
             // fetched until the user enables the feature.
             let wake_dir = data_dir.join("wake");

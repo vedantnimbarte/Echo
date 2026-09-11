@@ -95,6 +95,9 @@ export function ModelSelector() {
     await commands.setAsrProvider("local");
     queryClient.invalidateQueries({ queryKey: ["setting", "whisper_model"] });
     queryClient.invalidateQueries({ queryKey: ["setting", "asr_provider"] });
+    queryClient.invalidateQueries({ queryKey: ["whisper-ready"] });
+    // The pill reports the engine too, and it is a separate webview.
+    void echoEvents.emitEngineChanged();
   }
 
   // Default to base.en in the highlight when nothing is explicitly chosen yet.

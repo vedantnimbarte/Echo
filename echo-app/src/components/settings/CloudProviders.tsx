@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { commands, type CloudProvider, type ProviderField } from "../../ipc/commands";
+import { echoEvents } from "../../ipc/events";
 import { Field } from "../common/Page";
 
 /**
@@ -232,7 +233,11 @@ export function CloudProviders() {
 
   const use = useMutation({
     mutationFn: (id: string) => commands.setAsrProvider(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["setting", "asr_provider"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["setting", "asr_provider"] });
+      // The pill reports the engine too, and it is a separate webview.
+      void echoEvents.emitEngineChanged();
+    },
   });
 
   const activeCloud = providers.find((p) => p.id === active) ?? null;

@@ -83,6 +83,19 @@ export const echoEvents = {
     listen<RecordingMode>("echo://mode-changed", (e) => cb(e.payload)),
   emitModeChanged: (mode: RecordingMode) => emit("echo://mode-changed", mode),
 
+  // The chosen engine failed an utterance and the offline engine answered
+  // instead. Fired before the retry, so the screen stops naming a provider
+  // that is no longer doing the work. Carries the provider that was dropped.
+  onAsrFellBack: (cb: (provider: string) => void) =>
+    listen<{ provider: string }>("echo://asr-fell-back", (e) =>
+      cb(e.payload.provider)
+    ),
+
+  // Which engine is in use is chosen in the settings window and reported by
+  // both windows, so the change is broadcast for the same reason pill size is.
+  onEngineChanged: (cb: () => void) => listen("echo://engine-changed", cb),
+  emitEngineChanged: () => emit("echo://engine-changed"),
+
   // Pill size lives in the settings window but is rendered by the pill, and the
   // two are separate webviews with separate stores — so the change is
   // broadcast rather than read back on a timer.

@@ -23,6 +23,16 @@ use crate::error::Result;
 /// The only provider audio may be diverted *to*.
 const LOCAL_PROVIDER: &str = "local";
 
+/// Told the primary's name each time an utterance is diverted to the offline
+/// engine.
+///
+/// A callback rather than an `AppHandle` because this module is core: the
+/// fallback rule is worth testing without a Tauri runtime around it, and the
+/// one place that knows how to reach a window is the place that builds the
+/// manager. What the UI does with it is not this module's business — it only
+/// reports that the engine the user chose is not the engine that answered.
+pub type FallbackNotify = Arc<dyn Fn(&str) + Send + Sync>;
+
 /// Whether `name` identifies the on-device engine.
 pub fn is_local(name: &str) -> bool {
     name == LOCAL_PROVIDER
@@ -32,6 +42,7 @@ pub fn is_local(name: &str) -> bool {
 pub struct FallbackProvider {
     primary: Arc<dyn AsrProvider>,
     local: Arc<dyn AsrProvider>,
+    notify: Option<FallbackNotify>,
 }
 
 impl FallbackProvider {
@@ -43,12 +54,13 @@ impl FallbackProvider {
     pub fn wrap(
         primary: Arc<dyn AsrProvider>,
         local: Option<Arc<dyn AsrProvider>>,
+        notify: Option<FallbackNotify>,
     ) -> Arc<dyn AsrProvider> {
         if is_local(primary.name()) {
             return primary;
         }
         match local {
-            Some(local) => Arc::new(Self { primary, local }),
+            Some(local) => Arc::new(Self { primary, local, notify }),
             None => primary,
         }
     }
@@ -77,6 +89,13 @@ impl AsrProvider for FallbackProvider {
                     provider = self.primary.name(),
                     "Transcription failed, retrying on the offline engine: {e}"
                 );
+                // Announced before the retry, not after it: the local engine
+                // can take seconds on a long utterance, and the whole point is
+                // that the screen stops claiming the cloud is answering while
+                // it is not.
+                if let Some(notify) = &self.notify {
+                    notify(self.primary.name());
+                }
                 self.local.transcribe(retry, language).await
             }
         }
@@ -152,7 +171,7 @@ mod tests {
         let (cloud, _) = stub("openai", true);
         let (local, local_calls) = stub("local", false);
 
-        let provider = FallbackProvider::wrap(cloud, Some(local));
+        let provider = FallbackProvider::wrap(cloud, Some(local), None);
         let out = provider.transcribe(vec![0.1; 16], None).await.unwrap();
 
         assert_eq!(out.text, "local");
@@ -166,7 +185,7 @@ mod tests {
         let (cloud, _) = stub("openai", false);
         let (local, local_calls) = stub("local", false);
 
-        let provider = FallbackProvider::wrap(cloud, Some(local));
+        let provider = FallbackProvider::wrap(cloud, Some(local), None);
         assert_eq!(provider.transcribe(vec![0.1; 16], None).await.unwrap().text, "openai");
         assert_eq!(local_calls.load(Ordering::SeqCst), 0);
     }
@@ -177,7 +196,7 @@ mod tests {
         let (local, _) = stub("local", true);
         let (cloud, cloud_calls) = stub("openai", false);
 
-        let provider = FallbackProvider::wrap(local, Some(cloud));
+        let provider = FallbackProvider::wrap(local, Some(cloud), None);
         assert!(provider.transcribe(vec![0.1; 16], None).await.is_err());
         assert_eq!(
             cloud_calls.load(Ordering::SeqCst),
@@ -186,10 +205,51 @@ mod tests {
         );
     }
 
+    /// The screen is told the moment the chosen engine stops being the one
+    /// answering — otherwise the title bar keeps naming a provider that is no
+    /// longer doing the work.
+    #[tokio::test]
+    async fn a_diverted_utterance_is_announced() {
+        let (cloud, _) = stub("openai", true);
+        let (local, _) = stub("local", false);
+        let seen = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+
+        let sink = seen.clone();
+        let provider = FallbackProvider::wrap(
+            cloud,
+            Some(local),
+            Some(Arc::new(move |name: &str| {
+                sink.lock().unwrap().push(name.to_string());
+            })),
+        );
+
+        provider.transcribe(vec![0.1; 16], None).await.unwrap();
+        assert_eq!(seen.lock().unwrap().as_slice(), ["openai"]);
+    }
+
+    /// A local failure has no fallback, so there is nothing to announce — and
+    /// announcing one would put a diversion on screen that never happened.
+    #[tokio::test]
+    async fn a_local_failure_announces_nothing() {
+        let (local, _) = stub("local", true);
+        let (cloud, _) = stub("openai", false);
+        let fired = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+        let flag = fired.clone();
+        let provider = FallbackProvider::wrap(
+            local,
+            Some(cloud),
+            Some(Arc::new(move |_: &str| flag.store(true, Ordering::SeqCst))),
+        );
+
+        assert!(provider.transcribe(vec![0.1; 16], None).await.is_err());
+        assert!(!fired.load(Ordering::SeqCst));
+    }
+
     #[tokio::test]
     async fn without_a_local_engine_the_primary_is_returned_unchanged() {
         let (cloud, _) = stub("openai", true);
-        let provider = FallbackProvider::wrap(cloud, None);
+        let provider = FallbackProvider::wrap(cloud, None, None);
         assert!(provider.transcribe(vec![0.1; 16], None).await.is_err());
     }
 }
