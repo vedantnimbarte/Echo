@@ -72,46 +72,105 @@ jobs:
         run: node scripts/stage-runtime-deps.mjs
         working-directory: echo-app
 
-      - name: Build and release
-        uses: tauri-apps/tauri-action@v0
+      # Signing is opt-in, and the opt-in has to be the *absence of the
+      # variable* rather than an empty one.
+      #
+      # This step exists because of a release that failed. The signing values
+      # used to sit in the `env:` of the build step below, on the assumption
+      # that an unset secret meant no signing. It does not: a missing secret
+      # interpolates to an empty string and the variable is still **defined**,
+      # and Tauri's bundler decides to sign on whether APPLE_CERTIFICATE is
+      # present, not on whether it holds anything. So a repository with no
+      # secrets at all tried to sign, `security import` got an empty
+      # certificate, and the macOS job died after a full compile — producing no
+      # .dmg, which skipped the checksum job and left every platform's
+      # installer unverifiable.
+      #
+      # Writing to $GITHUB_ENV is what makes "unset" expressible: a name only
+      # enters the environment if this step echoes it. Keep it that way. Adding
+      # a key back to the `env:` block below reintroduces the bug in a form
+      # that only appears on a tagged release.
+      - name: Enable code signing, but only where a certificate really exists
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Auto-update signing. Generate once with `npm run tauri signer generate`,
-          # put the private key in this secret and its public key in
-          # tauri.conf.json → plugins.updater.pubkey. See docs/RELEASING.md.
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-
-          # ── macOS code signing and notarization ──────────────────────────
-          # Unsigned, Gatekeeper does not warn, it refuses: the only button it
-          # offers is "Move to Trash". That makes this the one platform where
-          # signing is a precondition for being installable at all, and it also
-          # gates a Homebrew cask and a Flathub submission.
-          #
-          # Every value below is empty until the secrets exist, and
-          # tauri-action skips signing when they are — so this stays a no-op
-          # rather than a broken build until an Apple Developer account
-          # ($99/yr) is in place. Setup: docs/RELEASING.md.
-          #
-          # APPLE_CERTIFICATE         base64 of the Developer ID .p12
-          # APPLE_CERTIFICATE_PASSWORD  its export password
-          # APPLE_SIGNING_IDENTITY    e.g. "Developer ID Application: Name (TEAMID)"
-          # APPLE_ID / APPLE_PASSWORD an app-specific password, for notarytool
-          # APPLE_TEAM_ID             the 10-character team id
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-
-          # ── Windows Authenticode ─────────────────────────────────────────
-          # Lower priority than macOS: SmartScreen warns but still offers
-          # "More info → Run anyway", which is survivable for a free project.
-          # Worth buying early all the same, because an OV certificate earns
-          # SmartScreen reputation on wall-clock time rather than on downloads.
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          UPDATER_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          # Forward one variable to later steps, and only if it has a value.
+          # The heredoc form is what keeps a multi-line secret — a base64 .p12,
+          # an updater private key — intact rather than truncated at line one.
+          forward() {
+            local name="$1" value="$2"
+            if [ -n "$value" ]; then
+              {
+                echo "$name<<__ECHO_SECRET_EOF__"
+                echo "$value"
+                echo "__ECHO_SECRET_EOF__"
+              } >> "$GITHUB_ENV"
+              echo "  $name: set"
+            fi
+          }
+
+          # macOS. Unsigned, Gatekeeper does not warn, it refuses — the only
+          # button it offers is "Move to Trash" — so this is the one platform
+          # where signing gates installability at all, and it additionally
+          # gates a Homebrew cask and a Flathub submission. $99/yr.
+          #
+          # APPLE_CERTIFICATE            base64 of the Developer ID .p12
+          # APPLE_CERTIFICATE_PASSWORD   its export password
+          # APPLE_SIGNING_IDENTITY       "Developer ID Application: Name (TEAMID)"
+          # APPLE_ID / APPLE_PASSWORD    Apple ID + an app-specific password
+          # APPLE_TEAM_ID                the 10-character team id
+          if [ -n "$APPLE_CERTIFICATE" ] && [ -n "$APPLE_SIGNING_IDENTITY" ]; then
+            echo "Apple certificate present, signing this build:"
+            forward APPLE_CERTIFICATE "$APPLE_CERTIFICATE"
+            forward APPLE_CERTIFICATE_PASSWORD "$APPLE_CERTIFICATE_PASSWORD"
+            forward APPLE_SIGNING_IDENTITY "$APPLE_SIGNING_IDENTITY"
+            forward APPLE_ID "$APPLE_ID"
+            forward APPLE_PASSWORD "$APPLE_PASSWORD"
+            forward APPLE_TEAM_ID "$APPLE_TEAM_ID"
+          else
+            echo "No Apple certificate configured. Building unsigned — users"
+            echo "right-click then Open, as the README describes."
+          fi
+
+          # Windows Authenticode. Lower priority than macOS: SmartScreen warns
+          # but still offers "More info -> Run anyway". Worth buying early even
+          # so, because an OV certificate earns reputation on wall-clock time.
+          if [ -n "$WINDOWS_CERTIFICATE" ]; then
+            echo "Windows certificate present, signing this build:"
+            forward WINDOWS_CERTIFICATE "$WINDOWS_CERTIFICATE"
+            forward WINDOWS_CERTIFICATE_PASSWORD "$WINDOWS_CERTIFICATE_PASSWORD"
+          else
+            echo "No Windows certificate configured. Building unsigned."
+          fi
+
+          # Auto-update signing. Generate once with
+          # `npm run tauri signer generate`; the public half goes into
+          # tauri.conf.json -> plugins.updater.pubkey. See docs/RELEASING.md.
+          if [ -n "$UPDATER_KEY" ]; then
+            echo "Updater key present, signing update artifacts:"
+            forward TAURI_SIGNING_PRIVATE_KEY "$UPDATER_KEY"
+            forward TAURI_SIGNING_PRIVATE_KEY_PASSWORD "$UPDATER_KEY_PASSWORD"
+          else
+            echo "No updater key configured. Releases ship no latest.json."
+          fi
+
+      - name: Build and release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signing variables are deliberately absent here. The step above
+          # adds them only when a real certificate exists — read its comment
+          # before putting anything back in this block.
         with:
           projectPath: echo-app
           tagName: ${{ github.ref_name }}

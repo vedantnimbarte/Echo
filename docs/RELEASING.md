@@ -126,10 +126,24 @@ The updater keypair proves *"this update came from us."* It does **not** make th
 OS trust the installer — that needs an Apple Developer cert (macOS notarization)
 and an Authenticode cert (Windows).
 
-**The workflow already reads the secrets.** `release.yml` passes every variable
-`tauri-action` needs for both platforms, and skips signing when they are unset —
-so adding a certificate is a matter of creating repository secrets, with no
-workflow change and no risk of a half-configured build failing.
+**The workflow already reads the secrets.** `release.yml` forwards every variable
+`tauri-action` needs for both platforms, so adding a certificate is a matter of
+creating repository secrets with no workflow change.
+
+> An earlier version of this page claimed the variables could sit in the build
+> step's `env:` and that signing would be skipped when the secrets were unset.
+> That is wrong, and it broke the v0.3.0 macOS build. A missing secret
+> interpolates to an **empty string**, and the environment variable is still
+> defined; Tauri's bundler decides to sign on whether `APPLE_CERTIFICATE` is
+> present, not on whether it contains anything. With no secrets configured at
+> all, the macOS job compiled for eight minutes and then died in `security
+> import` with an empty certificate — producing no `.dmg`, which in turn skipped
+> the checksum job and left every platform's installer unverifiable.
+>
+> The fix is the *Enable code signing* step, which writes each value to
+> `$GITHUB_ENV` only when it is non-empty — that is what makes "unset"
+> expressible. Do not move these back into the build step's `env:` block: it
+> reintroduces a failure that only appears on a tagged release.
 
 | Secret | Platform | What it is |
 |---|---|---|
