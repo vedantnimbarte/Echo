@@ -70,8 +70,20 @@ export function Page({
         </p>
       )}
       {/* divide-y draws rules only *between* groups, so no first/last-child
-          padding fights with the group's own spacing. */}
-      <div className="divide-y divide-[var(--hairline)]">{children}</div>
+          padding fights with the group's own spacing.
+
+          The 36px above the content is carried by the description's `mb-9`
+          when there is one. Dictation has no description — its greeting is the
+          whole header — so without this the content would start 8px under the
+          title, that 8px being only the header's own padding. 28 + 8 is the
+          same 36 every other page gets. */}
+      <div
+        className={
+          "divide-y divide-[var(--hairline)]" + (description ? "" : " mt-7")
+        }
+      >
+        {children}
+      </div>
     </div>
   );
 }
