@@ -76,6 +76,10 @@ function UpdateResult({ outcome }: { outcome: UpdateOutcome }) {
   }
 }
 
+/** The shared look of every link on this page, external or not. */
+const LINK_CLASS =
+  "text-[13.5px] text-[var(--ink-muted)] underline decoration-[var(--hairline-strong)] underline-offset-[5px] transition-colors hover:text-[var(--ink)] hover:decoration-[var(--ink)]";
+
 /**
  * An external link. A button, not an anchor: these leave the webview through
  * the opener plugin, and an `href` would navigate the app itself.
@@ -84,7 +88,7 @@ function Link({ href, children }: { href: string; children: React.ReactNode }) {
   return (
     <button
       onClick={() => void open(href)}
-      className="text-[13.5px] text-[var(--ink-muted)] underline decoration-[var(--hairline-strong)] underline-offset-[5px] transition-colors hover:text-[var(--ink)] hover:decoration-[var(--ink)]"
+      className={LINK_CLASS}
     >
       {children}
     </button>
@@ -218,6 +222,11 @@ export function About({ label }: { label: (title: string) => string }) {
           onChange={(e) => setEdited(e.target.value)}
           spellCheck={false}
         />
+        {/* The bug form asks what the log said, so this is where the log has
+            to be reachable from. It was not reachable anywhere before. */}
+        <button onClick={() => void commands.openLog()} className={LINK_CLASS}>
+          Show the log file
+        </button>
         <div className="flex flex-wrap items-center gap-2.5">
           <button
             onClick={() => void open(issueUrl("bug_report.yml" as IssueKind, { diagnostics }))}

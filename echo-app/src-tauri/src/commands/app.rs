@@ -1,5 +1,6 @@
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_autostart::ManagerExt;
+use tauri_plugin_opener::OpenerExt;
 
 use crate::error::{EchoError, Result};
 use crate::state::AppState;
@@ -81,6 +82,30 @@ pub fn account_name() -> Option<String> {
     Some(head + chars.as_str())
 }
 
+/// Show `echo.log` in the system file manager.
+///
+/// `init_tracing` calls that file "the only record a user can actually send
+/// us", and until this there was no way to reach it from inside Echo — while
+/// the bug report form asks for exactly that. Reveals the file rather than
+/// opening it, because the thing people need is to attach it, and because a
+/// long-running install's log is not something to hand to a text editor
+/// unasked.
+///
+/// Falls back to the folder when the log is missing, which is what a run that
+/// could not open it looks like (see `init_tracing`: logging is best effort).
+#[tauri::command]
+pub fn open_log(app: AppHandle) -> Result<()> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| EchoError::Config(format!("no application data directory: {e}")))?;
+    let log = dir.join("echo.log");
+    let target = if log.exists() { log } else { dir };
+    app.opener()
+        .reveal_item_in_dir(&target)
+        .map_err(|e| EchoError::Config(format!("could not show {}: {e}", target.display())))
+}
+
 /// The facts a bug report needs, as the markdown block Echo pastes into one.
 ///
 /// Built here rather than in the frontend because every line of it already
@@ -98,14 +123,22 @@ pub fn account_name() -> Option<String> {
 /// release.
 #[tauri::command]
 pub fn diagnostics(state: State<'_, AppState>) -> String {
-    let (provider, model, language) = {
+    let (provider, model, language, vad) = {
         let conn = state.db.lock().unwrap();
         let get = |k: &str| repositories::get_setting(&conn, k).ok().flatten();
         (
             get("asr_provider").unwrap_or_else(|| "local".into()),
             get("whisper_model").unwrap_or_else(|| "none".into()),
             get("language").unwrap_or_else(|| "auto".into()),
+            get("vad_engine").unwrap_or_else(|| "silero".into()),
         )
+    };
+    // What will actually run, not what was asked for: `start_recording` uses
+    // energy whenever the model is absent, however the setting reads.
+    let vad = if vad == "energy" || state.silero.is_none() {
+        "energy"
+    } else {
+        "silero"
     };
 
     let hotkey = crate::core::session::hotkey_support();
@@ -122,6 +155,7 @@ pub fn diagnostics(state: State<'_, AppState>) -> String {
     out.push_str(&format!("Engine: {provider}\n"));
     out.push_str(&format!("Model: {model}\n"));
     out.push_str(&format!("Language: {language}\n"));
+    out.push_str(&format!("Speech detection: {vad}\n"));
     out.push_str(&format!(
         "Acceleration: {} (detected {}, {} threads){}\n",
         if gpu.active { "on" } else { "off" },

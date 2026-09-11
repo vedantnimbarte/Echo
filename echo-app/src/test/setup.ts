@@ -25,8 +25,12 @@ export const invoked: string[] = [];
  *
  * Only commands the panels actually call on mount need an entry; the rest exist
  * because a shape of `null` would crash a `.map`.
+ *
+ * Exported and mutable, like `settings`: a test that needs the machine to answer
+ * differently — no neural VAD, no GPU — overrides the one key and restores it,
+ * rather than re-mocking the whole backend.
  */
-const ANSWERS: Record<string, unknown> = {
+export const ANSWERS: Record<string, unknown> = {
   get_audio_devices: [{ name: "Test Microphone", is_default: true }],
   list_models: [
     { name: "base.en", downloaded: true, size_mb: 142, english_only: true },
@@ -90,6 +94,7 @@ const ANSWERS: Record<string, unknown> = {
     { code: "en", label: "English" },
     { code: "es", label: "Spanish" },
   ],
+  silero_available: true,
   get_hotkey: "CommandOrControl+Shift+Space",
   secure_field_detection: true,
   wake_word_ready: false,

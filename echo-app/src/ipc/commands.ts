@@ -466,6 +466,15 @@ export const commands = {
    */
   diagnostics: () => invoke<string>("diagnostics"),
 
+  /** Show `echo.log` in the system file manager. */
+  openLog: () => invoke<void>("open_log"),
+
+  /**
+   * Whether the neural voice-activity model loaded. False means the energy
+   * detector is running whatever the `vad_engine` setting says.
+   */
+  sileroAvailable: () => invoke<boolean>("silero_available"),
+
   getDictationStats: () => invoke<DictationStats>("get_dictation_stats"),
 
   getInsights: () => invoke<Insights>("get_insights"),

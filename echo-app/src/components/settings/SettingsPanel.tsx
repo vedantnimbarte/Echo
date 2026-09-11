@@ -292,6 +292,15 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
     return [data, (v: string) => mutation.mutate(v)] as const;
   }
 
+  const [warmMic, setWarmMic] = useStringSetting("warm_mic");
+  const [vadEngine, setVadEngine] = useStringSetting("vad_engine");
+  // `undefined` while loading — only an explicit `false` means "not available",
+  // so the picker does not flash a warning on the way in.
+  const { data: sileroReady } = useQuery({
+    queryKey: ["silero-available"],
+    queryFn: commands.sileroAvailable,
+  });
+
   const [soundCues, setSoundCues] = useStringSetting("sound_cues");
   const [uiLanguage, setUiLanguageSetting] = useStringSetting("ui_language");
   // Applied immediately as well as persisted: the whole window is already
@@ -503,22 +512,68 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         "feature request",
       ]) && <About label={(title) => label("about", title)} />}
 
-      {on("settings", ["microphone", "mic", "input", "device", "audio"]) && (
+      {on("settings", [
+        "microphone", "mic", "input", "device", "audio", "warm", "ready",
+        "responsiveness", "vad", "voice activity", "speech detection", "silero",
+        "energy", "noise", "keyboard noise",
+      ]) && (
         <Group title={label("settings", "Microphone")}>
-          <select
-            className="field"
-            aria-label="Microphone"
-            value={savedDevice ?? ""}
-            onChange={(e) => setDeviceMutation.mutate(e.target.value)}
+          <Field label="Input device">
+            <select
+              className="field"
+              value={savedDevice ?? ""}
+              onChange={(e) => setDeviceMutation.mutate(e.target.value)}
+            >
+              <option value="">System default</option>
+              {devices.map((d) => (
+                <option key={d.name} value={d.name}>
+                  {d.name}
+                  {d.is_default ? " (default)" : ""}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          {/* Moved here from Performance, which only renders on the local lane
+              — this is about opening the audio device and has nothing to do
+              with where the words are transcribed. */}
+          <Check
+            checked={warmMic !== "false"}
+            hint={
+              <>
+                Keeping the microphone open for a few seconds after you stop lets
+                the next sentence start instantly, and captures the moment just
+                before you press the key — so a word begun early is not cut off.
+                While it is open, your system will show the microphone as in use.
+              </>
+            }
+            onChange={(v) => setWarmMic(v ? "true" : "false")}
           >
-            <option value="">System default</option>
-            {devices.map((d) => (
-              <option key={d.name} value={d.name}>
-                {d.name}
-                {d.is_default ? " (default)" : ""}
-              </option>
-            ))}
-          </select>
+            Keep the microphone ready between dictations
+          </Check>
+
+          <Field
+            label="Speech detection"
+            hint="What decides you have started and stopped talking. The neural detector ignores keyboard clatter and fans; the simple one only measures loudness, which is worth trying if speech is being cut off or a noisy room keeps it awake."
+          >
+            <select
+              className="field"
+              value={sileroReady === false ? "energy" : (vadEngine ?? "silero")}
+              disabled={sileroReady === false}
+              onChange={(e) => setVadEngine(e.target.value)}
+            >
+              <option value="silero">Neural — ignores background noise</option>
+              <option value="energy">Simple — loudness only</option>
+            </select>
+          </Field>
+          {/* The setting is honoured only when the model is there, so say so
+              rather than leaving a picker that quietly does nothing. */}
+          {sileroReady === false && (
+            <Problem>
+              The neural model didn’t load on this machine, so Echo is using the
+              simple detector.
+            </Problem>
+          )}
         </Group>
       )}
 

@@ -13,7 +13,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { settings, invoked } from "./setup";
+import { settings, invoked, ANSWERS } from "./setup";
 import App from "../App";
 import { SettingsPanel, type SettingsPage } from "../components/settings/SettingsPanel";
 import { DictionaryPanel } from "../components/dictionary/DictionaryPanel";
@@ -77,6 +77,37 @@ describe("every settings page", () => {
   it("lists the microphone the backend reported", async () => {
     mount(<SettingsPanel page="settings" />);
     expect(await screen.findByText(/Test Microphone/)).toBeTruthy();
+  });
+
+  // Keeping the microphone warm is about opening the audio device, so it has
+  // to be there whatever is transcribing. It used to live in Performance,
+  // which only renders on the local lane, and vanished for cloud users.
+  it("offers the microphone controls whichever engine is running", async () => {
+    settings.set("asr_provider", "openai");
+    mount(<SettingsPanel page="settings" />);
+
+    expect(await screen.findByText(/Keep the microphone ready/i)).toBeTruthy();
+    expect(await screen.findByLabelText("Speech detection")).toBeTruthy();
+  });
+
+  // The setting only bites when the model is there, so a machine without it
+  // must not be shown a choice that does nothing.
+  it("says so when the neural detector did not load", async () => {
+    ANSWERS.silero_available = false;
+    try {
+      mount(<SettingsPanel page="settings" />);
+      // Awaited first on purpose: the warning renders only once the probe has
+      // answered, so reaching it means the picker below has settled too. The
+      // picker itself is on screen from the first paint and would be read
+      // before the answer arrived.
+      expect(await screen.findByText(/didn’t load on this machine/i)).toBeTruthy();
+
+      const picker = screen.getByLabelText("Speech detection") as HTMLSelectElement;
+      expect(picker.disabled).toBe(true);
+      expect(picker.value).toBe("energy");
+    } finally {
+      ANSWERS.silero_available = true;
+    }
   });
 
   // About was carved out of the settings page, so the thing worth pinning is

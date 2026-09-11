@@ -7,6 +7,10 @@ import { Group, Field, Check } from "../common/Page";
 /**
  * Compute settings for the offline engine.
  *
+ * Only rendered on the local lane, which is why nothing that applies to cloud
+ * dictation may live here — keeping the microphone warm used to, and was
+ * unreachable for anyone on a cloud provider. It is under Microphone now.
+ *
  * Echo already prefers the GPU on its own, so this page is not where the user
  * turns acceleration on — it is where they find out *why* it is or is not
  * happening. That is the question a settings screen can actually answer:
@@ -21,11 +25,6 @@ export function Performance() {
   const { data: gpu } = useQuery({
     queryKey: ["gpu-status"],
     queryFn: commands.gpuStatus,
-  });
-
-  const { data: warm } = useQuery({
-    queryKey: ["setting", "warm_mic"],
-    queryFn: () => commands.getSetting("warm_mic"),
   });
 
   useEffect(() => {
@@ -54,13 +53,6 @@ export function Performance() {
   const setThreads = useMutation({
     mutationFn: (v: string) => commands.setWhisperThreads(v),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["gpu-status"] }),
-  });
-
-  const setWarm = useMutation({
-    mutationFn: (v: boolean) =>
-      commands.setSetting("warm_mic", v ? "true" : "false"),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["setting", "warm_mic"] }),
   });
 
   const canAccelerate = Boolean(gpu?.available_pack);
@@ -148,22 +140,6 @@ export function Performance() {
             ))}
           </select>
         </Field>
-      </Group>
-
-      <Group
-        title="Responsiveness"
-        hint={
-          <>
-            Keeping the microphone open for a few seconds after you stop lets
-            the next sentence start instantly, and captures the moment just
-            before you press the key — so a word begun early is not cut off.
-            While it is open, your system will show the microphone as in use.
-          </>
-        }
-      >
-        <Check checked={warm !== "false"} onChange={(v) => setWarm.mutate(v)}>
-          Keep the microphone ready between dictations
-        </Check>
       </Group>
     </>
   );
