@@ -484,6 +484,7 @@ pub fn run() {
             commands::app::quit,
             commands::app::get_autostart,
             commands::app::set_autostart,
+            commands::app::account_name,
             commands::audio::get_audio_devices,
             commands::asr::list_models,
             commands::asr::download_model,

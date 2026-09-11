@@ -32,8 +32,14 @@ export function Page({
   width = 640,
   children,
 }: {
-  title: string;
-  description?: string;
+  /**
+   * Usually the page's name. A node when the heading has something set into it
+   * — Dictation puts the keys of your shortcut in its own, which is why this is
+   * not a plain string. Whatever is passed lands in the page's one `h2`, so a
+   * page always has a heading to be found by.
+   */
+  title: React.ReactNode;
+  description?: React.ReactNode;
   /** Page-level controls, aligned to the title's baseline. */
   actions?: React.ReactNode;
   width?: number;

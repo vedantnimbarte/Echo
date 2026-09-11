@@ -280,7 +280,9 @@ export default function App() {
           {isSettingsPage(page) && <SettingsPanel page={page} />}
           {page === "insights" && <InsightsPanel />}
           {page === "dictionary" && <DictionaryPanel />}
-          {page === "dictation" && <HistoryPanel />}
+          {page === "dictation" && (
+            <HistoryPanel onOpenInsights={() => setPage("insights")} />
+          )}
           {page === "plugins" && <PluginsPanel />}
         </main>
       </div>

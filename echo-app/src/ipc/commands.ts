@@ -342,6 +342,9 @@ export const commands = {
   /** Read from the OS each time, not from echo.db — the registration is not ours. */
   getAutostart: () => invoke<boolean>("get_autostart"),
 
+  /** The logged-in account's given name, or null when the OS offers nothing usable. */
+  accountName: () => invoke<string | null>("account_name"),
+
   setAutostart: (enabled: boolean) =>
     invoke<void>("set_autostart", { enabled }),
 

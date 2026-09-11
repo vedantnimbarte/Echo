@@ -114,7 +114,7 @@ describe("every settings page", () => {
 describe("the other panels", () => {
   it.each([
     ["dictionary", <DictionaryPanel key="d" />],
-    ["dictation", <HistoryPanel key="h" />],
+    ["dictation", <HistoryPanel key="h" onOpenInsights={() => undefined} />],
     ["insights", <InsightsPanel key="i" />],
     ["plugins", <PluginsPanel key="p" />],
   ])("renders without throwing: %s", async (_name, ui) => {
