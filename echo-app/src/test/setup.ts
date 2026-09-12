@@ -60,6 +60,14 @@ export const ANSWERS: Record<string, unknown> = {
   list_profiles: [],
   list_wake_words: [],
   get_egress_log: [],
+  // Every one of these returns a Vec on the Rust side, so it is never null.
+  // Left out of the fake they came back as one, and the component that mapped
+  // over it threw — after `waitFor` had already seen the first paint, so the
+  // render tests went green while the panel was dying behind them.
+  retry_targets: [],
+  list_app_profiles: [],
+  installed_packs: [],
+  supported_import_formats: ["wav", "mp3", "m4a"],
   get_egress_status: { offline_capable: true, hosts: [] },
   get_telemetry_summary: [],
   get_dictation_stats: null,
