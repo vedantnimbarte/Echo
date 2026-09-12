@@ -97,11 +97,10 @@ pub async fn verify(path: &Path, expected: &str) -> Result<()> {
 
     // Reuses the plugin fingerprinter rather than hashing a second way: one
     // implementation means the two cannot disagree about what a digest is.
-    let actual = tokio::task::spawn_blocking(move || {
-        crate::core::plugins::integrity::fingerprint(&owned)
-    })
-    .await
-    .map_err(|e| EchoError::Config(format!("checksum task failed: {e}")))??;
+    let actual =
+        tokio::task::spawn_blocking(move || crate::core::plugins::integrity::fingerprint(&owned))
+            .await
+            .map_err(|e| EchoError::Config(format!("checksum task failed: {e}")))??;
 
     if actual == expected {
         return Ok(());
@@ -196,8 +195,7 @@ mod tests {
 
     /// SHA-256 of "echo", so the expectation here is not produced by the same
     /// code being tested.
-    const ECHO_DIGEST: &str =
-        "6e8f3df94f9e0e3b0c2e1f5e2a6a6a0e4c1a8e5e3b4d7e9f0a1b2c3d4e5f6a7b";
+    const ECHO_DIGEST: &str = "6e8f3df94f9e0e3b0c2e1f5e2a6a6a0e4c1a8e5e3b4d7e9f0a1b2c3d4e5f6a7b";
 
     fn scratch(name: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!("echo-verify-{}-{name}", std::process::id()))
@@ -231,7 +229,9 @@ mod tests {
         std::fs::write(&path, b"the bytes we expected").expect("write");
 
         let digest = crate::core::plugins::integrity::fingerprint(&path).expect("hash");
-        verify(&path, &digest).await.expect("matching digest should pass");
+        verify(&path, &digest)
+            .await
+            .expect("matching digest should pass");
         verify(&path, &digest.to_uppercase())
             .await
             .expect("uppercase digest should also pass");
@@ -254,7 +254,9 @@ mod tests {
         ));
 
         let brief = Duration::from_millis(50);
-        let first = next_chunk_within(&mut stalled, brief).await.expect("first chunk");
+        let first = next_chunk_within(&mut stalled, brief)
+            .await
+            .expect("first chunk");
         assert_eq!(first, Some(vec![1, 2, 3]));
 
         let err = next_chunk_within(&mut stalled, brief)

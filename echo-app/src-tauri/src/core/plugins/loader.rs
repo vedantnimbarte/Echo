@@ -52,9 +52,7 @@ impl PluginLoader {
                 .map_err(|e| EchoError::Plugin(format!("Missing echo_plugin_create: {e}")))?;
             let raw = create();
             if raw.is_null() {
-                return Err(EchoError::Plugin(
-                    "echo_plugin_create returned null".into(),
-                ));
+                return Err(EchoError::Plugin("echo_plugin_create returned null".into()));
             }
             *Box::from_raw(raw)
         };

@@ -200,7 +200,11 @@ pub fn diagnostics(state: State<'_, AppState>) -> String {
         if gpu.active { "on" } else { "off" },
         gpu.detected,
         gpu.threads,
-        if gpu.failed { ", latched to CPU after a failure" } else { "" }
+        if gpu.failed {
+            ", latched to CPU after a failure"
+        } else {
+            ""
+        }
     ));
     out.push_str(&format!(
         "Session: {:?}{}, hotkey {}\n",
@@ -209,7 +213,11 @@ pub fn diagnostics(state: State<'_, AppState>) -> String {
             .desktop
             .map(|d| format!(" / {d}"))
             .unwrap_or_default(),
-        if hotkey.can_bind { "bindable" } else { "NOT bindable" }
+        if hotkey.can_bind {
+            "bindable"
+        } else {
+            "NOT bindable"
+        }
     ));
     out
 }

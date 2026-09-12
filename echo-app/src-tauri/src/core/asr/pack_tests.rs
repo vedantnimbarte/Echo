@@ -100,7 +100,11 @@ async fn a_cublas_pack_installs_and_falls_back_when_it_cannot_run() {
 
     mgr.mark_gpu_failed();
 
-    assert_eq!(mgr.active_gpu_pack(), None, "still offering the failed pack");
+    assert_eq!(
+        mgr.active_gpu_pack(),
+        None,
+        "still offering the failed pack"
+    );
     let cpu_cli = mgr.resolve().expect("no CLI at all after the fallback");
     assert!(
         !cpu_cli.starts_with(mgr.pack_dir(PACK)),

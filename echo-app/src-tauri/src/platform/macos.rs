@@ -53,8 +53,10 @@ impl TextInjector for MacosInjector {
         for ch in text.chars() {
             if ch == '\n' {
                 for down in [true, false] {
-                    let ev = CGEvent::new_keyboard_event(source.clone(), 36, down)
-                        .map_err(|_| EchoError::Injection("Failed to create return event".into()))?;
+                    let ev =
+                        CGEvent::new_keyboard_event(source.clone(), 36, down).map_err(|_| {
+                            EchoError::Injection("Failed to create return event".into())
+                        })?;
                     ev.post(CGEventTapLocation::HID);
                 }
                 continue;

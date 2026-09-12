@@ -201,7 +201,11 @@ mod tests {
         // A duplicate id would silently shadow a provider in `find`, and the
         // keychain would hand both rows the same key.
         let ids: HashSet<_> = PROVIDERS.iter().map(|p| p.id).collect();
-        assert_eq!(ids.len(), PROVIDERS.len(), "duplicate provider id in catalog");
+        assert_eq!(
+            ids.len(),
+            PROVIDERS.len(),
+            "duplicate provider id in catalog"
+        );
     }
 
     #[test]
@@ -209,7 +213,10 @@ mod tests {
         for spec in PROVIDERS {
             assert!(find(spec.id).is_some(), "{} is not findable", spec.id);
         }
-        assert!(find("local").is_none(), "local is an engine, not a cloud provider");
+        assert!(
+            find("local").is_none(),
+            "local is an engine, not a cloud provider"
+        );
         assert!(find("none").is_none());
     }
 
@@ -232,7 +239,10 @@ mod tests {
         // Existing users have no stored model, so they resolve to models[0].
         // Reordering these silently changes what they get mid-sentence.
         assert_eq!(find("openai").unwrap().default_model(), Some("whisper-1"));
-        assert_eq!(find("groq").unwrap().default_model(), Some("whisper-large-v3"));
+        assert_eq!(
+            find("groq").unwrap().default_model(),
+            Some("whisper-large-v3")
+        );
         assert_eq!(find("deepgram").unwrap().default_model(), Some("nova-2"));
     }
 

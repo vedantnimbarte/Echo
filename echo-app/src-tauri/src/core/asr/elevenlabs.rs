@@ -117,7 +117,9 @@ mod tests {
     fn a_transcript_is_read_out_of_the_scribe_shape() {
         // `language_code`, not `language` — the field name is the whole reason
         // this provider is not the OpenAI one.
-        let seg = parse(r#"{"text":"  hello there  ","language_code":"eng","language_probability":0.98}"#);
+        let seg = parse(
+            r#"{"text":"  hello there  ","language_code":"eng","language_probability":0.98}"#,
+        );
         assert_eq!(seg.text, "hello there");
         assert_eq!(seg.language.as_deref(), Some("eng"));
         assert_eq!(seg.confidence, Some(0.98));

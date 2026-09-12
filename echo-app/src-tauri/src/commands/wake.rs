@@ -203,8 +203,8 @@ async fn start_wake_dictation(app: AppHandle) {
             watchdog.unlisten(handler);
         }
         let state = watchdog.state::<AppState>();
-        if let Err(e) = crate::commands::recording::end_recording(watchdog.clone(), state.inner())
-            .await
+        if let Err(e) =
+            crate::commands::recording::end_recording(watchdog.clone(), state.inner()).await
         {
             warn!("Failed to stop wake dictation: {e}");
         }

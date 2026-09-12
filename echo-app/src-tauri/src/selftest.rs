@@ -202,7 +202,10 @@ fn check_database(state: &AppState, report: &mut Report) {
             format!("settings round-trip, {} tables present", expected.len()),
         );
     } else {
-        report.fail("database", format!("missing tables: {}", missing.join(", ")));
+        report.fail(
+            "database",
+            format!("missing tables: {}", missing.join(", ")),
+        );
     }
 }
 
@@ -247,7 +250,10 @@ async fn check_pipeline(report: &mut Report) {
     );
 
     // A hang here is a real failure mode, not a reason to wait forever.
-    if tokio::time::timeout(Duration::from_secs(10), gate).await.is_err() {
+    if tokio::time::timeout(Duration::from_secs(10), gate)
+        .await
+        .is_err()
+    {
         report.fail("vad", "the VAD stage did not finish within 10s");
         return;
     }
@@ -267,7 +273,10 @@ async fn check_pipeline(report: &mut Report) {
     } else if sentinels == 0 {
         report.fail("vad", "the utterance was never closed (no end sentinel)");
     } else if started.get() == 0 {
-        report.fail("vad", "speech-started never fired, so the UI would not react");
+        report.fail(
+            "vad",
+            "speech-started never fired, so the UI would not react",
+        );
     } else if ended.get() == 0 {
         // Without this the pill sticks on "listening" and the transcript is
         // only flushed when recording stops entirely.
@@ -319,7 +328,10 @@ async fn check_dictionary(state: &AppState, report: &mut Report) {
 
     // And the user's own entries, which is what will actually run.
     let live = state.dictionary.read().await;
-    let entries = live.prompt_terms(None).map(|p| p.split(", ").count()).unwrap_or(0);
+    let entries = live
+        .prompt_terms(None)
+        .map(|p| p.split(", ").count())
+        .unwrap_or(0);
     let sample = live.process_for("\u{130} a routine transcript", None);
     drop(live);
 
@@ -354,7 +366,11 @@ fn check_delivery(state: &AppState, report: &mut Report) {
             "{} injection, auto-inject {}, settle {}ms (not exercised)",
             // Reported for a representative short transcript, since "auto"
             // has no single answer without one.
-            if delivery.use_paste("a sample transcript") { "paste" } else { "keystroke" },
+            if delivery.use_paste("a sample transcript") {
+                "paste"
+            } else {
+                "keystroke"
+            },
             if delivery.auto_inject { "on" } else { "off" },
             delivery.settle_ms
         ),
@@ -406,7 +422,9 @@ async fn check_asr(state: &AppState, report: &mut Report) {
 
 /// A sine at `amp`, `samples` long at 16 kHz.
 fn tone(amp: f32, samples: usize) -> Vec<f32> {
-    (0..samples).map(|i| (i as f32 * 0.05).sin() * amp).collect()
+    (0..samples)
+        .map(|i| (i as f32 * 0.05).sin() * amp)
+        .collect()
 }
 
 #[cfg(test)]

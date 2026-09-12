@@ -60,7 +60,11 @@ impl FallbackProvider {
             return primary;
         }
         match local {
-            Some(local) => Arc::new(Self { primary, local, notify }),
+            Some(local) => Arc::new(Self {
+                primary,
+                local,
+                notify,
+            }),
             None => primary,
         }
     }
@@ -162,7 +166,11 @@ mod tests {
 
     fn stub(name: &'static str, fail: bool) -> (Arc<dyn AsrProvider>, Arc<AtomicUsize>) {
         let calls = Arc::new(AtomicUsize::new(0));
-        let p = Arc::new(Stub { name, fail, calls: calls.clone() });
+        let p = Arc::new(Stub {
+            name,
+            fail,
+            calls: calls.clone(),
+        });
         (p, calls)
     }
 
@@ -186,7 +194,10 @@ mod tests {
         let (local, local_calls) = stub("local", false);
 
         let provider = FallbackProvider::wrap(cloud, Some(local), None);
-        assert_eq!(provider.transcribe(vec![0.1; 16], None).await.unwrap().text, "openai");
+        assert_eq!(
+            provider.transcribe(vec![0.1; 16], None).await.unwrap().text,
+            "openai"
+        );
         assert_eq!(local_calls.load(Ordering::SeqCst), 0);
     }
 

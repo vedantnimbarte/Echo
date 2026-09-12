@@ -89,9 +89,8 @@ const EN_BREAKS: &[(&str, &str)] = &[
     ("tab key", "\t"),
 ];
 const EN_DETERMINERS: &[&str] = &[
-    "a", "an", "the", "this", "that", "these", "those", "one", "each", "every",
-    "any", "some", "no", "another", "my", "your", "our", "their", "his", "her",
-    "its", "which", "what", "whose",
+    "a", "an", "the", "this", "that", "these", "those", "one", "each", "every", "any", "some",
+    "no", "another", "my", "your", "our", "their", "his", "her", "its", "which", "what", "whose",
 ];
 
 const ES_MARKS: &[(&str, &str)] = &[
@@ -110,14 +109,30 @@ const ES_MARKS: &[(&str, &str)] = &[
     ("guion", "-"),
     ("raya", "\u{2014}"),
 ];
-const ES_BREAKS: &[(&str, &str)] = &[
-    ("nueva linea", "\n"),
-    ("nuevo parrafo", "\n\n"),
-];
+const ES_BREAKS: &[(&str, &str)] = &[("nueva linea", "\n"), ("nuevo parrafo", "\n\n")];
 const ES_DETERMINERS: &[&str] = &[
-    "el", "la", "los", "las", "un", "una", "unos", "unas", "este", "esta",
-    "esos", "ese", "esa", "mi", "tu", "su", "cada", "otro", "otra", "algun",
-    "cualquier", "ningun",
+    "el",
+    "la",
+    "los",
+    "las",
+    "un",
+    "una",
+    "unos",
+    "unas",
+    "este",
+    "esta",
+    "esos",
+    "ese",
+    "esa",
+    "mi",
+    "tu",
+    "su",
+    "cada",
+    "otro",
+    "otra",
+    "algun",
+    "cualquier",
+    "ningun",
 ];
 
 const FR_MARKS: &[(&str, &str)] = &[
@@ -135,14 +150,10 @@ const FR_MARKS: &[(&str, &str)] = &[
     ("trait d'union", "-"),
     ("tiret", "\u{2014}"),
 ];
-const FR_BREAKS: &[(&str, &str)] = &[
-    ("nouvelle ligne", "\n"),
-    ("nouveau paragraphe", "\n\n"),
-];
+const FR_BREAKS: &[(&str, &str)] = &[("nouvelle ligne", "\n"), ("nouveau paragraphe", "\n\n")];
 const FR_DETERMINERS: &[&str] = &[
-    "le", "la", "les", "un", "une", "des", "du", "ce", "cet", "cette", "ces",
-    "mon", "ma", "mes", "ton", "ta", "son", "sa", "chaque", "quel", "quelle",
-    "aucun", "certain",
+    "le", "la", "les", "un", "une", "des", "du", "ce", "cet", "cette", "ces", "mon", "ma", "mes",
+    "ton", "ta", "son", "sa", "chaque", "quel", "quelle", "aucun", "certain",
 ];
 
 const DE_MARKS: &[(&str, &str)] = &[
@@ -158,14 +169,11 @@ const DE_MARKS: &[(&str, &str)] = &[
     ("bindestrich", "-"),
     ("gedankenstrich", "\u{2014}"),
 ];
-const DE_BREAKS: &[(&str, &str)] = &[
-    ("neue zeile", "\n"),
-    ("neuer absatz", "\n\n"),
-];
+const DE_BREAKS: &[(&str, &str)] = &[("neue zeile", "\n"), ("neuer absatz", "\n\n")];
 const DE_DETERMINERS: &[&str] = &[
-    "der", "die", "das", "den", "dem", "des", "ein", "eine", "einen", "einem",
-    "einer", "eines", "dieser", "diese", "dieses", "jeder", "jede", "jedes",
-    "mein", "dein", "sein", "ihr", "kein", "keine",
+    "der", "die", "das", "den", "dem", "des", "ein", "eine", "einen", "einem", "einer", "eines",
+    "dieser", "diese", "dieses", "jeder", "jede", "jedes", "mein", "dein", "sein", "ihr", "kein",
+    "keine",
 ];
 
 const IT_MARKS: &[(&str, &str)] = &[
@@ -183,8 +191,8 @@ const IT_MARKS: &[(&str, &str)] = &[
 ];
 const IT_BREAKS: &[(&str, &str)] = &[("a capo", "\n"), ("nuovo paragrafo", "\n\n")];
 const IT_DETERMINERS: &[&str] = &[
-    "il", "lo", "la", "i", "gli", "le", "un", "uno", "una", "questo", "questa",
-    "quel", "quella", "ogni", "mio", "tuo", "suo", "nessun", "qualche",
+    "il", "lo", "la", "i", "gli", "le", "un", "uno", "una", "questo", "questa", "quel", "quella",
+    "ogni", "mio", "tuo", "suo", "nessun", "qualche",
 ];
 
 const PT_MARKS: &[(&str, &str)] = &[
@@ -201,14 +209,10 @@ const PT_MARKS: &[(&str, &str)] = &[
     ("hifen", "-"),
     ("travessao", "\u{2014}"),
 ];
-const PT_BREAKS: &[(&str, &str)] = &[
-    ("nova linha", "\n"),
-    ("novo paragrafo", "\n\n"),
-];
+const PT_BREAKS: &[(&str, &str)] = &[("nova linha", "\n"), ("novo paragrafo", "\n\n")];
 const PT_DETERMINERS: &[&str] = &[
-    "o", "a", "os", "as", "um", "uma", "uns", "umas", "este", "esta", "esse",
-    "essa", "cada", "meu", "minha", "seu", "sua", "outro", "outra", "algum",
-    "nenhum", "qualquer",
+    "o", "a", "os", "as", "um", "uma", "uns", "umas", "este", "esta", "esse", "essa", "cada",
+    "meu", "minha", "seu", "sua", "outro", "outra", "algum", "nenhum", "qualquer",
 ];
 
 const NL_MARKS: &[(&str, &str)] = &[
@@ -224,13 +228,10 @@ const NL_MARKS: &[(&str, &str)] = &[
     ("koppelteken", "-"),
     ("gedachtestreepje", "\u{2014}"),
 ];
-const NL_BREAKS: &[(&str, &str)] = &[
-    ("nieuwe regel", "\n"),
-    ("nieuwe alinea", "\n\n"),
-];
+const NL_BREAKS: &[(&str, &str)] = &[("nieuwe regel", "\n"), ("nieuwe alinea", "\n\n")];
 const NL_DETERMINERS: &[&str] = &[
-    "de", "het", "een", "deze", "dit", "die", "dat", "elke", "elk", "ieder",
-    "mijn", "jouw", "zijn", "haar", "hun", "geen", "sommige",
+    "de", "het", "een", "deze", "dit", "die", "dat", "elke", "elk", "ieder", "mijn", "jouw",
+    "zijn", "haar", "hun", "geen", "sommige",
 ];
 
 /// Which languages have rules, keyed by the code the decoder reports.
@@ -241,13 +242,69 @@ const NL_DETERMINERS: &[&str] = &[
 /// a wrong determiner list silently mangles text on every utterance. Adding one
 /// is a table and its tests, and nothing else.
 const RULES: &[(&str, Rules)] = &[
-    ("en", Rules { marks: EN_MARKS, breaks: EN_BREAKS, determiners: EN_DETERMINERS, genitive: "of" }),
-    ("es", Rules { marks: ES_MARKS, breaks: ES_BREAKS, determiners: ES_DETERMINERS, genitive: "de" }),
-    ("fr", Rules { marks: FR_MARKS, breaks: FR_BREAKS, determiners: FR_DETERMINERS, genitive: "de" }),
-    ("de", Rules { marks: DE_MARKS, breaks: DE_BREAKS, determiners: DE_DETERMINERS, genitive: "" }),
-    ("it", Rules { marks: IT_MARKS, breaks: IT_BREAKS, determiners: IT_DETERMINERS, genitive: "di" }),
-    ("pt", Rules { marks: PT_MARKS, breaks: PT_BREAKS, determiners: PT_DETERMINERS, genitive: "de" }),
-    ("nl", Rules { marks: NL_MARKS, breaks: NL_BREAKS, determiners: NL_DETERMINERS, genitive: "van" }),
+    (
+        "en",
+        Rules {
+            marks: EN_MARKS,
+            breaks: EN_BREAKS,
+            determiners: EN_DETERMINERS,
+            genitive: "of",
+        },
+    ),
+    (
+        "es",
+        Rules {
+            marks: ES_MARKS,
+            breaks: ES_BREAKS,
+            determiners: ES_DETERMINERS,
+            genitive: "de",
+        },
+    ),
+    (
+        "fr",
+        Rules {
+            marks: FR_MARKS,
+            breaks: FR_BREAKS,
+            determiners: FR_DETERMINERS,
+            genitive: "de",
+        },
+    ),
+    (
+        "de",
+        Rules {
+            marks: DE_MARKS,
+            breaks: DE_BREAKS,
+            determiners: DE_DETERMINERS,
+            genitive: "",
+        },
+    ),
+    (
+        "it",
+        Rules {
+            marks: IT_MARKS,
+            breaks: IT_BREAKS,
+            determiners: IT_DETERMINERS,
+            genitive: "di",
+        },
+    ),
+    (
+        "pt",
+        Rules {
+            marks: PT_MARKS,
+            breaks: PT_BREAKS,
+            determiners: PT_DETERMINERS,
+            genitive: "de",
+        },
+    ),
+    (
+        "nl",
+        Rules {
+            marks: NL_MARKS,
+            breaks: NL_BREAKS,
+            determiners: NL_DETERMINERS,
+            genitive: "van",
+        },
+    ),
 ];
 
 /// Language codes with spoken-punctuation rules, for the settings screen.
@@ -366,9 +423,7 @@ fn is_command(rules: &Rules, keys: &[String], i: usize, len: usize) -> bool {
     if i > 0 && rules.determiners.contains(&keys[i - 1].as_str()) {
         return false;
     }
-    if !rules.genitive.is_empty()
-        && keys.get(i + len).map(String::as_str) == Some(rules.genitive)
-    {
+    if !rules.genitive.is_empty() && keys.get(i + len).map(String::as_str) == Some(rules.genitive) {
         return false;
     }
     true
@@ -511,7 +566,10 @@ mod tests {
     #[test]
     fn each_language_guards_with_its_own_determiners() {
         assert_eq!(apply("el punto es claro", Some("es")), "el punto es claro");
-        assert_eq!(apply("le point est clair", Some("fr")), "le point est clair");
+        assert_eq!(
+            apply("le point est clair", Some("fr")),
+            "le point est clair"
+        );
         assert_eq!(apply("punto de partida", Some("es")), "punto de partida");
     }
 
@@ -579,7 +637,10 @@ mod tests {
         let listed = supported_languages();
         assert_eq!(listed.len(), RULES.len());
         for code in listed {
-            assert!(rules_for(Some(code)).is_some(), "{code} is listed but has no rules");
+            assert!(
+                rules_for(Some(code)).is_some(),
+                "{code} is listed but has no rules"
+            );
         }
     }
 }

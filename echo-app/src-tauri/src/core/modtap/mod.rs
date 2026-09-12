@@ -90,7 +90,9 @@ impl ModTapWatcher {
         let flag = stop.clone();
 
         std::thread::spawn(move || {
-            let Some(reader) = KeyReader::open(key) else { return };
+            let Some(reader) = KeyReader::open(key) else {
+                return;
+            };
             let mut state = TapState::default();
 
             while !flag.load(Ordering::Relaxed) {
@@ -288,7 +290,11 @@ mod windows_key_reading {
                 ki: KEYBDINPUT {
                     wVk: VIRTUAL_KEY(0x11), // VK_CONTROL
                     wScan: 0,
-                    dwFlags: if up { KEYEVENTF_KEYUP } else { Default::default() },
+                    dwFlags: if up {
+                        KEYEVENTF_KEYUP
+                    } else {
+                        Default::default()
+                    },
                     time: 0,
                     dwExtraInfo: 0,
                 },

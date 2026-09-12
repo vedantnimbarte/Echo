@@ -277,7 +277,13 @@ async fn run_retain(input: Vec<Vec<f32>>) -> (Vec<Vec<f32>>, Option<Retained>) {
 /// boundary sentinels, still arrives unchanged and in order.
 #[tokio::test]
 async fn retaining_audio_does_not_disturb_the_stream() {
-    let input = vec![vec![0.1; 4], vec![0.2; 4], Vec::new(), vec![0.3; 4], Vec::new()];
+    let input = vec![
+        vec![0.1; 4],
+        vec![0.2; 4],
+        Vec::new(),
+        vec![0.3; 4],
+        Vec::new(),
+    ];
     let (forwarded, _) = run_retain(input.clone()).await;
     assert_eq!(forwarded, input);
 }
@@ -400,7 +406,10 @@ fn delivery_falls_back_to_global_settings() {
     // Nothing configured at all: the documented defaults.
     let d = resolve_delivery(&conn, None);
     assert!(d.auto_inject, "auto-insert defaults on");
-    assert!(!d.use_paste("some text"), "typing is the default insert method");
+    assert!(
+        !d.use_paste("some text"),
+        "typing is the default insert method"
+    );
     assert!(d.record_history, "history defaults on");
     assert_eq!(d.dictionary_profile, None);
 
@@ -523,7 +532,9 @@ async fn pipeline_delivers_dictionary_corrected_text_to_the_focused_app() {
     drop(audio_tx);
 
     let manager = AsrManager::new("fake".into());
-    manager.register(Arc::new(FakeAsr::new(&["echo app is listening"]))).await;
+    manager
+        .register(Arc::new(FakeAsr::new(&["echo app is listening"])))
+        .await;
 
     tokio::spawn(async move {
         vad_gate(
@@ -534,7 +545,10 @@ async fn pipeline_delivers_dictionary_corrected_text_to_the_focused_app() {
         )
         .await;
     });
-    manager.transcribe_stream(vad_rx, text_tx, None).await.unwrap();
+    manager
+        .transcribe_stream(vad_rx, text_tx, None)
+        .await
+        .unwrap();
 
     // The delivery half of `begin_recording`'s transcript loop.
     while let Some(segment) = text_rx.recv().await {
@@ -644,7 +658,10 @@ fn retention_removes_only_transcripts_past_the_window() {
     insert("last year", 365);
 
     let removed = crate::storage::repositories::trim_history_older_than(&conn, 30).unwrap();
-    assert_eq!(removed, 1, "only the year-old transcript is past a 30-day window");
+    assert_eq!(
+        removed, 1,
+        "only the year-old transcript is past a 30-day window"
+    );
 
     let kept: Vec<String> = crate::storage::repositories::list_history(&conn, 100)
         .unwrap()
@@ -675,7 +692,9 @@ fn retention_of_zero_or_less_keeps_all_history() {
         );
     }
     assert_eq!(
-        crate::storage::repositories::list_history(&conn, 100).unwrap().len(),
+        crate::storage::repositories::list_history(&conn, 100)
+            .unwrap()
+            .len(),
         1
     );
 }

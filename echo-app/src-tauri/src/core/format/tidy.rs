@@ -151,7 +151,10 @@ mod tests {
     /// A capital inside a sentence is the speaker's, not ours to change.
     #[test]
     fn existing_capitals_are_left_alone() {
-        assert_eq!(en("we deployed Kubernetes today"), "We deployed Kubernetes today");
+        assert_eq!(
+            en("we deployed Kubernetes today"),
+            "We deployed Kubernetes today"
+        );
     }
 
     /// A decimal point is not a sentence ender in practice — but it does set

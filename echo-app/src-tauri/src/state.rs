@@ -5,18 +5,10 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::RwLock;
 
 use crate::core::{
-    asr::binary_manager::BinaryManager,
-    asr::manager::AsrManager,
-    asr::model_manager::ModelManager,
-    asr::whisper_server::WhisperServer,
-    audio::AudioService,
-    dictionary::DictionaryEngine,
-    injection::TextInjector,
-    modtap::ModTapWatcher,
-    plugins::loader::PluginLoader,
-    telemetry::TelemetryService,
-    vad::SileroModel,
-    wake::WakeModelManager,
+    asr::binary_manager::BinaryManager, asr::manager::AsrManager, asr::model_manager::ModelManager,
+    asr::whisper_server::WhisperServer, audio::AudioService, dictionary::DictionaryEngine,
+    injection::TextInjector, modtap::ModTapWatcher, plugins::loader::PluginLoader,
+    telemetry::TelemetryService, vad::SileroModel, wake::WakeModelManager,
 };
 
 /// Shared application state — stored in Tauri's managed state.

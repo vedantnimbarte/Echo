@@ -53,9 +53,9 @@ const LEGITIMATE_DOUBLES: &[&str] = &["had", "that", "is", "was", "will"];
 /// repeat is meaningless.
 fn is_collapsible(word: &str) -> bool {
     const FUNCTION_WORDS: &[&str] = &[
-        "the", "a", "an", "and", "or", "but", "to", "of", "in", "on", "at",
-        "for", "with", "from", "by", "as", "if", "it", "i", "we", "you", "he",
-        "she", "they", "this", "there", "then", "so",
+        "the", "a", "an", "and", "or", "but", "to", "of", "in", "on", "at", "for", "with", "from",
+        "by", "as", "if", "it", "i", "we", "you", "he", "she", "they", "this", "there", "then",
+        "so",
     ];
     FUNCTION_WORDS.contains(&word) && !LEGITIMATE_DOUBLES.contains(&word)
 }
@@ -142,8 +142,14 @@ mod tests {
     #[test]
     fn legitimate_doubles_survive() {
         assert_eq!(apply("I had had enough"), "I had had enough");
-        assert_eq!(apply("the rule that that covers it"), "the rule that that covers it");
-        assert_eq!(apply("what it is is complicated"), "what it is is complicated");
+        assert_eq!(
+            apply("the rule that that covers it"),
+            "the rule that that covers it"
+        );
+        assert_eq!(
+            apply("what it is is complicated"),
+            "what it is is complicated"
+        );
     }
 
     /// Repeating a content word is emphasis the speaker chose.
@@ -165,10 +171,7 @@ mod tests {
     /// is ordinary English.
     #[test]
     fn a_word_used_twice_in_a_sentence_is_left_alone() {
-        assert_eq!(
-            apply("the cat sat on the mat"),
-            "the cat sat on the mat"
-        );
+        assert_eq!(apply("the cat sat on the mat"), "the cat sat on the mat");
     }
 
     #[test]

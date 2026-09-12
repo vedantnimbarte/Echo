@@ -182,7 +182,11 @@ mod tests {
         );
         assert_eq!(seg.text, "hello there how are you");
         // Averaged, not compared exactly: (0.9 + 0.7) / 2 is 0.79999995 in f32.
-        assert!((seg.confidence.unwrap() - 0.8).abs() < 1e-6, "{:?}", seg.confidence);
+        assert!(
+            (seg.confidence.unwrap() - 0.8).abs() < 1e-6,
+            "{:?}",
+            seg.confidence
+        );
     }
 
     #[test]
@@ -220,7 +224,11 @@ mod tests {
     async fn audio_past_the_sixty_second_cap_is_refused_before_it_is_uploaded() {
         // Google would otherwise truncate and return a confident partial
         // sentence, which reads as a complete one.
-        let p = GoogleSttProvider::new("https://speech.googleapis.com/v1", "latest_short", "k".into());
+        let p = GoogleSttProvider::new(
+            "https://speech.googleapis.com/v1",
+            "latest_short",
+            "k".into(),
+        );
         let too_long = vec![0.0f32; (MAX_SECONDS + 1) * SAMPLE_RATE];
         let err = p.transcribe(too_long, Some("en")).await;
         assert!(err.is_err());
@@ -230,6 +238,9 @@ mod tests {
     #[test]
     fn the_endpoint_is_built_from_the_configured_base() {
         let p = GoogleSttProvider::new("https://speech.googleapis.com/v1/", "default", "k".into());
-        assert_eq!(p.endpoint, "https://speech.googleapis.com/v1/speech:recognize");
+        assert_eq!(
+            p.endpoint,
+            "https://speech.googleapis.com/v1/speech:recognize"
+        );
     }
 }

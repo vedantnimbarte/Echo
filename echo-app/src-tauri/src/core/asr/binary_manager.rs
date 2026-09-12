@@ -405,8 +405,7 @@ impl BinaryManager {
 /// so the binaries and their DLLs land side by side.
 fn extract_zip_flat(zip_path: &Path, dest: &Path) -> Result<()> {
     let file = std::fs::File::open(zip_path).map_err(|e| EchoError::Config(e.to_string()))?;
-    let mut archive =
-        zip::ZipArchive::new(file).map_err(|e| EchoError::Config(e.to_string()))?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| EchoError::Config(e.to_string()))?;
 
     for i in 0..archive.len() {
         let mut entry = archive
@@ -415,7 +414,10 @@ fn extract_zip_flat(zip_path: &Path, dest: &Path) -> Result<()> {
         if entry.is_dir() {
             continue;
         }
-        let name = match entry.enclosed_name().and_then(|p| p.file_name().map(|n| n.to_owned())) {
+        let name = match entry
+            .enclosed_name()
+            .and_then(|p| p.file_name().map(|n| n.to_owned()))
+        {
             Some(n) => n,
             None => continue,
         };
@@ -542,9 +544,18 @@ mod tests {
 
     #[test]
     fn gpu_backends_map_to_the_right_pack() {
-        assert_eq!(Pack::for_gpu(GpuBackend::Cuda { major: 12 }), Some(Pack::Cuda12));
-        assert_eq!(Pack::for_gpu(GpuBackend::Cuda { major: 13 }), Some(Pack::Cuda12));
-        assert_eq!(Pack::for_gpu(GpuBackend::Cuda { major: 11 }), Some(Pack::Cuda11));
+        assert_eq!(
+            Pack::for_gpu(GpuBackend::Cuda { major: 12 }),
+            Some(Pack::Cuda12)
+        );
+        assert_eq!(
+            Pack::for_gpu(GpuBackend::Cuda { major: 13 }),
+            Some(Pack::Cuda12)
+        );
+        assert_eq!(
+            Pack::for_gpu(GpuBackend::Cuda { major: 11 }),
+            Some(Pack::Cuda11)
+        );
         // Metal needs no pack, and a CUDA 10 driver has no build we can offer.
         assert_eq!(Pack::for_gpu(GpuBackend::Metal), None);
         assert_eq!(Pack::for_gpu(GpuBackend::Cuda { major: 10 }), None);

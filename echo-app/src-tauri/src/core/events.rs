@@ -6,13 +6,30 @@ use serde::{Deserialize, Serialize};
 pub enum AppEvent {
     RecordingStarted,
     RecordingStopped,
-    TranscriptPartial { text: String },
-    TranscriptFinal { text: String, language: Option<String> },
-    DeviceChanged { device_name: String },
-    ErrorOccurred { message: String },
-    ModelDownloadProgress { name: String, progress: f32 },
-    ModelDownloadComplete { name: String },
-    WakeDetected { phrase: String, score: f32 },
+    TranscriptPartial {
+        text: String,
+    },
+    TranscriptFinal {
+        text: String,
+        language: Option<String>,
+    },
+    DeviceChanged {
+        device_name: String,
+    },
+    ErrorOccurred {
+        message: String,
+    },
+    ModelDownloadProgress {
+        name: String,
+        progress: f32,
+    },
+    ModelDownloadComplete {
+        name: String,
+    },
+    WakeDetected {
+        phrase: String,
+        score: f32,
+    },
 }
 
 impl AppEvent {

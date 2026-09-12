@@ -1,10 +1,6 @@
 use tauri::State;
 
-use crate::{
-    error::Result,
-    state::AppState,
-    storage::repositories,
-};
+use crate::{error::Result, state::AppState, storage::repositories};
 
 #[tauri::command]
 pub fn get_setting(state: State<'_, AppState>, key: String) -> Result<Option<String>> {

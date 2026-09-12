@@ -111,7 +111,11 @@ mod tests {
 
     #[test]
     fn args_carry_the_raised_thresholds() {
-        let args = DecodeConfig { threads: 4, use_gpu: true }.args();
+        let args = DecodeConfig {
+            threads: 4,
+            use_gpu: true,
+        }
+        .args();
         let joined = args.join(" ");
         assert!(joined.contains("-et 2.8"), "{joined}");
         assert!(joined.contains("-lpt -1.25"), "{joined}");
@@ -121,7 +125,11 @@ mod tests {
 
     #[test]
     fn cpu_only_config_disables_gpu() {
-        let args = DecodeConfig { threads: 2, use_gpu: false }.args();
+        let args = DecodeConfig {
+            threads: 2,
+            use_gpu: false,
+        }
+        .args();
         assert!(args.iter().any(|a| a == "-ng"), "{args:?}");
     }
 
@@ -141,7 +149,14 @@ mod tests {
     #[test]
     fn blank_or_broken_settings_fall_back_to_auto() {
         let auto = auto_threads();
-        for raw in [None, Some(""), Some("auto"), Some("many"), Some("0"), Some("-4")] {
+        for raw in [
+            None,
+            Some(""),
+            Some("auto"),
+            Some("many"),
+            Some("0"),
+            Some("-4"),
+        ] {
             assert_eq!(resolve_threads(raw), auto, "input {raw:?}");
         }
     }

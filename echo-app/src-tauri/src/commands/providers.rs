@@ -58,8 +58,8 @@ pub struct ProviderConfig {
 
 /// Resolve a provider's configuration: stored value, else catalog default.
 pub fn resolve_config(conn: &Connection, spec: &ProviderSpec) -> Result<ProviderConfig> {
-    let endpoint = stored(conn, spec.id, "endpoint")
-        .unwrap_or_else(|| spec.default_endpoint.to_string());
+    let endpoint =
+        stored(conn, spec.id, "endpoint").unwrap_or_else(|| spec.default_endpoint.to_string());
 
     if endpoint.is_empty() && !spec.needs_region {
         return Err(EchoError::Config(format!(
@@ -213,7 +213,9 @@ pub async fn set_provider_setting(
     value: String,
 ) -> Result<()> {
     if !matches!(field.as_str(), "model" | "endpoint" | "region") {
-        return Err(EchoError::Config(format!("Unknown provider field '{field}'")));
+        return Err(EchoError::Config(format!(
+            "Unknown provider field '{field}'"
+        )));
     }
     {
         let conn = state.db.lock().unwrap();
@@ -308,7 +310,10 @@ mod tests {
     fn the_custom_provider_refuses_to_run_without_an_endpoint() {
         let conn = memory_db();
         let spec = catalog::find("custom").unwrap();
-        assert!(resolve_config(&conn, spec).is_err(), "should demand an endpoint");
+        assert!(
+            resolve_config(&conn, spec).is_err(),
+            "should demand an endpoint"
+        );
 
         repositories::set_setting(&conn, "cloud_custom_endpoint", "http://localhost:8000/v1")
             .unwrap();

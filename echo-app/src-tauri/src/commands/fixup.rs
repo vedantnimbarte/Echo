@@ -92,9 +92,7 @@ pub async fn retry_last(app: AppHandle) -> Result<Option<String>> {
 
     let text = transcribe_again(&app, audio, language.as_deref()).await?;
     if text.trim().is_empty() {
-        return Err(EchoError::AsrProvider(
-            "The retry produced no text.".into(),
-        ));
+        return Err(EchoError::AsrProvider("The retry produced no text.".into()));
     }
 
     // Take back the first attempt before typing the second, so the two do not
@@ -187,8 +185,7 @@ async fn transcribe_again(
         Some(model) => model,
         None => largest_installed_model(app).ok_or_else(|| {
             EchoError::NotFound(
-                "No local Whisper model is installed to retry with. Pick one in Settings."
-                    .into(),
+                "No local Whisper model is installed to retry with. Pick one in Settings.".into(),
             )
         })?,
     };
@@ -287,7 +284,10 @@ mod tests {
         assert!(is_whisper_model("medium"));
         assert!(is_whisper_model("small.en"));
         for provider in ["openai", "groq", "deepgram"] {
-            assert!(!is_whisper_model(provider), "{provider} looked like a model");
+            assert!(
+                !is_whisper_model(provider),
+                "{provider} looked like a model"
+            );
         }
     }
 }

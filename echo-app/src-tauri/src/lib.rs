@@ -21,12 +21,8 @@ use tracing::info;
 use tracing_subscriber::EnvFilter;
 
 use core::{
-    asr::binary_manager::BinaryManager,
-    asr::manager::AsrManager,
-    asr::model_manager::ModelManager,
-    audio::AudioService,
-    dictionary::DictionaryEngine,
-    injection::platform_injector,
+    asr::binary_manager::BinaryManager, asr::manager::AsrManager, asr::model_manager::ModelManager,
+    audio::AudioService, dictionary::DictionaryEngine, injection::platform_injector,
 };
 use state::AppState;
 use storage::db;
@@ -58,9 +54,7 @@ fn log_panics() {
 fn init_tracing(data_dir: &std::path::Path) {
     use tracing_subscriber::fmt::writer::MakeWriterExt;
 
-    let filter = || {
-        EnvFilter::from_default_env().add_directive("echo=debug".parse().unwrap())
-    };
+    let filter = || EnvFilter::from_default_env().add_directive("echo=debug".parse().unwrap());
 
     // Best effort: if the log file can't be opened, stdout alone still works.
     let file = std::fs::OpenOptions::new()
@@ -342,16 +336,14 @@ pub fn run() {
                     match core::plugins::integrity::verify(&lib, row.lib_sha256.as_deref()) {
                         Ok(verdict) if !verdict.is_trusted() => {
                             tracing::error!("{}", verdict.refusal(&name));
-                            let _ =
-                                storage::repositories::set_plugin_enabled(&conn, &name, false);
+                            let _ = storage::repositories::set_plugin_enabled(&conn, &name, false);
                             continue;
                         }
                         Ok(core::plugins::integrity::Verdict::FirstSeen(hash)) => {
                             // Installed before fingerprints existed: adopt what
                             // is there now, and check it from here on.
-                            let _ = storage::repositories::set_plugin_fingerprint(
-                                &conn, &name, &hash,
-                            );
+                            let _ =
+                                storage::repositories::set_plugin_fingerprint(&conn, &name, &hash);
                         }
                         Ok(_) => {}
                         Err(e) => {
@@ -406,8 +398,7 @@ pub fn run() {
             // Drain the egress channel into the database. Requests are logged
             // fire-and-forget so a network call never waits on SQLite.
             {
-                let (tx, mut rx) =
-                    tokio::sync::mpsc::unbounded_channel::<core::egress::Egress>();
+                let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<core::egress::Egress>();
                 core::egress::init(tx);
 
                 let handle = app.handle().clone();
@@ -463,7 +454,10 @@ pub fn run() {
             // has still rescued the audio.
             match crate::core::spool::recover(&data_dir) {
                 Ok(Some(path)) => {
-                    tracing::warn!("Recovered audio from an interrupted session: {}", path.display())
+                    tracing::warn!(
+                        "Recovered audio from an interrupted session: {}",
+                        path.display()
+                    )
                 }
                 Ok(None) => {}
                 Err(e) => tracing::error!("Could not recover the interrupted session: {e}"),

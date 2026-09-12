@@ -49,8 +49,11 @@ pub async fn begin_recording(
         *recording = true;
     }
 
-    app.emit(AppEvent::RecordingStarted.event_name(), AppEvent::RecordingStarted)
-        .map_err(|e| EchoError::Plugin(e.to_string()))?;
+    app.emit(
+        AppEvent::RecordingStarted.event_name(),
+        AppEvent::RecordingStarted,
+    )
+    .map_err(|e| EchoError::Plugin(e.to_string()))?;
     info!("Recording started");
 
     let provider = state.asr.active_provider_name().await;
@@ -228,7 +231,10 @@ pub async fn begin_recording(
     asr.set_partials_wanted(stream_partials).await;
 
     tokio::spawn(async move {
-        if let Err(e) = asr.transcribe_stream(asr_rx, transcript_tx, lang.as_deref()).await {
+        if let Err(e) = asr
+            .transcribe_stream(asr_rx, transcript_tx, lang.as_deref())
+            .await
+        {
             error!("ASR stream error: {e}");
         }
     });
@@ -261,7 +267,8 @@ pub async fn begin_recording(
             .map(|v| v == "true")
             .unwrap_or(false)
     };
-    let command_key = if (command_cfg.enabled || auto_edit_llm) && command_cfg.provider == "openai" {
+    let command_key = if (command_cfg.enabled || auto_edit_llm) && command_cfg.provider == "openai"
+    {
         crate::storage::keychain::get_api_key("openai").unwrap_or(None)
     } else {
         None
@@ -283,11 +290,10 @@ pub async fn begin_recording(
                 // which dictionary entries apply, so resolve it now rather than
                 // at recording start — focus can move while you talk.
                 // The macOS/Linux lookups shell out, so keep them off the runtime.
-                let focused =
-                    tokio::task::spawn_blocking(crate::core::appcontext::foreground_app)
-                        .await
-                        .ok()
-                        .flatten();
+                let focused = tokio::task::spawn_blocking(crate::core::appcontext::foreground_app)
+                    .await
+                    .ok()
+                    .flatten();
 
                 let delivery = {
                     let state = app_clone.state::<AppState>();
@@ -316,7 +322,10 @@ pub async fn begin_recording(
                     }
                     tracing::warn!("Focused field is a password box; transcript discarded");
                     let _ = app_clone.emit(
-                        AppEvent::ErrorOccurred { message: String::new() }.event_name(),
+                        AppEvent::ErrorOccurred {
+                            message: String::new(),
+                        }
+                        .event_name(),
                         serde_json::json!({
                             "message": "That looked like a password field, so Echo didn't type \
                                         the transcript or keep it. Turn the guard off in \
@@ -336,12 +345,8 @@ pub async fn begin_recording(
                 // The decoder's own answer wins over the configured language:
                 // with auto-detect on, it is the only one that knows what was
                 // actually spoken.
-                let spoken = segment
-                    .language
-                    .as_deref()
-                    .or(lang_for_format.as_deref());
-                let processed =
-                    crate::core::format::apply(&corrected, delivery.format, spoken);
+                let spoken = segment.language.as_deref().or(lang_for_format.as_deref());
+                let processed = crate::core::format::apply(&corrected, delivery.format, spoken);
 
                 // "Scratch that" is a correction, not dictation: take back the
                 // last delivery instead of typing the words. Checked before
@@ -467,7 +472,11 @@ pub async fn begin_recording(
                     info!(
                         focused = focused.as_deref().unwrap_or("<unknown>"),
                         chars = to_inject.chars().count(),
-                        method = if delivery.use_paste(&to_inject) { "paste" } else { "keystrokes" },
+                        method = if delivery.use_paste(&to_inject) {
+                            "paste"
+                        } else {
+                            "keystrokes"
+                        },
                         settle_ms = delivery.settle_ms,
                         "Injecting transcript"
                     );
@@ -572,10 +581,7 @@ pub async fn begin_recording(
 }
 
 #[tauri::command]
-pub async fn stop_recording(
-    app: AppHandle,
-    state: State<'_, AppState>,
-) -> Result<()> {
+pub async fn stop_recording(app: AppHandle, state: State<'_, AppState>) -> Result<()> {
     end_recording(app, state.inner()).await
 }
 
@@ -616,8 +622,11 @@ pub async fn end_recording(app: AppHandle, state: &AppState) -> Result<()> {
         state.audio.stop_capture();
     }
 
-    app.emit(AppEvent::RecordingStopped.event_name(), AppEvent::RecordingStopped)
-        .map_err(|e| EchoError::Plugin(e.to_string()))?;
+    app.emit(
+        AppEvent::RecordingStopped.event_name(),
+        AppEvent::RecordingStopped,
+    )
+    .map_err(|e| EchoError::Plugin(e.to_string()))?;
     info!("Recording stopped");
 
     crate::commands::wake::rearm(&app);
@@ -724,7 +733,6 @@ fn word_edits(before: &str, after: &str) -> i64 {
     (changed + a.len().abs_diff(b.len())) as i64
 }
 
-
 /// Cap on retained audio: three minutes at 16 kHz mono f32, about 11.5 MB.
 ///
 /// Was thirty seconds, which is one breath — but an utterance ends at a pause,
@@ -824,7 +832,10 @@ fn rescue_to_clipboard(app: &AppHandle, text: &str, reason: &str) {
         Err(e) => format!("Couldn't type that ({reason}), and the clipboard refused it too: {e}"),
     };
     let _ = app.emit(
-        AppEvent::ErrorOccurred { message: String::new() }.event_name(),
+        AppEvent::ErrorOccurred {
+            message: String::new(),
+        }
+        .event_name(),
         serde_json::json!({ "message": message }),
     );
 }
@@ -864,10 +875,7 @@ pub(crate) struct Delivery {
 /// Global settings are the baseline; a matching per-app profile overrides only
 /// the fields it actually sets (a `NULL` column means "inherit"). With no
 /// focused app or no profile, this is exactly the old global behaviour.
-pub(crate) fn resolve_delivery(
-    conn: &rusqlite::Connection,
-    focused: Option<&str>,
-) -> Delivery {
+pub(crate) fn resolve_delivery(conn: &rusqlite::Connection, focused: Option<&str>) -> Delivery {
     use crate::storage::repositories as repo;
 
     let get = |key: &str| repo::get_setting(conn, key).unwrap_or(None);
@@ -890,7 +898,9 @@ pub(crate) fn resolve_delivery(
             // are ones nobody meant to write, so it costs no fidelity. The
             // LLM rewrite, which does change your words, is separate and off.
             cleanup: get("auto_edit").map(|v| v != "false").unwrap_or(true),
-            spoken_punctuation: get("spoken_punctuation").map(|v| v == "true").unwrap_or(false),
+            spoken_punctuation: get("spoken_punctuation")
+                .map(|v| v == "true")
+                .unwrap_or(false),
             numbers: get("format_numbers").map(|v| v != "false").unwrap_or(true),
             tidy: get("format_tidy").map(|v| v != "false").unwrap_or(true),
         },
@@ -939,7 +949,9 @@ fn command_config(state: &AppState) -> CommandConfig {
     };
 
     CommandConfig {
-        enabled: get("command_mode_enabled").map(|v| v == "true").unwrap_or(false),
+        enabled: get("command_mode_enabled")
+            .map(|v| v == "true")
+            .unwrap_or(false),
         prefix: get("command_prefix").unwrap_or(defaults.prefix),
         provider: get("command_llm_provider").unwrap_or(defaults.provider),
         model: get("command_llm_model").unwrap_or(defaults.model),
@@ -958,11 +970,10 @@ async fn run_command(
     // Reading the selection synthesizes a copy shortcut and touches the OS
     // clipboard, so it must not run on the async runtime.
     let inj = injector.clone();
-    let selection = tokio::task::spawn_blocking(move || {
-        crate::core::injection::copy_selection(inj.as_ref())
-    })
-    .await
-    .map_err(|e| EchoError::Injection(format!("selection task panicked: {e}")))??;
+    let selection =
+        tokio::task::spawn_blocking(move || crate::core::injection::copy_selection(inj.as_ref()))
+            .await
+            .map_err(|e| EchoError::Injection(format!("selection task panicked: {e}")))??;
 
     crate::core::command::run(cfg, api_key, instruction, selection.as_deref()).await
 }

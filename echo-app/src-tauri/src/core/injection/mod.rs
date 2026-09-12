@@ -297,7 +297,10 @@ fn is_unspaced_script(c: char) -> bool {
 /// restore from pretending otherwise.
 enum Saved {
     /// HTML with its plain-text alternative, so formatting survives the trip.
-    Html { html: String, text: String },
+    Html {
+        html: String,
+        text: String,
+    },
     Text(String),
     Image(arboard::ImageData<'static>),
     Files(Vec<std::path::PathBuf>),
@@ -358,7 +361,11 @@ impl Borrowed {
         let mut clipboard = arboard::Clipboard::new()
             .map_err(|e| EchoError::Injection(format!("clipboard unavailable: {e}")))?;
         let saved = snapshot(&mut clipboard);
-        Ok(Self { _lock: lock, clipboard, saved })
+        Ok(Self {
+            _lock: lock,
+            clipboard,
+            saved,
+        })
     }
 }
 
@@ -393,9 +400,10 @@ impl Drop for Borrowed {
         // something a finished dictation can be failed over, and `Drop` has
         // nowhere to report it to anyway.
         let _ = match &self.saved {
-            Saved::Html { html, text } => {
-                self.clipboard.set().html(html.as_str(), Some(text.as_str()))
-            }
+            Saved::Html { html, text } => self
+                .clipboard
+                .set()
+                .html(html.as_str(), Some(text.as_str())),
             Saved::Text(text) => self.clipboard.set_text(text.clone()),
             Saved::Image(image) => self.clipboard.set_image(image.clone()),
             Saved::Files(files) => self.clipboard.set().file_list(files),
@@ -465,10 +473,7 @@ pub fn copy_selection(inj: &dyn TextInjector) -> Result<Option<String>> {
 /// Read the clipboard until it stops being `sentinel`, or the budget runs out.
 /// `None` means nothing was copied — either no selection, or the app ignored
 /// the shortcut.
-fn poll_clipboard_change(
-    clipboard: &mut arboard::Clipboard,
-    sentinel: &str,
-) -> Option<String> {
+fn poll_clipboard_change(clipboard: &mut arboard::Clipboard, sentinel: &str) -> Option<String> {
     let step = std::time::Duration::from_millis(COPY_POLL_STEP_MS);
     let attempts = COPY_POLL_TIMEOUT_MS / COPY_POLL_STEP_MS;
 
@@ -555,18 +560,30 @@ mod tests {
     fn a_failed_shortcut_still_gives_the_clipboard_back() {
         const MINE: &str = "something the user copied themselves";
 
-        let Ok(mut cb) = arboard::Clipboard::new() else { return };
+        let Ok(mut cb) = arboard::Clipboard::new() else {
+            return;
+        };
         if cb.set_text(MINE.to_owned()).is_err() {
             return;
         }
         drop(cb);
 
         let pasted = paste_text(&FailingPaste, "a dictated sentence", 1);
-        assert!(pasted.is_err(), "a paste that could not be sent must be reported");
-        assert_eq!(current_text().as_deref(), Some(MINE), "a failed paste kept what it borrowed");
+        assert!(
+            pasted.is_err(),
+            "a paste that could not be sent must be reported"
+        );
+        assert_eq!(
+            current_text().as_deref(),
+            Some(MINE),
+            "a failed paste kept what it borrowed"
+        );
 
         let copied = copy_selection(&FailingPaste);
-        assert!(copied.is_err(), "a copy that could not be sent must be reported");
+        assert!(
+            copied.is_err(),
+            "a copy that could not be sent must be reported"
+        );
         let now = current_text().unwrap_or_default();
         assert!(
             !now.contains("echo-no-selection"),
@@ -587,13 +604,20 @@ mod tests {
     fn linux_text_is_separated_from_the_options() {
         for wayland in [false, true] {
             let (_, args) = linux_type_command(wayland, "-- as I was saying");
-            let sep = args.iter().position(|a| a == "--").expect("no -- separator");
+            let sep = args
+                .iter()
+                .position(|a| a == "--")
+                .expect("no -- separator");
             assert_eq!(
                 args.last().unwrap(),
                 "-- as I was saying",
                 "the text must survive verbatim"
             );
-            assert_eq!(sep, args.len() - 2, "-- must sit immediately before the text");
+            assert_eq!(
+                sep,
+                args.len() - 2,
+                "-- must sit immediately before the text"
+            );
         }
     }
 
@@ -681,7 +705,10 @@ mod tests {
         assert!(!args.iter().any(|a| a.starts_with("29:")), "ctrl was held");
 
         let (_, args) = linux_key_command(false, 14, "BackSpace", 3);
-        assert_eq!(args, vec!["key", "--clearmodifiers", "--repeat", "3", "BackSpace"]);
+        assert_eq!(
+            args,
+            vec!["key", "--clearmodifiers", "--repeat", "3", "BackSpace"]
+        );
     }
 
     /// The common case: a partial only grows, so nothing is deleted and only
@@ -735,10 +762,16 @@ mod tests {
         // A ZWJ family is one cluster however many code points build it.
         let family = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
         assert!(family.chars().count() > 1);
-        assert_eq!(partial_edit(&format!("hi {family}"), "hi "), (1, String::new()));
+        assert_eq!(
+            partial_edit(&format!("hi {family}"), "hi "),
+            (1, String::new())
+        );
 
         // A regional-indicator flag is two code points and one backspace.
-        assert_eq!(partial_edit("go \u{1F1EE}\u{1F1F3}", "go "), (1, String::new()));
+        assert_eq!(
+            partial_edit("go \u{1F1EE}\u{1F1F3}", "go "),
+            (1, String::new())
+        );
 
         // Growing by an emoji types it whole and deletes nothing.
         assert_eq!(

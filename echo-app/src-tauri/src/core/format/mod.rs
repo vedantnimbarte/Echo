@@ -107,7 +107,10 @@ mod tests {
     fn every_stage_off_returns_the_transcript_untouched() {
         let opts = FormatOptions::default();
         assert!(opts.is_noop());
-        assert_eq!(apply("as spoken, exactly", opts, None), "as spoken, exactly");
+        assert_eq!(
+            apply("as spoken, exactly", opts, None),
+            "as spoken, exactly"
+        );
     }
 
     /// The stages compose in one pass: a spoken mark introduced by stage 1 is
@@ -121,7 +124,11 @@ mod tests {
             tidy: true,
         };
         assert_eq!(
-            apply("we shipped um twenty five of them period next question", opts, Some("en")),
+            apply(
+                "we shipped um twenty five of them period next question",
+                opts,
+                Some("en")
+            ),
             "We shipped 25 of them. Next question"
         );
     }
@@ -139,7 +146,10 @@ mod tests {
         // Tidy still runs — spacing and sentence capitals are not
         // language-specific — but no word is replaced and no number rewritten.
         let out = apply("twenty five comma period", opts, Some("ja"));
-        assert_eq!(out, "Twenty five comma period", "only the capital may change");
+        assert_eq!(
+            out, "Twenty five comma period",
+            "only the capital may change"
+        );
     }
 
     #[test]

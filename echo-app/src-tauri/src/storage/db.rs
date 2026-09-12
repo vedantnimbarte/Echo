@@ -20,12 +20,14 @@ pub fn migrate_for_test(conn: &Connection) -> Result<()> {
 }
 
 fn migrate(conn: &Connection) -> Result<()> {
-    conn.execute_batch("
+    conn.execute_batch(
+        "
         CREATE TABLE IF NOT EXISTS schema_migrations (
             version INTEGER PRIMARY KEY,
             applied_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
-    ")?;
+    ",
+    )?;
 
     let version: i64 = conn
         .query_row(
@@ -36,7 +38,8 @@ fn migrate(conn: &Connection) -> Result<()> {
         .unwrap_or(0);
 
     if version < 1 {
-        conn.execute_batch("
+        conn.execute_batch(
+            "
             CREATE TABLE IF NOT EXISTS settings (
                 key   TEXT PRIMARY KEY NOT NULL,
                 value TEXT NOT NULL
@@ -83,11 +86,13 @@ fn migrate(conn: &Connection) -> Result<()> {
             );
 
             INSERT INTO schema_migrations (version) VALUES (1);
-        ")?;
+        ",
+        )?;
     }
 
     if version < 2 {
-        conn.execute_batch("
+        conn.execute_batch(
+            "
             -- Per-app overrides. A NULL column means \"inherit the global
             -- setting\", so a profile can pin one behaviour without freezing
             -- the rest. `app_match` is a lowercased executable / bundle id /
@@ -116,11 +121,13 @@ fn migrate(conn: &Connection) -> Result<()> {
                 ON egress_log (created_at DESC);
 
             INSERT INTO schema_migrations (version) VALUES (2);
-        ")?;
+        ",
+        )?;
     }
 
     if version < 3 {
-        conn.execute_batch("
+        conn.execute_batch(
+            "
             -- Whether partial transcripts are typed into this app as you speak.
             -- NULL inherits the global setting, which defaults to off: partial
             -- injection rewrites text inside somebody else's field, and that is
@@ -128,11 +135,13 @@ fn migrate(conn: &Connection) -> Result<()> {
             ALTER TABLE app_profiles ADD COLUMN stream_partials INTEGER;
 
             INSERT INTO schema_migrations (version) VALUES (3);
-        ")?;
+        ",
+        )?;
     }
 
     if version < 4 {
-        conn.execute_batch("
+        conn.execute_batch(
+            "
             -- Whether the formatting pass (spoken punctuation, numbers, tidy)
             -- runs for this app. NULL inherits the global setting. A terminal
             -- wants the words exactly as spoken; an email wants sentences —
@@ -140,18 +149,21 @@ fn migrate(conn: &Connection) -> Result<()> {
             ALTER TABLE app_profiles ADD COLUMN formatting INTEGER;
 
             INSERT INTO schema_migrations (version) VALUES (4);
-        ")?;
+        ",
+        )?;
     }
 
     if version < 5 {
-        conn.execute_batch("
+        conn.execute_batch(
+            "
             -- SHA-256 of the plugin library as installed. NULL for plugins that
             -- predate this column; those adopt their current hash on next load
             -- rather than being locked out. See core::plugins::integrity.
             ALTER TABLE plugins ADD COLUMN lib_sha256 TEXT;
 
             INSERT INTO schema_migrations (version) VALUES (5);
-        ")?;
+        ",
+        )?;
     }
 
     if version < 6 {

@@ -237,11 +237,7 @@ pub fn get_fixup_hotkeys(state: State<'_, AppState>) -> (String, String) {
 /// bindings are vetted, and rejecting an old one here would only strand the
 /// user with a hotkey they cannot change.
 #[tauri::command]
-pub fn register_hotkey(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    shortcut: String,
-) -> Result<()> {
+pub fn register_hotkey(app: AppHandle, state: State<'_, AppState>, shortcut: String) -> Result<()> {
     let mode = setting(state.inner(), "recording_mode", DEFAULT_MODE);
     bind(&app, state.inner(), &shortcut, &mode)?;
 
@@ -256,11 +252,7 @@ pub fn register_hotkey(
 /// modifier it also needs a different rule for telling a hold from a chord — so
 /// the binding is not independent of the mode.
 #[tauri::command]
-pub fn set_recording_mode(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    mode: String,
-) -> Result<()> {
+pub fn set_recording_mode(app: AppHandle, state: State<'_, AppState>, mode: String) -> Result<()> {
     {
         let conn = state.db.lock().unwrap();
         repositories::set_setting(&conn, "recording_mode", &mode)?;
