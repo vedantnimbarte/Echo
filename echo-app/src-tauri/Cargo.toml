@@ -10,7 +10,10 @@ edition = "2021"
 # echo-app/) leaves the Cargo.lock, target dir, and all build tooling paths
 # unchanged.
 [workspace]
-members = ["echo-sdk"]
+# `plugin-examples/hello-echo` is the scaffold template's own output. It is a
+# member so `cargo build` compiles it against this exact SDK and toolchain:
+# a starter project that stops compiling is worse than none at all.
+members = ["echo-sdk", "plugin-examples/hello-echo"]
 resolver = "2"
 
 [lib]

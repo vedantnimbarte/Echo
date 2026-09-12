@@ -1,0 +1,16 @@
+[package]
+name = "hello-echo"
+version = "0.1.0"
+edition = "2021"
+
+# Echo loads a plugin with dlopen/LoadLibrary, so it has to be a C-ABI dynamic
+# library. A plain Rust `lib` cannot be loaded at runtime.
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# By path, not by version: this example ships inside the repository, so it
+# builds against the SDK the host was built against and proves the scaffold
+# template still compiles. A scaffold written to your own machine gets
+# `echo-sdk = "0.1"` from crates.io instead.
+echo-sdk = { path = "../../echo-sdk" }
