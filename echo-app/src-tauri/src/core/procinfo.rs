@@ -1,9 +1,8 @@
 //! How much memory this process is actually using, and how long it took to
 //! start.
 //!
-//! Phase 9.2 set targets for both and never measured either, so the numbers in
-//! `plan.md` were aspirations. This is what `--benchmark` reads to replace them
-//! with facts.
+//! Both had targets that were never measured, so the published numbers were
+//! aspirations. This is what `--benchmark` reads to replace them with facts.
 //!
 //! **Resident set, not virtual size.** Virtual size counts address space the
 //! process reserved and may never touch — a whisper model mapped but not read

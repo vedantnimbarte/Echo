@@ -58,7 +58,7 @@ Clean-architecture-ish separation in `echo-app/src-tauri/src`:
 Frontend (`echo-app/src`): React 19 + Zustand + TanStack Query, with typed IPC
 wrappers in `ipc/`.
 
-### Key rules (see `plan.md`)
+### Key rules
 
 1. `AppState.db` is `Mutex<Connection>` — never share the `Connection` across
    threads; drop the guard before `.await`.

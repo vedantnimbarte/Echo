@@ -152,7 +152,6 @@ Echo/
 ├─ packaging/               # winget / homebrew / flatpak / snap manifests
 ├─ .github/workflows/       # CI + release matrix
 ├─ docs/                    # RELEASING.md, BUNDLING.md, WAKE_WORD.md
-├─ plan.md                  # phase-by-phase implementation plan & status
 ├─ CONTRIBUTING.md          # dev setup + architecture
 └─ PLUGINS.md               # plugin manifest + SDK contract
 ```
@@ -523,25 +522,6 @@ with the download:
 
 ---
 
-## Status
-
-See [`plan.md`](plan.md) for the full phase breakdown. Summary:
-
-| Phase | Area | Status |
-|---|---|---|
-| 0 | Foundation | ✅ |
-| 1 | Audio pipeline (VAD, device select) | ✅ |
-| 2 | Local ASR (Whisper) | ✅ (`whisper-cli` default; `--features whisper` optional) |
-| 3 | Text injection (Win/macOS/Linux) | ✅ (type + paste) |
-| 4 | Dictionaries | ✅ |
-| 5 | Cloud ASR (9 providers + custom endpoint) | ✅ (Deepgram also streams over WS) |
-| 6 | Telemetry | ✅ |
-| 7 | Plugin system | ✅ |
-| 8 | Packaging | ✅ (offline engine bundled in CI; OS code-signing TBD) |
-| 9 | v1 launch (hotkey, CSP, auto-update, docs) | ✅ (OS code-signing TBD) |
-
----
-
 ## Docs
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) — dev setup & architecture
@@ -549,7 +529,6 @@ See [`plan.md`](plan.md) for the full phase breakdown. Summary:
 - [RELEASING.md](docs/RELEASING.md) — cutting releases & auto-update signing
 - [BUNDLING.md](docs/BUNDLING.md) — staging the offline Whisper engine
 - [WAKE_WORD.md](docs/WAKE_WORD.md) — wake word + command mode, and training a custom phrase
-- [plan.md](plan.md) — implementation plan
 
 ## License
 

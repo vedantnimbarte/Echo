@@ -22,7 +22,7 @@ The capability traits — `OutputPlugin` and `AudioPlugin` in the SDK, `AsrPlugi
 and `DictionaryPlugin` host-side — define the shape of work still to come.
 **Nothing dispatches to them yet.** Implementing one compiles and installs
 cleanly, and Echo will never call it. Build on the lifecycle hooks until that
-changes; `plan.md` §7 tracks the rest.
+changes.
 
 ## ⚠️ Security: read this before installing anything
 
@@ -79,15 +79,14 @@ transcripts and dictionary entries would have to be serialised, and every
 existing plugin would need rewriting.
 
 That is a project, not a patch, and pretending otherwise is how a checkbox ends
-up in Settings with nothing behind it. `plan.md` §9.1 tracks it.
+up in Settings with nothing behind it.
 
 **Practical advice:** install plugins you have built yourself or whose source
 you have read and compiled. Do not install a prebuilt binary from someone you
 do not trust.
 
 Real enforcement needs an out-of-process or WASM runtime with a capability API.
-That is a future goal, not a current property — the design is tracked in
-`plan.md` §9.1.
+That is a future goal, not a current property.
 
 ## Manifest
 
