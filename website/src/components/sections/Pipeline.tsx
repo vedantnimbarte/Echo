@@ -49,7 +49,7 @@ export default function Pipeline() {
             <h2 className="mt-5 text-5xl sm:text-6xl">
               Five stages,
               <br />
-              one <span className="glow-text">machine</span>.
+              one <span className="bright">machine</span>.
             </h2>
             <p className="mt-6 max-w-md text-lg leading-relaxed text-fog">
               Every stage between the room and your cursor runs locally unless
@@ -70,14 +70,14 @@ export default function Pipeline() {
         <ol className="relative">
           {/* the connector the audio travels down */}
           <div
-            className="rail absolute bottom-6 left-[27px] top-6 hidden w-px bg-glow/20 sm:block"
+            className="rail absolute bottom-6 left-[27px] top-6 hidden w-px bg-line-2 sm:block"
             aria-hidden
           />
 
           {STAGES.map((s, i) => (
             <Reveal key={s.no} delay={i * 0.06}>
               <li className="relative flex gap-6 pb-12 last:pb-0">
-                <span className="relative z-10 hidden h-14 w-14 shrink-0 items-center justify-center rounded-full border border-line-2 bg-ink font-mono text-sm text-glow sm:flex">
+                <span className="relative z-10 hidden h-14 w-14 shrink-0 items-center justify-center rounded-full border border-line-2 bg-ink text-sm text-fog sm:flex">
                   {s.no}
                 </span>
                 <div className="min-w-0">

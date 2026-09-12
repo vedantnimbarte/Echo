@@ -1,23 +1,22 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
+import { EB_Garamond, Figtree } from "next/font/google";
 import "./globals.css";
 import Nav from "@/components/site/Nav";
 import Footer from "@/components/site/Footer";
 
-const bricolage = Bricolage_Grotesque({
-  variable: "--font-bricolage",
+/* The same two families the app is set in, divided the same way: a book face
+   for headings, a grotesque for everything that involves operating rather than
+   reading. Garamond is latin-only and pulled at the single weight it is used
+   at — the app ships exactly this cut. */
+const garamond = EB_Garamond({
+  variable: "--font-garamond",
   subsets: ["latin"],
+  weight: ["500"],
   display: "swap",
 });
 
-const hanken = Hanken_Grotesk({
-  variable: "--font-hanken",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const jetbrains = JetBrains_Mono({
-  variable: "--font-jetbrains",
+const figtree = Figtree({
+  variable: "--font-figtree",
   subsets: ["latin"],
   display: "swap",
 });
@@ -41,7 +40,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${bricolage.variable} ${hanken.variable} ${jetbrains.variable}`}
+      className={`${garamond.variable} ${figtree.variable}`}
     >
       <body className="grain min-h-screen antialiased">
         <div className="field" aria-hidden />

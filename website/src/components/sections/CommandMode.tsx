@@ -44,7 +44,7 @@ export default function CommandMode() {
           <h2 className="mt-5 text-5xl sm:text-6xl">
             Say what you
             <br />
-            <span className="glow-text">want done</span>.
+            <span className="bright">want done</span>.
           </h2>
           <p className="mt-6 max-w-md text-lg leading-relaxed text-fog">
             Start a sentence with your trigger word and Echo stops typing and
@@ -68,10 +68,10 @@ export default function CommandMode() {
               onMouseLeave={() => setPaused(false)}
             >
               <div className="flex items-center justify-between">
-                <span className="datum uppercase tracking-[0.24em]">selection</span>
+                <span className="datum">selection</span>
                 <span className="datum">notes.md</span>
               </div>
-              <p className="mt-3 rounded-xl bg-glow/10 p-3 text-sm leading-relaxed text-fog ring-1 ring-glow/25">
+              <p className="mt-3 rounded-xl bg-ink-2 p-3 text-sm leading-relaxed text-fog ring-1 ring-line-2">
                 {SOURCE}
               </p>
 
@@ -82,9 +82,9 @@ export default function CommandMode() {
                     key={c.say}
                     onClick={() => setI(idx)}
                     aria-pressed={i === idx}
-                    className={`flex items-center gap-2 rounded-full border px-3 py-1.5 font-mono text-[0.7rem] transition-colors ${
+                    className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[0.7rem] transition-colors ${
                       i === idx
-                        ? "border-glow/45 bg-glow/10 text-text"
+                        ? "border-line-2 bg-ink-2 text-text"
                         : "border-line-2 text-faint hover:text-fog"
                     }`}
                   >

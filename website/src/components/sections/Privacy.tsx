@@ -37,11 +37,11 @@ export default function Privacy() {
         <Reveal>
           <TiltCard className="panel rounded-[var(--radius-card)] p-5 sm:p-7" max={4}>
             <div className="flex items-center justify-between gap-4">
-              <span className="datum uppercase tracking-[0.24em]">
+              <span className="datum">
                 requests echo made
               </span>
-              <span className="flex items-center gap-2 font-mono text-[0.7rem] text-glow">
-                <span className="h-1.5 w-1.5 rounded-full bg-glow" />
+              <span className="flex items-center gap-2 datum">
+                <span className="h-1.5 w-1.5 rounded-full bg-fog" />
                 offline-capable
               </span>
             </div>
@@ -52,7 +52,7 @@ export default function Privacy() {
                   key={r.host + r.when}
                   className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-3"
                 >
-                  <span className="font-mono text-sm text-text">{r.host}</span>
+                  <span className="text-sm text-text">{r.host}</span>
                   <span className="datum">{r.when}</span>
                   <span className="w-full text-sm text-fog">{r.why}</span>
                 </div>
@@ -69,7 +69,7 @@ export default function Privacy() {
           <Reveal>
             <p className="eyebrow">Privacy</p>
             <h2 className="mt-5 text-5xl sm:text-6xl">
-              Proof, not a <span className="glow-text">promise</span>.
+              Proof, not a <span className="bright">promise</span>.
             </h2>
             <p className="mt-6 text-lg leading-relaxed text-fog">
               Echo logs every outbound request it makes — the host, the reason,
@@ -81,7 +81,7 @@ export default function Privacy() {
           <div className="mt-10 space-y-7">
             {FACTS.map((f, i) => (
               <Reveal key={f.title} delay={0.06 * (i + 1)}>
-                <h3 className="text-lg font-semibold">{f.title}</h3>
+                <h3 className="text-lg">{f.title}</h3>
                 <p className="mt-2 leading-relaxed text-fog">{f.body}</p>
               </Reveal>
             ))}

@@ -71,7 +71,7 @@ export default function PrivacyPage() {
         <Reveal>
           <p className="eyebrow">Outbound</p>
           <h2 className="mt-4 text-4xl sm:text-5xl">
-            Five moments Echo <span className="glow-text">could</span> speak.
+            Five moments Echo <span className="bright">could</span> speak.
           </h2>
         </Reveal>
 
@@ -82,11 +82,11 @@ export default function PrivacyPage() {
                 <div className="flex items-baseline gap-3">
                   <span
                     className={`mt-2 h-1.5 w-1.5 shrink-0 rounded-full ${
-                      l.tone === "sends" ? "bg-ember" : "bg-glow"
+                      l.tone === "sends" ? "bg-rec" : "bg-fog"
                     }`}
                     aria-hidden
                   />
-                  <h3 className="text-lg font-semibold">{l.when}</h3>
+                  <h3 className="text-lg">{l.when}</h3>
                 </div>
                 <p className="leading-relaxed text-fog">{l.what}</p>
               </div>
@@ -107,7 +107,7 @@ export default function PrivacyPage() {
         <Reveal>
           <p className="eyebrow">At rest</p>
           <h2 className="mt-4 text-4xl sm:text-5xl">
-            What Echo <span className="glow-text">keeps</span>.
+            What Echo <span className="bright">keeps</span>.
           </h2>
         </Reveal>
 
@@ -115,7 +115,7 @@ export default function PrivacyPage() {
           {STORES.map((s, i) => (
             <Reveal key={s.title} delay={(i % 2) * 0.06}>
               <div className="panel h-full rounded-[var(--radius-card)] p-6">
-                <h3 className="text-xl font-semibold">{s.title}</h3>
+                <h3 className="text-xl">{s.title}</h3>
                 <p className="mt-3 text-sm leading-relaxed text-fog">{s.body}</p>
               </div>
             </Reveal>
@@ -127,7 +127,7 @@ export default function PrivacyPage() {
         <Reveal>
           <p className="eyebrow">Limits</p>
           <h2 className="mt-4 text-4xl sm:text-5xl">
-            Three things this <span className="glow-text">can&rsquo;t</span> prove.
+            Three things this <span className="bright">can&rsquo;t</span> prove.
           </h2>
 
           <div className="mt-10 space-y-8 leading-relaxed text-fog">
@@ -150,7 +150,7 @@ export default function PrivacyPage() {
                 href={LINKS.plugins}
                 target="_blank"
                 rel="noreferrer"
-                className="text-fog underline underline-offset-4 hover:text-glow"
+                className="text-fog underline underline-offset-4 hover:text-text"
               >
                 The plugin contract is public
               </a>
@@ -173,7 +173,7 @@ export default function PrivacyPage() {
               href={LINKS.github}
               target="_blank"
               rel="noreferrer"
-              className="text-fog underline underline-offset-4 hover:text-glow"
+              className="text-fog underline underline-offset-4 hover:text-text"
             >
               read the code
             </a>

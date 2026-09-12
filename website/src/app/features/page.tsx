@@ -188,7 +188,7 @@ export default function FeaturesPage() {
               <div>
                 <p className="eyebrow">{g.eyebrow}</p>
                 <h2 className="mt-4 text-4xl sm:text-5xl">
-                  {g.title} <span className="glow-text">{g.highlight}</span>.
+                  {g.title} <span className="bright">{g.highlight}</span>.
                 </h2>
               </div>
               <p className="max-w-sm leading-relaxed text-fog">{g.intro}</p>
@@ -215,7 +215,7 @@ export default function FeaturesPage() {
         <Reveal>
           <p className="eyebrow">Platforms</p>
           <h2 className="mt-4 text-4xl sm:text-5xl">
-            What each OS <span className="glow-text">asks of you</span>.
+            What each OS <span className="bright">asks of you</span>.
           </h2>
         </Reveal>
 
@@ -238,7 +238,7 @@ export default function FeaturesPage() {
               href={LINKS.wakeWord}
               target="_blank"
               rel="noreferrer"
-              className="text-fog underline underline-offset-4 hover:text-glow"
+              className="text-fog underline underline-offset-4 hover:text-text"
             >
               including how to train &ldquo;Hey Echo&rdquo; yourself
             </a>

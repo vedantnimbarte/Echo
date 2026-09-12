@@ -31,7 +31,7 @@ const MODES = [
     price: "$0",
     note: "Everything runs on your hardware.",
     points: ["Fully private & offline", "No API keys", "No usage limits", "You pay nothing to anyone"],
-    glow: true,
+    raised: true,
   },
   {
     name: "Cloud (optional)",
@@ -39,7 +39,7 @@ const MODES = [
     price: "you pay your provider",
     note: "Route to any of ten providers, or your own endpoint.",
     points: ["Your key, your bill", "Stored in your keychain", "Echo adds zero markup", "Or self-host an endpoint", "Falls back to local if it fails"],
-    glow: false,
+    raised: false,
   },
 ];
 
@@ -75,10 +75,10 @@ export default function PricingPage() {
       {/* hero plan */}
       <section className="mx-auto mt-14 max-w-3xl px-6 sm:px-10">
         <Reveal>
-          <div className="panel glow-ring relative overflow-hidden rounded-3xl p-8 text-center sm:p-12">
+          <div className="panel edge-ring relative overflow-hidden rounded-3xl p-8 text-center sm:p-12">
             <p className="eyebrow">The whole app</p>
             <div className="mt-6 flex items-end justify-center gap-3">
-              <span className="font-display text-8xl font-bold leading-none glow-text">
+              <span className="font-display text-8xl font-medium leading-none bright">
                 $0
               </span>
               <span className="mb-2 text-lg text-fog">/ forever</span>
@@ -90,7 +90,7 @@ export default function PricingPage() {
             <ul className="mx-auto mt-9 grid max-w-lg grid-cols-1 gap-x-8 gap-y-3 text-left sm:grid-cols-2">
               {INCLUDED.map((f) => (
                 <li key={f} className="flex items-center gap-3 text-text">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-glow/15 text-glow">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-ink-2 text-text">
                     <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={2}>
                       <path d="M2.5 6.5 5 9l4.5-5.5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
@@ -102,7 +102,7 @@ export default function PricingPage() {
 
             <div className="mt-10 flex justify-center">
               <Magnetic>
-                <Link href="/download" className="btn-glow text-base">
+                <Link href="/download" className="btn-primary text-base">
                   Download Echo
                 </Link>
               </Magnetic>
@@ -118,12 +118,12 @@ export default function PricingPage() {
             <Reveal key={m.name} delay={i * 0.1}>
               <div
                 className={`h-full rounded-card p-6 ${
-                  m.glow ? "panel glow-ring" : "panel"
+                  m.raised ? "panel edge-ring" : "panel"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <h3 className="text-2xl font-medium">{m.name}</h3>
-                  <span className="font-mono text-[0.66rem] uppercase tracking-[0.18em] text-glow">
+                  <h3 className="text-2xl">{m.name}</h3>
+                  <span className="datum">
                     {m.tag}
                   </span>
                 </div>
@@ -132,7 +132,7 @@ export default function PricingPage() {
                 <ul className="mt-6 space-y-2.5 text-sm text-fog">
                   {m.points.map((p) => (
                     <li key={p} className="flex items-center gap-2.5">
-                      <span className="h-1 w-1 rounded-full bg-glow" />
+                      <span className="h-1 w-1 rounded-full bg-faint" />
                       {p}
                     </li>
                   ))}
@@ -146,7 +146,7 @@ export default function PricingPage() {
       {/* faq */}
       <section className="mx-auto mt-20 max-w-3xl px-6 sm:px-10">
         <Reveal>
-          <h2 className="text-center text-4xl font-semibold sm:text-5xl">
+          <h2 className="text-center text-4xl sm:text-5xl">
             Questions, answered
           </h2>
         </Reveal>
@@ -156,7 +156,7 @@ export default function PricingPage() {
               <details className="group py-5">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-lg font-medium text-text">
                   {item.q}
-                  <span className="font-mono text-glow transition-transform duration-300 group-open:rotate-45">
+                  <span className="text-fog transition-transform duration-300 group-open:rotate-45">
                     +
                   </span>
                 </summary>

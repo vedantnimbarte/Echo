@@ -23,7 +23,7 @@ export default function FinalCTA() {
           <Reveal>
             <p className="eyebrow">v{VERSION} · MIT</p>
             <h2 className="mt-5 text-5xl sm:text-7xl">
-              Stop <span className="glow-text">typing</span>.
+              Stop <span className="bright">typing</span>.
             </h2>
             <p className="mx-auto mt-6 max-w-lg text-lg leading-relaxed text-fog">
               Free, open-source, and a few megabytes. No account to make, no
@@ -34,7 +34,7 @@ export default function FinalCTA() {
           <Reveal delay={0.08}>
             <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Magnetic>
-                <Link href="/download" className="btn-glow">
+                <Link href="/download" className="btn-primary">
                   Download Echo
                 </Link>
               </Magnetic>
@@ -91,7 +91,7 @@ export default function FinalCTA() {
           <p className="relative mx-auto mt-8 max-w-xl text-center text-sm leading-relaxed text-faint">
             Echo isn&rsquo;t code-signed yet, so Windows and macOS will warn you
             on first launch.{" "}
-            <Link href="/download" className="text-fog underline underline-offset-4 hover:text-glow">
+            <Link href="/download" className="text-fog underline underline-offset-4 hover:text-text">
               Here is exactly what you&rsquo;ll see
             </Link>
             .

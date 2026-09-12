@@ -41,11 +41,11 @@ export default function PillMock({ className = "" }: { className?: string }) {
   return (
     <div
       ref={host}
-      className={`glass glow-ring inline-flex items-center gap-3 rounded-full px-4 py-2.5 ${className}`}
+      className={`glass edge-ring inline-flex items-center gap-3 rounded-full px-4 py-2.5 ${className}`}
       role="img"
       aria-label="Echo's floating pill, listening"
     >
-      <span className="h-2 w-2 shrink-0 rounded-full bg-ember" />
+      <span className="h-2 w-2 shrink-0 rounded-full bg-rec" />
       <span className="flex h-6 items-center gap-[3px]">
         {Array.from({ length: 22 }).map((_, i) => (
           <span
@@ -53,12 +53,18 @@ export default function PillMock({ className = "" }: { className?: string }) {
             ref={(el) => {
               bars.current[i] = el;
             }}
-            className="w-[2px] rounded-full bg-glow"
-            style={{ height: "30%" }}
+            className="w-[2px] rounded-full"
+            style={{
+              height: "30%",
+              // The real pill's bars, same gradient: dim at the floor, paper
+              // white at the peak, so loudness reads as brightness.
+              background:
+                "linear-gradient(to top, var(--color-faint), var(--color-fog) 45%, var(--color-text))",
+            }}
           />
         ))}
       </span>
-      <span className="font-mono text-xs tabular-nums text-fog">0:07</span>
+      <span className="text-xs tabular-nums text-fog">0:07</span>
     </div>
   );
 }

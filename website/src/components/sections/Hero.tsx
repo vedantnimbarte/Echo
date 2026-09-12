@@ -36,8 +36,8 @@ export default function Hero() {
       <div className="mx-auto max-w-4xl text-center">
         <motion.div {...up(0)} className="flex justify-center">
           <span className="glass inline-flex items-center gap-2.5 rounded-full px-4 py-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-glow anim-pulse" />
-            <span className="datum uppercase tracking-[0.22em]">
+            <span className="h-1.5 w-1.5 rounded-full bg-rec anim-pulse" />
+            <span className="datum">
               wake word · runs on your machine
             </span>
           </span>
@@ -45,11 +45,11 @@ export default function Hero() {
 
         <motion.h1
           {...up(0.08)}
-          className="mt-8 text-balance text-5xl leading-[0.92] font-semibold sm:text-7xl lg:text-8xl"
+          className="mt-8 text-balance text-5xl leading-[1.02] sm:text-7xl lg:text-8xl"
         >
           Say the word.
           <br />
-          Start <span className="glow-text">talking</span>.
+          Start <span className="bright">talking</span>.
         </motion.h1>
 
         <motion.p
@@ -66,7 +66,7 @@ export default function Hero() {
           className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row"
         >
           <Magnetic>
-            <Link href="/download" className="btn-glow">
+            <Link href="/download" className="btn-primary">
               Download for free
               <svg
                 viewBox="0 0 20 20"

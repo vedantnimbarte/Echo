@@ -20,16 +20,16 @@ export default function CopyLine({
 
   return (
     <div className="glass min-w-0 overflow-hidden rounded-2xl p-4">
-      <p className="datum uppercase tracking-[0.24em]">{label}</p>
+      <p className="datum">{label}</p>
       <div className="mt-3 flex items-center gap-3">
-        <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap font-mono text-xs text-text sm:text-sm">
+        <code className="command min-w-0 flex-1 overflow-x-auto whitespace-nowrap text-xs text-text sm:text-sm">
           {command}
         </code>
         <button
           onClick={() => {
             navigator.clipboard.writeText(command).then(() => setCopied(true));
           }}
-          className="shrink-0 rounded-full border border-line-2 px-3 py-1.5 font-mono text-[0.7rem] text-fog transition-colors hover:border-glow/45 hover:text-text"
+          className="shrink-0 rounded-full border border-line-2 px-3 py-1.5 text-[0.7rem] text-fog transition-colors hover:border-line-2 hover:text-text"
         >
           {copied ? "copied" : "copy"}
         </button>

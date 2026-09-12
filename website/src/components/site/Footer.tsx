@@ -38,9 +38,9 @@ export default function Footer() {
       <div className="mx-auto max-w-7xl px-6 pb-12 pt-16 sm:px-10">
         <div className="grid gap-12 lg:grid-cols-[1.4fr_2fr]">
           <div>
-            <div className="flex items-center gap-3 text-glow">
+            <div className="flex items-center gap-3 text-fog">
               <EchoMark className="h-7 w-24" />
-              <span className="font-display text-2xl font-semibold text-text">
+              <span className="font-display text-2xl font-medium text-text">
                 Echo
               </span>
             </div>
@@ -54,13 +54,13 @@ export default function Footer() {
           <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
             {COLS.map((col) => (
               <div key={col.title}>
-                <h4 className="datum uppercase tracking-[0.25em]">{col.title}</h4>
+                <h4 className="eyebrow">{col.title}</h4>
                 <ul className="mt-5 space-y-3">
                   {col.links.map((l) => (
                     <li key={l.label}>
                       <Link
                         href={l.href}
-                        className="text-fog transition-colors hover:text-glow"
+                        className="text-fog transition-colors hover:text-text"
                         {...(l.href.startsWith("http")
                           ? { target: "_blank", rel: "noreferrer" }
                           : {})}
@@ -77,8 +77,8 @@ export default function Footer() {
 
         <div className="mt-12 flex flex-col items-start justify-between gap-4 border-t border-line pt-8 text-sm text-faint sm:flex-row sm:items-center">
           <p>© {new Date().getFullYear()} Echo. Released under the MIT license.</p>
-          <p className="font-mono text-[0.72rem] tracking-wide">
-            <span className="text-glow anim-pulse">●</span> transcription stays
+          <p className="text-[0.72rem] tracking-wide">
+            <span className="text-fog anim-pulse">●</span> transcription stays
             on your machine
           </p>
         </div>
@@ -87,7 +87,7 @@ export default function Footer() {
       {/* oversized ghost wordmark */}
       <div
         aria-hidden
-        className="pointer-events-none select-none px-6 text-center font-display text-[22vw] font-bold leading-none tracking-tighter text-text/[0.025] sm:px-10"
+        className="pointer-events-none select-none px-6 text-center font-display text-[22vw] font-medium leading-none text-text/[0.025] sm:px-10"
       >
         ECHO
       </div>

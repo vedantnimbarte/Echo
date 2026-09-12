@@ -95,18 +95,18 @@ export default function DownloadPage() {
             <Reveal key={p.key} delay={i * 0.1} className="min-w-0">
               <div
                 className={`flex h-full flex-col rounded-card p-6 ${
-                  p.featured ? "panel glow-ring" : "panel"
+                  p.featured ? "panel edge-ring" : "panel"
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-glow">{ICONS[p.key]}</span>
+                  <span className="text-fog">{ICONS[p.key]}</span>
                   {p.featured && (
-                    <span className="font-mono text-[0.62rem] uppercase tracking-[0.2em] text-glow">
+                    <span className="datum">
                       recommended
                     </span>
                   )}
                 </div>
-                <h3 className="mt-6 text-3xl font-medium">{p.name}</h3>
+                <h3 className="mt-6 text-3xl">{p.name}</h3>
                 <p className="mt-2 text-sm text-fog">{p.format}</p>
 
                 <div className="mt-7">
@@ -115,7 +115,7 @@ export default function DownloadPage() {
                       href={p.href}
                       className={
                         p.featured
-                          ? "btn-glow w-full justify-center"
+                          ? "btn-primary w-full justify-center"
                           : "btn-ghost w-full justify-center"
                       }
                     >
@@ -125,12 +125,12 @@ export default function DownloadPage() {
                 </div>
 
                 {p.alt && (
-                  <p className="mt-3 text-center font-mono text-[0.7rem] text-faint">
+                  <p className="mt-3 text-center text-[0.7rem] text-faint">
                     also{" "}
                     {p.alt.map((a, n) => (
                       <span key={a.label}>
                         {n > 0 && " · "}
-                        <a href={a.href} className="text-fog hover:text-glow">
+                        <a href={a.href} className="text-fog hover:text-text">
                           {a.label}
                         </a>
                       </span>
@@ -156,7 +156,7 @@ export default function DownloadPage() {
       <section className="mx-auto mt-10 max-w-7xl px-6 sm:px-10">
         <Reveal>
           <div className="panel rounded-card p-6">
-            <h3 className="text-xl font-medium">
+            <h3 className="text-xl">
               Echo isn&apos;t code-signed yet
             </h3>
             <p className="mt-2 max-w-3xl text-fog">
@@ -166,14 +166,14 @@ export default function DownloadPage() {
             </p>
             <ul className="mt-4 space-y-2 text-sm text-fog">
               <li>
-                <span className="font-mono text-xs uppercase tracking-[0.18em] text-glow">
+                <span className="datum text-fog">
                   windows
                 </span>{" "}
                 — SmartScreen says &ldquo;Windows protected your PC&rdquo;. Choose{" "}
                 <em>More info</em> → <em>Run anyway</em>.
               </li>
               <li>
-                <span className="font-mono text-xs uppercase tracking-[0.18em] text-glow">
+                <span className="datum text-fog">
                   macos
                 </span>{" "}
                 — Gatekeeper offers only <em>Move to Trash</em>. The terminal
@@ -181,7 +181,7 @@ export default function DownloadPage() {
                 right-click Echo in Applications → <em>Open</em>.
               </li>
               <li>
-                <span className="font-mono text-xs uppercase tracking-[0.18em] text-glow">
+                <span className="datum text-fog">
                   linux
                 </span>{" "}
                 — nothing to do.
@@ -191,7 +191,7 @@ export default function DownloadPage() {
               Every build is checksummed. Verify your download against{" "}
               <a
                 href={DOWNLOADS.checksums}
-                className="text-glow underline underline-offset-4"
+                className="text-text underline underline-offset-4"
               >
                 SHA256SUMS.txt
               </a>{" "}
@@ -200,7 +200,7 @@ export default function DownloadPage() {
                 href={LINKS.installing}
                 target="_blank"
                 rel="noreferrer"
-                className="text-glow underline underline-offset-4"
+                className="text-text underline underline-offset-4"
               >
                 read the install docs
               </a>
@@ -215,7 +215,7 @@ export default function DownloadPage() {
         <Reveal>
           <div className="panel flex flex-col items-start justify-between gap-6 rounded-card p-6 sm:flex-row sm:items-center">
             <div>
-              <h3 className="text-xl font-medium">Prefer to build it yourself?</h3>
+              <h3 className="text-xl">Prefer to build it yourself?</h3>
               <p className="mt-2 max-w-xl text-fog">
                 The full source is on GitHub. Clone it, audit it, and compile with
                 a single command — that&apos;s the whole point of local-first.
@@ -246,7 +246,7 @@ export default function DownloadPage() {
       {/* requirements */}
       <section className="mx-auto mt-20 max-w-5xl px-6 sm:px-10">
         <Reveal>
-          <h2 className="text-center text-3xl font-semibold sm:text-4xl">
+          <h2 className="text-center text-3xl sm:text-4xl">
             What you&apos;ll need
           </h2>
         </Reveal>
@@ -258,7 +258,7 @@ export default function DownloadPage() {
           ].map((r, i) => (
             <Reveal key={r.k} delay={i * 0.08}>
               <div className="panel h-full rounded-card p-6">
-                <p className="font-mono text-xs uppercase tracking-[0.2em] text-glow">
+                <p className="datum">
                   {r.k}
                 </p>
                 <p className="mt-3 leading-relaxed text-fog">{r.v}</p>

@@ -1,40 +1,83 @@
 @import "tailwindcss";
 
 /* ============================================================
-   ECHO — acoustic glow, mk.II
-   A dark room with one instrument lit. Colour is signal:
-   glow = live, ember = detected, violet = depth. Nothing else.
+   ECHO — "Monolith", warm cast.
+
+   The same design language as the settings window, carried onto the web.
+   Hierarchy comes from elevation and luminance rather than hue: each surface
+   is a translucent warm wash over the near-black base, lit along its top edge
+   and dropped onto a layered shadow. One accent survives — the record red —
+   because a live microphone is the single state that must be unmistakable
+   across a room. It is spent on the record dot, the detection ridge, and
+   nothing else.
+
+   Emphasis in a headline is a step in brightness, not a change in hue: the
+   page sets its headings a shade under paper-white and takes the word that
+   matters up to it. That is the web reading of the app's own rule that full
+   white on near-black is the strongest thing monochrome allows.
+
+   Echo turns speech into set text, so the site that describes it is set like a
+   page. EB Garamond, a face cut for books, carries the headings and nothing
+   else; Figtree does every job that involves operating rather than reading —
+   labels, controls, numbers. Two families, no overlap.
    ============================================================ */
 
 @theme {
-  /* fonts (wired to next/font CSS vars in layout.tsx) */
-  --font-display: var(--font-bricolage), ui-sans-serif, system-ui, sans-serif;
-  --font-sans: var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+  /* Wired to next/font CSS vars in layout.tsx. */
+  --font-display: var(--font-garamond), "Iowan Old Style", Palatino, Georgia,
+    serif;
+  --font-sans: var(--font-figtree), "Segoe UI Variable Text", "Segoe UI",
+    system-ui, -apple-system, sans-serif;
 
-  /* ink — deepest to raised */
-  --color-ink: #04070b;
-  --color-ink-1: #070c13;
-  --color-ink-2: #0c131c;
-  --color-ink-3: #131c27;
+  /* Page base. Warm brown-black: it gives the glass something to tint and
+     keeps the serif from reading like a hospital chart. */
+  --color-ink: #100e0c;
 
-  /* text */
-  --color-text: #eaf0f6;
-  --color-fog: #8e9aa9;
-  --color-faint: #78848f;
+  /* Elevation: a translucent warm wash over the base. Higher = closer to you.
+     Tinted rather than pure white, so stacked surfaces warm as they rise
+     instead of going grey. */
+  --color-ink-1: rgba(255, 246, 235, 0.035);
+  --color-ink-2: rgba(255, 246, 235, 0.065);
+  --color-ink-3: rgba(255, 246, 235, 0.105);
 
-  /* signal */
-  --color-glow: #4ff0e6; /* live / primary */
-  --color-ember: #ff8a4c; /* detected / recording — used sparingly */
-  --color-violet: #6b5cff; /* depth only, never text */
+  /* Paper white, not screen white. */
+  --color-text: #f6f2ec;
+  /* Headings rest one step below paper-white so a single word can rise to it. */
+  --color-head: #d8d1c8;
+  --color-fog: #a9a199;
+  /* Kept at >=4.5:1 on the surfaces it actually sits on — it sets the smallest
+     text on the page. */
+  --color-faint: #8b8279;
 
-  /* hairlines */
-  --color-line: #17202b;
-  --color-line-2: #212d3a;
+  /* The only chromatic value in the system: a live microphone, nothing else. */
+  --color-rec: #ff453a;
+
+  --color-line: rgba(255, 246, 235, 0.09);
+  --color-line-2: rgba(255, 246, 235, 0.24);
 
   --radius-card: 18px;
 
   --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:root {
+  /* Panes that float over the page rather than sit on it carry their own
+     darkness instead of relying on what is behind them. */
+  --glass: rgba(22, 19, 16, 0.64);
+  --glass-strong: rgba(26, 23, 19, 0.82);
+
+  /* Each shadow is a pair: a tight contact shadow that anchors the edge, and a
+     wide ambient one that gives it depth. A single blur reads flat. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px -2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.45),
+    0 10px 28px -8px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 4px 10px rgba(0, 0, 0, 0.5),
+    0 26px 64px -14px rgba(0, 0, 0, 0.75);
+
+  /* The lit top edge. This one line is what makes a flat panel read as a slab
+     of glass catching light from above. */
+  --edge-light: inset 0 1px 0 rgba(255, 246, 235, 0.09);
+  --edge-light-strong: inset 0 1px 0 rgba(255, 246, 235, 0.16);
 }
 
 @layer base {
@@ -58,22 +101,31 @@
   }
 
   ::selection {
-    background: color-mix(in oklab, var(--color-glow) 30%, transparent);
-    color: #ffffff;
+    background: rgba(255, 246, 235, 0.22);
+    color: var(--color-text);
   }
 
+  /* Garamond sets headings and nothing else. A hair of negative tracking is
+     what a serif at display size both needs and can carry, and a serif wants
+     more room between lines than the grotesque it replaced — 0.95 was set for
+     a face with a much larger x-height. */
   h1,
   h2,
   h3,
   h4 {
     font-family: var(--font-display);
-    font-weight: 600;
-    letter-spacing: -0.035em;
-    line-height: 0.95;
+    font-weight: 500;
+    letter-spacing: -0.012em;
+    line-height: 1.06;
+    color: var(--color-head);
   }
 
+  /* Keyboard focus must be visible, and with hue gone the ring is the only
+     thing left to say it — so it is drawn in the brightest ink the system has
+     rather than in the app's interior hairline, which is too faint to carry a
+     focus indicator at arm's length from a monitor. */
   :focus-visible {
-    outline: 2px solid var(--color-glow);
+    outline: 2px solid var(--color-text);
     outline-offset: 3px;
     border-radius: 4px;
   }
@@ -86,12 +138,14 @@
     background: var(--color-ink);
   }
   ::-webkit-scrollbar-thumb {
-    background: var(--color-line-2);
+    background: rgba(255, 246, 235, 0.1);
     border-radius: 99px;
     border: 3px solid var(--color-ink);
+    background-clip: content-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: var(--color-glow);
+    background: rgba(255, 246, 235, 0.18);
+    background-clip: content-box;
   }
 }
 
@@ -104,11 +158,14 @@
   inset: 0;
   z-index: 60;
   pointer-events: none;
-  opacity: 0.04;
+  opacity: 0.035;
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
+/* Light from above — `--edge-light` at room scale: one soft fall from the top
+   of the page and two dimmer ones at the sides. Warm white rather than
+   coloured, because the room is lit, not tinted. */
 .field {
   position: fixed;
   inset: 0;
@@ -117,22 +174,22 @@
   background:
     radial-gradient(
       55% 45% at 50% -5%,
-      color-mix(in oklab, var(--color-glow) 11%, transparent),
+      rgba(255, 246, 235, 0.055),
       transparent 70%
     ),
     radial-gradient(
       45% 40% at 88% 18%,
-      color-mix(in oklab, var(--color-violet) 12%, transparent),
+      rgba(255, 238, 220, 0.03),
       transparent 70%
     ),
     radial-gradient(
       40% 40% at 6% 62%,
-      color-mix(in oklab, var(--color-violet) 8%, transparent),
+      rgba(255, 238, 220, 0.022),
       transparent 70%
     );
 }
 
-/* A grid laid in perspective — the room floor the instrument sits on. */
+/* A grid laid in perspective — the floor the instrument sits on. */
 .floor-grid {
   position: absolute;
   inset: auto 0 0 0;
@@ -153,7 +210,7 @@
   background-size: 72px 72px;
   -webkit-mask-image: linear-gradient(to top, #000 4%, transparent 62%);
   mask-image: linear-gradient(to top, #000 4%, transparent 62%);
-  opacity: 0.55;
+  opacity: 0.45;
 }
 
 /* flat measurement grid, for interior pages */
@@ -169,30 +226,31 @@
 /* ----------------------------------------------------------------
    Surfaces
    ---------------------------------------------------------------- */
+
+/* A pane floating over the page or over other content. */
 .glass {
-  background: color-mix(in oklab, var(--color-ink-2) 68%, transparent);
-  backdrop-filter: blur(18px) saturate(140%);
-  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  background: var(--glass);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
   border: 1px solid var(--color-line);
+  box-shadow: var(--shadow-md), var(--edge-light);
 }
 
+/* A panel sitting on the page base — nothing behind it to blur, so it earns
+   its depth from the wash, the lit edge, and the shadow instead. */
 .panel {
-  background: linear-gradient(
-    180deg,
-    color-mix(in oklab, var(--color-ink-3) 88%, transparent),
-    var(--color-ink-1)
-  );
+  background: linear-gradient(180deg, var(--color-ink-2), var(--color-ink-1));
   border: 1px solid var(--color-line);
-  box-shadow:
-    inset 0 1px 0 0 color-mix(in oklab, #ffffff 5%, transparent),
-    0 24px 60px -40px #000;
+  box-shadow: var(--shadow-sm), var(--edge-light);
 }
 
-.glow-ring {
-  box-shadow:
-    0 0 0 1px color-mix(in oklab, var(--color-glow) 26%, transparent),
-    0 0 44px -10px color-mix(in oklab, var(--color-glow) 45%, transparent),
-    inset 0 0 32px -20px color-mix(in oklab, var(--color-glow) 60%, transparent);
+/* The raised treatment for the one card on a page that matters most. No bloom:
+   the app rejected a glow bleeding off its shell because the record dot already
+   says "live", and says it precisely. Here the same job is done with a brighter
+   lit edge and a deeper shadow — the surface is closer to you, not hotter. */
+.edge-ring {
+  border-color: var(--color-line-2);
+  box-shadow: var(--shadow-lg), var(--edge-light-strong);
 }
 
 /* ----------------------------------------------------------------
@@ -225,32 +283,63 @@
 /* ----------------------------------------------------------------
    Type treatments
    ---------------------------------------------------------------- */
-.glow-text {
-  color: var(--color-glow);
-  text-shadow: 0 0 28px color-mix(in oklab, var(--color-glow) 45%, transparent);
+
+/* The emphasised word in a heading. Monochrome has no hue to spend, so the
+   step is in brightness: the heading rests at --color-head and this carries it
+   the rest of the way to paper-white. */
+.bright {
+  color: var(--color-text);
 }
 
+/* Section labels, set in the sans at a readable size in sentence case. The app
+   has no all-caps anywhere, and a tracked-out capital label is the loudest way
+   to say the quietest thing on a page. */
 .eyebrow {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
+  /* Stated rather than inherited: these labels are sometimes set on a heading
+     element, and Garamond must not follow them there. */
+  font-family: var(--font-sans);
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   color: var(--color-faint);
 }
 
-/* mono data label — model names, tensor shapes, hosts */
+/* Data label — engines, model names, hosts, sizes. Small, tracked a touch
+   wider than running text so a string of lowercase identifiers stays legible,
+   with tabular figures for the numbers among them. */
 .datum {
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
+  font-family: var(--font-sans);
+  font-size: 0.74rem;
+  letter-spacing: 0.035em;
   color: var(--color-faint);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* A shell command. There is no mono family in this system — two families, and
+   neither of them is one — so `font-family: inherit` is deliberate: it undoes
+   the monospace stack the reset puts on <code>, which would otherwise sneak a
+   third face onto the page by default. What marks this as machine text is the
+   treatment instead: a slashed zero and tabular figures so digits can't be
+   misread, and a little extra tracking so a long one-liner doesn't close up. */
+.command {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums slashed-zero;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  letter-spacing: 0.01em;
 }
 
 /* ----------------------------------------------------------------
    Buttons
    ---------------------------------------------------------------- */
 @layer components {
-  .btn-glow {
+  /* The strongest affordance monochrome allows: full white against near-black. */
+  .btn-primary {
     position: relative;
     display: inline-flex;
     align-items: center;
@@ -259,19 +348,20 @@
     padding: 0.85rem 1.5rem;
     border-radius: 999px;
     font-weight: 600;
-    color: #021312;
-    background: linear-gradient(
-      100deg,
-      var(--color-glow),
-      color-mix(in oklab, var(--color-glow) 70%, #ffffff)
-    );
-    box-shadow: 0 0 34px -8px color-mix(in oklab, var(--color-glow) 70%, transparent);
+    color: var(--color-ink);
+    background: var(--color-text);
+    box-shadow: var(--shadow-md);
     transition:
+      background-color 0.25s ease,
       box-shadow 0.35s ease,
-      transform 0.25s var(--ease-out-soft);
+      transform 0.1s ease;
   }
-  .btn-glow:hover {
-    box-shadow: 0 0 56px -4px color-mix(in oklab, var(--color-glow) 85%, transparent);
+  .btn-primary:hover {
+    background: #fffdfa;
+    box-shadow: var(--shadow-lg);
+  }
+  .btn-primary:active {
+    transform: scale(0.985);
   }
 
   .btn-ghost {
@@ -283,14 +373,15 @@
     border-radius: 999px;
     font-weight: 500;
     color: var(--color-text);
-    border: 1px solid var(--color-line-2);
-    background: color-mix(in oklab, var(--color-ink-2) 55%, transparent);
+    border: 1px solid var(--color-line);
+    background: var(--color-ink-1);
+    box-shadow: var(--edge-light);
     transition:
       border-color 0.35s ease,
       background 0.35s ease;
   }
   .btn-ghost:hover {
-    border-color: color-mix(in oklab, var(--color-glow) 45%, transparent);
+    border-color: var(--color-line-2);
     background: var(--color-ink-2);
   }
 }
@@ -352,7 +443,7 @@
   background: linear-gradient(
     to bottom,
     transparent,
-    var(--color-glow),
+    rgba(255, 246, 235, 0.55),
     transparent
   );
   animation: rail 3.4s var(--ease-out-soft) infinite;

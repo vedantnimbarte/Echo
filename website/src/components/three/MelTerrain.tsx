@@ -112,9 +112,13 @@ function Terrain({ still }: { still: boolean }) {
       uTime: { value: still ? 4.2 : 0 },
       uEvent: { value: still ? 0.85 : 0 },
       uRidge: { value: still ? 0.62 : 0 },
-      uLow: { value: new THREE.Color("#241f5e") },
-      uMid: { value: new THREE.Color("#4ff0e6") },
-      uHot: { value: new THREE.Color("#ff8a4c") },
+      // The surface is lit, not tinted: quiet cells sit just above the warm
+      // base, speech energy carries them up to paper-white. Only the detected
+      // ridge is chromatic, and it is the record red — the same mark the pill
+      // uses to say a microphone is live.
+      uLow: { value: new THREE.Color("#2a2119") },
+      uMid: { value: new THREE.Color("#a9a199") },
+      uHot: { value: new THREE.Color("#ff453a") },
     }),
     [still],
   );

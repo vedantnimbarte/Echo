@@ -71,7 +71,7 @@ export default function Nav() {
           {/* Magnetic sets its own display, so the breakpoint lives on a wrapper */}
           <span className="hidden sm:inline-block">
             <Magnetic>
-              <Link href="/download" className="btn-glow text-sm">
+              <Link href="/download" className="btn-primary text-sm">
                 Download
               </Link>
             </Magnetic>

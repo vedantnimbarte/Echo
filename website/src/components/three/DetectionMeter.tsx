@@ -25,8 +25,8 @@ export default function DetectionMeter({ className = "" }: { className?: string 
       if (bar.current) {
         bar.current.style.transform = `scaleX(${s})`;
         bar.current.style.background = hit
-          ? "var(--color-ember)"
-          : "var(--color-glow)";
+          ? "var(--color-rec)"
+          : "var(--color-fog)";
       }
       if (value.current) value.current.textContent = s.toFixed(2);
       if (state.current) state.current.dataset.hit = String(hit);
@@ -48,13 +48,13 @@ export default function DetectionMeter({ className = "" }: { className?: string 
   return (
     <div ref={host} className={`glass w-full max-w-xs rounded-2xl p-4 ${className}`}>
       <div className="flex items-baseline justify-between gap-4">
-        <span className="datum uppercase tracking-[0.24em]">wake phrase</span>
-        <span className="font-mono text-xs text-text">&ldquo;hey jarvis&rdquo;</span>
+        <span className="datum">wake phrase</span>
+        <span className="text-xs text-text">&ldquo;hey jarvis&rdquo;</span>
       </div>
 
       <div className="mt-4 flex items-center justify-between">
         <span className="datum">score</span>
-        <span ref={value} className="font-mono text-sm tabular-nums text-text">
+        <span ref={value} className="text-sm tabular-nums text-text">
           0.04
         </span>
       </div>
@@ -64,7 +64,7 @@ export default function DetectionMeter({ className = "" }: { className?: string 
         <div
           ref={bar}
           className="h-full w-full origin-left rounded-full"
-          style={{ transform: "scaleX(0.04)", background: "var(--color-glow)" }}
+          style={{ transform: "scaleX(0.04)", background: "var(--color-fog)" }}
         />
         <div
           className="absolute inset-y-0 w-px bg-fog/70"
@@ -80,13 +80,13 @@ export default function DetectionMeter({ className = "" }: { className?: string 
       <div
         ref={state}
         data-hit="false"
-        className="group mt-4 flex items-center gap-2 border-t border-line pt-3 font-mono text-xs"
+        className="group mt-4 flex items-center gap-2 border-t border-line pt-3 text-xs"
       >
-        <span className="h-1.5 w-1.5 rounded-full bg-fog anim-pulse group-data-[hit=true]:animate-none group-data-[hit=true]:bg-ember" />
+        <span className="h-1.5 w-1.5 rounded-full bg-fog anim-pulse group-data-[hit=true]:animate-none group-data-[hit=true]:bg-rec" />
         <span className="text-fog group-data-[hit=true]:hidden">
           listening — nothing sent
         </span>
-        <span className="hidden text-ember group-data-[hit=true]:inline">
+        <span className="hidden text-rec group-data-[hit=true]:inline">
           detected — dictating
         </span>
       </div>

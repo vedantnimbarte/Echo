@@ -59,7 +59,7 @@ export default function FeatureIndex() {
           <div>
             <p className="eyebrow">Everything else</p>
             <h2 className="mt-5 max-w-xl text-5xl sm:text-6xl">
-              The rest of the <span className="glow-text">instrument</span>.
+              The rest of the <span className="bright">instrument</span>.
             </h2>
           </div>
           <p className="max-w-sm leading-relaxed text-fog">

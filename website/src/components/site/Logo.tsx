@@ -44,11 +44,13 @@ export default function Logo({
       className={`group inline-flex items-center gap-2.5 ${className}`}
       aria-label="Echo home"
     >
-      <span className="text-glow transition-all duration-500 group-hover:[filter:drop-shadow(0_0_10px_var(--color-glow))]">
+      {/* The mark brightens on hover rather than blooming — with hue gone,
+          a step toward paper-white is the whole vocabulary of emphasis. */}
+      <span className="text-fog transition-colors duration-500 group-hover:text-text">
         <EchoMark className="h-6 w-[5.2rem]" />
       </span>
       {wordmark && (
-        <span className="font-display text-[1.35rem] font-semibold tracking-tight text-text">
+        <span className="font-display text-[1.35rem] font-medium tracking-tight text-text">
           Echo
         </span>
       )}
