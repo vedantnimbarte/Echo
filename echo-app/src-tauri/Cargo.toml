@@ -14,6 +14,12 @@ edition = "2021"
 # member so `cargo build` compiles it against this exact SDK and toolchain:
 # a starter project that stops compiling is worse than none at all.
 members = ["echo-sdk", "plugin-examples/hello-echo"]
+# A workspace with a root package builds only that package by default, which
+# would have left the example compiled by nobody — the opposite of why it is
+# here. Listing all three means `cargo build`/`check`/`clippy` at this root
+# really do compile the scaffold template, so one that stops compiling is
+# caught rather than shipped.
+default-members = [".", "echo-sdk", "plugin-examples/hello-echo"]
 resolver = "2"
 
 [lib]
