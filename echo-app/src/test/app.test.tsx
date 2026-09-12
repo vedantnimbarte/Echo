@@ -29,6 +29,17 @@ function mount(ui: React.ReactNode) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
+/**
+ * Open one of a settings page's sections.
+ *
+ * Each page shows a single section at a time, so a test that reaches for a
+ * control has to say which section it lives in — which is also the assertion
+ * that it is still reachable from there at all.
+ */
+async function openSection(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await user.click(await screen.findByRole("button", { name }));
+}
+
 describe("the app shell", () => {
   beforeEach(() => {
     settings.set("onboarding_complete", "true");
@@ -75,7 +86,9 @@ describe("every settings page", () => {
   });
 
   it("lists the microphone the backend reported", async () => {
+    const user = userEvent.setup();
     mount(<SettingsPanel page="settings" />);
+    await openSection(user, "Microphone");
     expect(await screen.findByText(/Test Microphone/)).toBeTruthy();
   });
 
@@ -84,17 +97,82 @@ describe("every settings page", () => {
   // which only renders on the local lane, and vanished for cloud users.
   it("offers the microphone controls whichever engine is running", async () => {
     settings.set("asr_provider", "openai");
+    const user = userEvent.setup();
     mount(<SettingsPanel page="settings" />);
 
+    await openSection(user, "Microphone");
     expect(await screen.findByText(/Keep the microphone ready/i)).toBeTruthy();
     expect(await screen.findByLabelText("Speech detection")).toBeTruthy();
+  });
+
+  // The sections are a way of hiding things, so the two ways back to what is
+  // hidden are what have to hold: search reaches across every one of them, and
+  // moving to another page does not leave you on a section that page has not
+  // got. Both were silent failures waiting to happen.
+  it("finds a control from a section that is not open", async () => {
+    const user = userEvent.setup();
+    mount(<SettingsPanel page="settings" />);
+
+    // Speech detection lives under Microphone; General is what opens.
+    expect(screen.queryByLabelText("Speech detection")).toBeNull();
+    await user.type(await screen.findByLabelText(/search/i), "silero");
+
+    expect(await screen.findByLabelText("Speech detection")).toBeTruthy();
+    // Out of context, so it says where it lives — page, then section.
+    expect(await screen.findByText(/Settings · Microphone · Speech detection/)).toBeTruthy();
+  });
+
+  it("opens each page on its own first section", async () => {
+    const user = userEvent.setup();
+    const { rerender } = mount(<SettingsPanel page="settings" />);
+
+    await openSection(user, "Microphone");
+    expect(await screen.findByLabelText("Speech detection")).toBeTruthy();
+
+    // Output's sections are its own — the page must not carry the last pick
+    // across, and there is no "Microphone" on it to carry it to.
+    rerender(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <SettingsPanel page="output" />
+      </QueryClientProvider>
+    );
+    expect(await screen.findByText(/Insert the transcript as soon as/i)).toBeTruthy();
+    expect(screen.queryByLabelText(/Insert delay/i)).toBeNull();
+  });
+
+  // The clipboard is what "auto" reaches for on any line break or long
+  // transcript, so the knob that says how long to hold it has to be offered
+  // there too. It used to appear only on an explicit "paste", which hid it from
+  // exactly the people whose text was going missing.
+  it.each([
+    ["paste", true],
+    ["auto", true],
+    ["type", false],
+    // Unset is typing — the Rust side resolves it the same way — so the knob
+    // must not appear for someone who has never touched the picker.
+    [null, false],
+  ])("offers the clipboard hold when the method pastes: %s", async (chosen, offered) => {
+    if (chosen === null) settings.delete("injection_method");
+    else settings.set("injection_method", chosen);
+    const user = userEvent.setup();
+    mount(<SettingsPanel page="output" />);
+
+    await openSection(user, "Advanced");
+    // Awaited first: Insert delay shares the group and is always there, so
+    // reaching it means the group has settled and "not here" means something.
+    // Exact labels: each field's hint icon is a button whose accessible name
+    // is "About <the same words>", which a regex would match as well.
+    expect(await screen.findByLabelText("Insert delay (ms)")).toBeTruthy();
+    expect(screen.queryByLabelText("Clipboard hold (ms)") !== null).toBe(offered);
   });
 
   // The one screen a user only ever sees after a crash, which is exactly the
   // kind that rots unnoticed. Both halves: silent when there is nothing, and
   // offering the audio back when there is.
   it("says nothing about recovered audio when there is none", async () => {
+    const user = userEvent.setup();
     mount(<SettingsPanel page="engine" />);
+    await openSection(user, "Tools");
     expect(await screen.findByText(/Choose an audio file/i)).toBeTruthy();
     expect(screen.queryByText(/stopped before it could transcribe/i)).toBeNull();
   });
@@ -105,6 +183,8 @@ describe("every settings page", () => {
       const user = userEvent.setup();
       mount(<SettingsPanel page="engine" />);
 
+      // No section clicked on purpose: recovered audio is the one thing nobody
+      // would think to go looking for on a tab, so the page has to open on it.
       expect(await screen.findByText(/stopped before it could transcribe/i)).toBeTruthy();
       await user.click(await screen.findByText("Transcribe it"));
 
@@ -121,7 +201,9 @@ describe("every settings page", () => {
   it("says so when the neural detector did not load", async () => {
     ANSWERS.silero_available = false;
     try {
+      const user = userEvent.setup();
       mount(<SettingsPanel page="settings" />);
+      await openSection(user, "Microphone");
       // Awaited first on purpose: the warning renders only once the probe has
       // answered, so reaching it means the picker below has settled too. The
       // picker itself is on screen from the first paint and would be read
