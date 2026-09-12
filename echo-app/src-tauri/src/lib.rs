@@ -574,6 +574,7 @@ pub fn run() {
             commands::plugins::enable_plugin,
             commands::plugins::disable_plugin,
             commands::plugins::uninstall_plugin,
+            commands::plugins::scaffold_plugin,
             commands::wake::set_wake_word_enabled,
             commands::wake::set_wake_word_model,
             commands::wake::set_wake_word_sensitivity,

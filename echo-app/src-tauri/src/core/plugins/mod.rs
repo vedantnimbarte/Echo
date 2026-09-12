@@ -5,6 +5,7 @@ use crate::core::dictionary::DictionaryEntry;
 
 pub mod integrity;
 pub mod loader;
+pub mod scaffold;
 
 // The base plugin API lives in the standalone `echo-sdk` crate so external
 // plugin authors can compile against the same trait/manifest definitions the

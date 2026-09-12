@@ -841,9 +841,10 @@ impl Delivery {
 /// a per-app profile — and any settings change — takes effect immediately.
 pub(crate) struct Delivery {
     pub auto_inject: bool,
-    /// Raw `injection_method`: `"type"`, `"paste"` or `"auto"`. Kept unresolved
-    /// because `"auto"` decides from the text, which does not exist yet when
-    /// settings are read.
+    /// Raw `injection_method`: `"type"`, `"paste"`, `"auto"`, or `None` for
+    /// unset, which [`use_paste_for`](crate::core::injection::use_paste_for)
+    /// reads as typing. Kept unresolved because `"auto"` decides from the text,
+    /// which does not exist yet when settings are read.
     pub method: Option<String>,
     /// Type partial transcripts as they arrive rather than waiting for the
     /// finished sentence. Off unless the app's profile asks for it.
@@ -873,9 +874,10 @@ pub(crate) fn resolve_delivery(
 
     let mut delivery = Delivery {
         auto_inject: get("auto_inject").map(|v| v != "false").unwrap_or(true),
-        // Unset stays "type", which is what it has always meant. "auto" is an
-        // explicit choice, not a silent change of behaviour for everyone.
-        method: Some(get("injection_method").unwrap_or_else(|| "type".into())),
+        // Unset stays "type" — `use_paste_for` owns that default now, so this
+        // passes the setting through exactly as stored rather than stating it a
+        // second time here.
+        method: get("injection_method"),
         // Off unless asked for: this one types into another app's text field
         // while the user is still speaking into it.
         stream_partials: get("stream_partials").map(|v| v == "true").unwrap_or(false),

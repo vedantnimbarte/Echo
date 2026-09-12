@@ -24,6 +24,7 @@ export function Page({
   title,
   description,
   actions,
+  tabs,
   /**
    * Measure, in px. Settings pages are a column of controls and read best
    * narrow; a page of charts needs the room, and cramming one into 640 would
@@ -42,6 +43,12 @@ export function Page({
   description?: React.ReactNode;
   /** Page-level controls, aligned to the title's baseline. */
   actions?: React.ReactNode;
+  /**
+   * Sub-navigation across the page's own sections, when it has more than one.
+   * Sits under the description rather than beside the title: it belongs to the
+   * body it switches, and the header row is already carrying search.
+   */
+  tabs?: React.ReactNode;
   width?: number;
   children: React.ReactNode;
 }) {
@@ -64,11 +71,19 @@ export function Page({
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
       </header>
 
+      {/* A tab strip carries its own room underneath, so the description gives
+          some of its back rather than opening a second gap. */}
       {description && (
-        <p className="mb-9 max-w-[46ch] text-[14.5px] leading-relaxed text-[var(--ink-muted)]">
+        <p
+          className={
+            "max-w-[46ch] text-[14.5px] leading-relaxed text-[var(--ink-muted)] " +
+            (tabs ? "mb-6" : "mb-9")
+          }
+        >
           {description}
         </p>
       )}
+      {tabs}
       {/* divide-y draws rules only *between* groups, so no first/last-child
           padding fights with the group's own spacing.
 
@@ -79,12 +94,63 @@ export function Page({
           same 36 every other page gets. */}
       <div
         className={
-          "divide-y divide-[var(--hairline)]" + (description ? "" : " mt-7")
+          "divide-y divide-[var(--hairline)]" +
+          (description || tabs ? "" : " mt-7")
         }
       >
         {children}
       </div>
     </div>
+  );
+}
+
+/**
+ * A page's sub-navigation: one section of it at a time.
+ *
+ * Underlined rather than the sidebar's filled pill. The sidebar's shape means
+ * "which page", and borrowing it here would say the wrong thing twice on the
+ * same screen — these switch the body of the page you are already on.
+ *
+ * Generic over the id so a caller keeps its own union of section names and a
+ * typo stays a type error rather than a section that silently never opens.
+ */
+export function Tabs<Id extends string>({
+  label,
+  tabs,
+  current,
+  onSelect,
+}: {
+  /** Names the strip for a screen reader, e.g. "Engine sections". */
+  label: string;
+  tabs: readonly { id: Id; label: string }[];
+  current: Id;
+  onSelect: (id: Id) => void;
+}) {
+  // One section is not a choice, and a strip offering a single destination is
+  // furniture. The caller can hand over its whole list without checking.
+  if (tabs.length < 2) return null;
+
+  return (
+    <nav aria-label={label} className="mb-7 flex gap-5 border-b border-[var(--hairline)]">
+      {tabs.map((tab) => {
+        const open = tab.id === current;
+        return (
+          <button
+            key={tab.id}
+            onClick={() => onSelect(tab.id)}
+            aria-current={open ? "true" : undefined}
+            className={
+              "-mb-px border-b-2 pb-2.5 text-[14px] tracking-tight transition-colors " +
+              (open
+                ? "border-[var(--ink)] font-medium text-[var(--ink)]"
+                : "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]")
+            }
+          >
+            {tab.label}
+          </button>
+        );
+      })}
+    </nav>
   );
 }
 

@@ -3,10 +3,25 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trash2, Puzzle, ShieldAlert } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { commands, type PluginManifest } from "../../ipc/commands";
-import { Page, Group } from "../common/Page";
+import { Page, Tabs, Group } from "../common/Page";
+import { BuildGuide } from "./BuildGuide";
+
+/**
+ * Two things happen on this page and only one of them is a list: managing what
+ * is installed, and writing one of your own. The guide is long enough that
+ * leaving it under the list would bury the toggles people actually come here
+ * for, so each gets a section.
+ */
+const TABS = [
+  { id: "installed", label: "Installed" },
+  { id: "build", label: "Build one" },
+] as const;
+
+type Section = (typeof TABS)[number]["id"];
 
 export function PluginsPanel() {
   const qc = useQueryClient();
+  const [section, setSection] = useState<Section>("installed");
 
   const { data: plugins = [], isLoading } = useQuery({
     queryKey: ["plugins"],
@@ -63,13 +78,30 @@ export function PluginsPanel() {
   return (
     <Page
       title="Plugins"
-      description="Extra transcription engines, output targets and dictionaries, loaded from files you install."
+      // Was "extra transcription engines, output targets and dictionaries",
+      // which is the plan rather than the present: the host loads plugins and
+      // runs their lifecycle hooks, and does not dispatch to the capability
+      // traits yet. Build one says so at length; the page should not promise
+      // otherwise in the line above it.
+      description="Native libraries you install, loaded into Echo at startup."
       actions={
-        <button onClick={handleInstall} className="btn-primary px-3 py-1.5 text-[13.5px]">
-          <Puzzle className="w-3.5 h-3.5" /> Install from file
-        </button>
+        section === "installed" && (
+          <button onClick={handleInstall} className="btn-primary px-3 py-1.5 text-[13.5px]">
+            <Puzzle className="w-3.5 h-3.5" /> Install from file
+          </button>
+        )
+      }
+      tabs={
+        <Tabs
+          label="Plugins sections"
+          tabs={TABS}
+          current={section}
+          onSelect={setSection}
+        />
       }
     >
+      {section === "build" && <BuildGuide />}
+      {section === "installed" && (
       <Group>
       <div className="space-y-6">
       <div className="glass flex items-start gap-2.5 rounded-lg px-3 py-2.5">
@@ -126,7 +158,19 @@ export function PluginsPanel() {
       {isLoading ? (
         <p className="text-[var(--ink-muted)] text-sm">Loading…</p>
       ) : plugins.length === 0 ? (
-        <p className="text-[var(--ink-muted)] text-sm">No plugins installed.</p>
+        // An empty screen is a place to offer the next move, and for someone
+        // with nothing installed that is far more often writing one than
+        // hunting for a binary to trust.
+        <p className="text-sm text-[var(--ink-muted)]">
+          No plugins installed. Install one from a file, or{" "}
+          <button
+            onClick={() => setSection("build")}
+            className="text-[var(--ink)] underline decoration-[var(--hairline-strong)] underline-offset-[5px] transition-colors hover:decoration-[var(--ink)]"
+          >
+            write your own
+          </button>
+          .
+        </p>
       ) : (
         <ul className="space-y-2">
           {plugins.map((p) => (
@@ -173,6 +217,7 @@ export function PluginsPanel() {
       )}
       </div>
       </Group>
+      )}
     </Page>
   );
 }

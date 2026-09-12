@@ -8,7 +8,7 @@
   "pill.genericError": "Etwas ist schiefgelaufen",
   "settings.settings.title": "Einstellungen",
   "settings.settings.description": "Wie die Aufnahme startet und wie sich Echo beim Zuhören verhält.",
-  "settings.engine.title": "Engine",
+  "settings.engine.title": "Sprach-Engine",
   "settings.engine.description": "Was deine Sprache in Text umwandelt und mit welchen Modellen.",
   "settings.output.title": "Ausgabe",
   "settings.output.description": "Wohin der fertige Text geht und wie er dorthin gelangt.",

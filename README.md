@@ -8,43 +8,56 @@ any OpenAI-compatible endpoint you host yourself. Your choice, your keys.
 
 Built with **Rust · Tauri v2 · React 19 · TypeScript · TailwindCSS v4 · SQLite**.
 
+**Using Echo** — [Features](#features) · [Installing](#installing) · [Transcription backends](#transcription-backends) · [Text injection](#text-injection-per-os) · [Per-app profiles](#per-app-profiles) · [What Echo sends](#what-echo-sends-and-where) · [Global hotkey](#global-hotkey) · [Tray & login](#tray-icon-and-starting-at-login) · [Privacy](#privacy) · [Troubleshooting](#debugging--troubleshooting)
+
+**Building Echo** — [CONTRIBUTING.md](CONTRIBUTING.md) covers the repository layout, dev setup, architecture and release builds · [More docs](#docs)
+
 ---
 
 ## Features
 
-- 🎙️ **Live capture** with device selection and voice-activity detection (VAD)
-- 🧠 **Local transcription** via Whisper (whisper.cpp) — fully offline
-- ☁️ **Cloud transcription (BYOK)** — ten providers: OpenAI, Groq, Deepgram, Mistral, ElevenLabs, AssemblyAI, Speechmatics, Azure and Google
-- 🔌 **Any OpenAI-compatible endpoint** — LiteLLM, OpenRouter, vLLM, or a self-hosted Whisper server on your own machine
-- 🎚️ **Pick the model per provider** — free text, so a model released after your copy of Echo still works
-- 🧪 **Test a key before you trust it** — one button, caught at entry instead of mid-sentence
-- 🛟 **Falls back to offline** if a cloud request fails — and only ever toward more privacy; local never falls back to cloud
-- ⌨️ **Text injection** into the focused app — type keystrokes *or* clipboard-paste
-- ↩️ **Undo the last insert** with a global hotkey, or by saying "scratch that"
-- 🔁 **Retry the last utterance** on a stronger model without saying it again
-- ⚡ **Live text** (opt-in, per app) — words appear as you speak them, offline or in the cloud
-- 🧹 **Drops “um” and stuttered words** — and, optionally, fixes self-corrections with a local model
-- 📊 **Insights** — speaking speed, the fixes Echo made, which apps you dictate into, a streak calendar and an on-device-vs-cloud split, all counted from your own History and never sent anywhere
-- ✍️ **Spoken punctuation** (opt-in) — "comma", "new paragraph", "question mark"; English, Spanish, French, German, Italian, Portuguese, Dutch
-- 🔢 **Numbers, times and units** written properly (English) — "twenty five" → 25, "five percent" → 5%
-- 🔒 **Never types into a password field** (Windows/macOS; Linux can't detect it — see below)
-- 🖥️ **Scriptable** — `echo --transcribe recording.mp3` prints to stdout
-- 📈 **`echo --benchmark`** — measures your machine rather than promising numbers
-- 📁 **Transcribe a file** you already have — wav, mp3, ogg or flac, offline
-- 📖 **Custom dictionary** with replacements, enable/disable, JSON import/export — biases the decoder offline *and* in the cloud
-- 🗂️ **Per-app profiles** — override insert behaviour and dictionary scope per application
-- 🌍 **Language selection** — pin a dictation language or let Whisper auto-detect
-- ⚡ **Global hotkey** to toggle recording from anywhere
-- 📌 **Lives in the tray** — notification area on Windows, menu bar on macOS, status area on Linux; click it for Settings or to quit
-- 🚀 **Starts at login** (opt-in) — a hotkey can only answer if Echo is already running
-- 🗣️ **Wake word** (opt-in) — say a phrase to start dictating hands-free, matched on-device
-- 🤖 **Command mode** (opt-in) — say a trigger word to rewrite the selection via a local LLM
-- 🔄 **Auto-update** from GitHub Releases (signed)
-- 🧩 **Plugin system** (experimental) for custom ASR / output / audio / dictionary
-- 📊 **Local-only telemetry**, opt-in, viewable and deletable — nothing leaves your device
-- 🕘 **History** of past transcriptions, searchable and exportable to JSON
-- 🔎 **Request log** — see every outbound request Echo made, and whether your setup is offline-capable
-- 🔐 **API keys stored in the OS keychain**, never in plain files
+**Speak anywhere.** A global hotkey starts recording — or a wake word, or simply
+talking, if you turn those on. The transcript is typed or pasted into whatever
+app has focus. Both the undo and the retry-on-a-stronger-model are global too,
+because by the time you notice a mistake the focus has moved on.
+
+**Offline by default.** Whisper runs on your machine and the audio never leaves
+it.
+
+**Or ten cloud providers, on your own keys.** OpenAI, Groq, Deepgram, Mistral,
+ElevenLabs, AssemblyAI, Speechmatics, Azure and Google, plus any
+OpenAI-compatible endpoint you host yourself. Pick the model per provider, test
+a key before you trust it, and fall back to offline if a request fails — never
+the other way round.
+
+**Text that reads like writing.** Drops "um" and stuttered words, writes
+numbers, times and units as digits, and takes spoken punctuation ("comma", "new
+paragraph") in seven languages. Every one of them optional.
+
+**A dictionary that biases the decoder,** rather than a find-and-replace
+afterwards — your corrections steer Whisper offline *and* the provider in the
+cloud. Enable entries individually, import and export as JSON.
+
+**Per-app profiles** override insert behaviour and dictionary scope for a given
+application, so a terminal can take the words exactly as spoken.
+
+**Never types into a password field.** Windows and macOS ask the accessibility
+API. Linux cannot, and Settings says so rather than pretending.
+
+**You can see what left.** A log of every outbound request Echo made, telemetry
+that is local-only and opt-in, and API keys held in the OS keychain.
+
+**History and Insights.** Searchable transcripts, exportable to JSON; speaking
+speed, the fixes Echo made, which apps you dictate into and an on-device-vs-cloud
+split — all counted from your own history and never sent anywhere.
+
+**Scriptable.** `echo --transcribe recording.mp3` prints to stdout, and
+`echo --benchmark` measures your machine instead of promising numbers.
+
+**Also in the box:** transcribe a wav/mp3/ogg/flac you already have, live text
+as you speak (opt-in, per app), command mode that rewrites a selection through a
+local LLM, a tray icon, start at login, signed auto-update, language pinning or
+auto-detect, and an experimental plugin system.
 
 ---
 
@@ -77,10 +90,10 @@ This is expected, and here is exactly what you'll see:
 | OS | What happens | What to do |
 |---|---|---|
 | **Windows** | SmartScreen: *"Windows protected your PC"* | **More info** → **Run anyway** |
-| **macOS** | Gatekeeper refuses to open it, offering only *Move to Trash* | The install script clears the quarantine flag for you. Installing by hand: right-click Echo in Applications → **Open** → **Open** |
+| **macOS** | Gatekeeper refuses to open it, offering only *Move to Trash*, or says *"Echo is damaged and can't be opened"* | The install script clears the quarantine flag for you. Installing by hand: right-click Echo in Applications → **Open** → **Open**, or clear it yourself with `xattr -cr /Applications/Echo.app` |
 | **Linux** | Nothing — no signing gate | — |
 
-If that trade isn't one you want to make, [build from source](#running-locally)
+If that trade isn't one you want to make, [build from source](CONTRIBUTING.md)
 instead: the result is identical and you compiled it yourself.
 
 ### The password-field guard is unverified on real hardware
@@ -109,23 +122,27 @@ somebody dictating into twenty applications, so here is the honest state:
 If you use Echo on a Community-tier platform and it works, saying so is a
 genuinely useful contribution — the gap is verification, not code.
 
-### Per-OS notes
+### Per-OS requirements
 
-- **Windows** — needs the WebView2 runtime (preinstalled on Win11; on Win10 grab
-  the *Evergreen* runtime from Microsoft).
-- **macOS** — **Apple Silicon only.** The ONNX Runtime behind Silero VAD and
-  wake word publishes no Intel-macOS binaries, so there is no x86_64 build; an
-  Intel Mac would have to compile ONNX Runtime from source. Grant **Microphone**
-  and **Accessibility** permissions on first run, or Echo can hear you but can't
-  type.
-- **Tray icon** — Windows puts it in the notification area (possibly behind the
-  overflow arrow, where you can drag it out), macOS in the menu bar, Linux in
-  whatever status area the desktop provides. A few minimal Linux desktops have
-  none at all; Echo logs a warning and runs without it, reachable through the
-  pill and the global hotkey.
-- **Linux** — the AppImage needs FUSE (`sudo apt install libfuse2` on
-  Debian/Ubuntu), and text injection needs `xdotool` (X11) or `ydotool`
-  (Wayland). A `.deb` is also attached to each release.
+What a user needs on each platform. This is the canonical list — later sections
+link here rather than repeating it.
+
+| OS | Install first | Permissions to grant |
+|---|---|---|
+| **Windows** | **WebView2 runtime** — preinstalled on Windows 11; on Windows 10 grab the *Evergreen* runtime from [Microsoft](https://developer.microsoft.com/microsoft-edge/webview2/). Typing into other apps needs nothing extra. | Microphone |
+| **macOS** *(Apple Silicon only)* | Nothing. | **Microphone** and **Accessibility**. Without Accessibility, Echo can hear you but cannot type. |
+| **Linux (X11)** | **`xdotool`**, for typing into other apps. The AppImage also needs FUSE — `sudo apt install libfuse2` on Debian/Ubuntu; a `.deb` and an `.rpm` are attached to each release too. | Microphone |
+| **Linux (Wayland)** | **`ydotool`** *and* a running **`ydotoold`** daemon. Some compositors refuse synthetic input whatever you install. | Microphone |
+
+**Why Apple Silicon only:** the ONNX Runtime behind Silero VAD and the wake word
+publishes no Intel-macOS binaries, so there is no x86_64 build — an Intel Mac
+would have to compile ONNX Runtime from source.
+
+**The tray icon** lands in the Windows notification area (possibly behind the
+overflow arrow, where you can drag it out), the macOS menu bar, or whatever
+status area your Linux desktop provides. A few minimal desktops have none at
+all; Echo logs a warning and runs without it, still reachable through the pill
+and the global hotkey.
 
 ### Updating
 
@@ -135,115 +152,10 @@ command above to upgrade.
 
 ---
 
-## Project structure
+## Building Echo yourself
 
-```
-Echo/
-├─ echo-app/                # the Tauri application
-│  ├─ src/                  # React frontend (components, hooks, ipc wrappers)
-│  ├─ scripts/              # build helpers (stage-runtime-deps.mjs)
-│  └─ src-tauri/            # Rust backend
-│     ├─ src/core/          # audio, asr, vad, dictionary, injection, telemetry, plugins
-│     ├─ src/storage/       # SQLite, repositories, keychain
-│     ├─ src/commands/      # Tauri IPC commands
-│     ├─ src/platform/      # per-OS text injection
-│     ├─ capabilities/      # Tauri permission capabilities
-│     └─ resources/bin/     # bundled whisper-cli lands here at package time
-├─ packaging/               # winget / homebrew / flatpak / snap manifests
-├─ .github/workflows/       # CI + release matrix
-├─ docs/                    # RELEASING.md, BUNDLING.md, WAKE_WORD.md
-├─ plan.md                  # phase-by-phase implementation plan & status
-├─ CONTRIBUTING.md          # dev setup + architecture
-└─ PLUGINS.md               # plugin manifest + SDK contract
-```
-
----
-
-## Running locally
-
-### 1. Common prerequisites (all platforms)
-
-- **Rust** (stable) + Cargo — https://rustup.rs
-- **Node.js 20+** and npm — https://nodejs.org
-- **Tauri v2 system dependencies** — the per-OS setup below covers these; the
-  canonical list is at https://tauri.app/start/prerequisites/
-
-### 2. Per-OS setup
-
-<details open>
-<summary><b>Windows</b></summary>
-
-1. **Visual Studio C++ Build Tools** — install the *"Desktop development with
-   C++"* workload (includes the MSVC compiler). https://visualstudio.microsoft.com/downloads/
-2. **WebView2 Runtime** — preinstalled on Windows 11; on Windows 10 install the
-   *Evergreen* runtime: https://developer.microsoft.com/microsoft-edge/webview2/
-3. That's it — text injection (SendInput) and the offline `whisper-cli` both work
-   with no extra tools (the Whisper engine auto-downloads on first run).
-
-</details>
-
-<details>
-<summary><b>macOS</b></summary>
-
-1. **Xcode Command Line Tools:**
-   ```bash
-   xcode-select --install
-   ```
-2. **Offline Whisper engine** — in dev, macOS needs `whisper-cli` on your `PATH`
-   (release installers bundle it for you):
-   ```bash
-   brew install whisper-cpp        # provides `whisper-cli`
-   ```
-3. **Accessibility permission** — required so Echo can type into other apps.
-   Grant it under System Settings → Privacy & Security → Accessibility (see
-   [Text injection](#text-injection-per-os)). In dev the app that needs
-   permission is your terminal; for an installed build it's Echo itself.
-
-</details>
-
-<details>
-<summary><b>Linux (Debian/Ubuntu)</b></summary>
-
-1. **Tauri + audio system libraries:**
-   ```bash
-   sudo apt update
-   sudo apt install -y \
-     libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
-     libasound2-dev build-essential curl wget file cmake
-   ```
-   (Fedora/Arch equivalents: see the Tauri prerequisites page.)
-2. **Text-injection tool** — pick one for your display server:
-   ```bash
-   sudo apt install -y xdotool     # X11
-   sudo apt install -y ydotool     # Wayland — also needs the ydotoold daemon running
-   ```
-3. **Offline Whisper engine** — in dev, Linux needs `whisper-cli` on your `PATH`
-   (release installers bundle it). Install `whisper.cpp` from your package
-   manager or build it, ensuring a `whisper-cli` binary is on `PATH`.
-
-</details>
-
-### 3. Clone and run
-
-```bash
-git clone git@github.com:vedantnimbarte/Echo.git
-cd Echo/echo-app
-npm install
-npm run tauri dev
-```
-
-This launches the desktop app in development mode. **The first Rust build
-compiles all dependencies and can take several minutes**; subsequent runs are
-incremental and fast. Three surfaces exist: a floating **pill** (always-on-top
-recorder), the **Settings** window, and a **tray icon**. The pill has no window
-chrome and stays out of the taskbar, so the tray is how you reach Settings or
-quit once the pill is dismissed.
-
-### 4. First-run configuration
-
-Out of the box the app runs, but **transcription is `none`** until you pick a
-backend — the onboarding wizard walks you through mic → engine → permissions →
-hotkey. See [Transcription backends](#transcription-backends) below.
+Repository layout, per-OS dev setup, the architecture tour and how to build
+installers all live in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
@@ -254,13 +166,12 @@ hotkey. See [Transcription backends](#transcription-backends) below.
 The default local engine shells out to a bundled **`whisper-cli`** (whisper.cpp).
 It needs **no** cmake/libclang at build time:
 
-- **Windows** — the binary auto-downloads on first run (Settings → *Set up local
-  Whisper*, or the onboarding "Transcription" step).
+- **Windows** — the binary auto-downloads on first run (**Voice engine → Speech → Local models**, or the onboarding "Transcription" step).
 - **macOS / Linux (dev)** — provide `whisper-cli` on your `PATH`
   (`brew install whisper-cpp`, or your distro's whisper.cpp package). Release
   installers bundle it, so end users need nothing.
 
-Then in the app: **Settings → Local Whisper models → Download** a model
+Then in the app: **Voice engine → Speech → Local models** and download a model
 (`tiny` / `base` / `small` / `medium`) and click **Use**. Models are saved under
 the app data directory (see [Where things live](#where-things-live)).
 
@@ -276,7 +187,7 @@ the app data directory (see [Where things live](#where-things-live)).
 
 ### Cloud providers (no native build needed)
 
-In **Settings → Engine**, choose **A cloud provider**, then open the provider you
+In **Voice engine → Speech**, choose **A cloud provider**, then open the provider you
 want. Paste a key and click **Save key** (it goes to your OS keychain), **Test
 the key** to check it before you rely on it, and **Dictate with …** to send audio
 there instead of to the offline engine.
@@ -320,7 +231,7 @@ speaking OpenAI's `/audio/transcriptions` API works:
 | Azure OpenAI | `https://<resource>.openai.azure.com/openai/deployments/<deployment>` |
 
 A local endpoint keeps your audio on your own machine or network while still
-skipping the native Whisper build. **Settings → Request log** shows every host
+skipping the native Whisper build. **Privacy → Request log** shows every host
 Echo contacted, so you can confirm where the audio actually went.
 
 ---
@@ -328,27 +239,22 @@ Echo contacted, so you can confirm where the audio actually went.
 ## Text injection (per OS)
 
 Echo types the transcript into the focused app. Two methods, selectable in
-**Settings → Text output → Insert method**:
+**Output → Insert → Method**:
 
 - **Type keystrokes** (default) — universal, works everywhere.
 - **Paste** — puts the text on the clipboard, sends the paste shortcut, then
   restores your clipboard. Faster and more reliable for long transcripts; note
   some apps (e.g. terminals) use a different paste shortcut.
 
-Per-OS requirements:
-
-| OS | Requirement |
-|---|---|
-| **Windows** | Works out of the box (SendInput). |
-| **macOS** | Grant **Accessibility** permission (System Settings → Privacy & Security → Accessibility). Verify with **Settings → Check accessibility permission**. |
-| **Linux (X11)** | `xdotool` installed. |
-| **Linux (Wayland)** | `ydotool` installed **and** `ydotoold` daemon running. Note: some compositors (e.g. GNOME) restrict synthetic input. |
+What each OS needs before this works is in
+[Per-OS requirements](#per-os-requirements). On macOS you can confirm the
+permission took with **Output → Advanced → Check permission**.
 
 ---
 
 ## Per-app profiles
 
-Settings → *Per-app profiles* overrides how Echo behaves in a given app. Every
+**Output → Apps** overrides how Echo behaves in a given app. Every
 field can stay on **Global**, which inherits the setting above it — so a profile
 can pin one behaviour (never auto-insert into a password manager) without
 freezing the rest.
@@ -362,7 +268,7 @@ apply and the global settings are used.
 
 ## What Echo sends, and where
 
-Settings → *Privacy* shows whether the current configuration can reach the
+**Privacy** shows whether the current configuration can reach the
 network at all, plus a log of every outbound request Echo made: the host, why,
 and when.
 
@@ -374,7 +280,7 @@ this instruments (see [PLUGINS.md](PLUGINS.md)).
 ## Global hotkey
 
 Default is **`Ctrl/Cmd + Shift + Space`** to toggle recording. Change it in
-**Settings → Global hotkey** using Tauri accelerator syntax (e.g.
+**Settings → Dictation → Global hotkey** using Tauri accelerator syntax (e.g.
 `CommandOrControl+Alt+E`). If the hotkey doesn't fire, another app may already
 own that combination — pick a different one.
 
@@ -386,7 +292,7 @@ menu with **Settings…** and **Quit Echo**. That is the only persistent way bac
 in: the pill has no window chrome and stays out of the taskbar, and Settings
 hides itself once onboarding is done.
 
-A hotkey can only answer if Echo is already running, so **Settings → Dictation →
+A hotkey can only answer if Echo is already running, so **Settings → General →
 Starting Echo** has *Start Echo when I log in*. The login item is registered
 with your OS rather than recorded in `echo.db` — a registry `Run` key on
 Windows, a LaunchAgent on macOS, an XDG autostart entry on Linux — and the
@@ -432,31 +338,17 @@ The Rust backend logs via `tracing` (the `echo` crate is at `debug` by default).
 - **Frontend / WebView** — in a `tauri dev` build, right-click the window →
   *Inspect Element* to open the WebView devtools (console, network, React state).
 
-### Quick checks
-
-```bash
-# Frontend type-check
-cd echo-app && npx tsc --noEmit
-
-# Backend compile, tests, format, lint
-cd echo-app/src-tauri
-cargo check
-cargo test
-cargo fmt --check
-cargo clippy
-```
-
 ### Common issues
 
 | Symptom | Likely cause / fix |
 |---|---|
 | **App window is blank** | Vite dev server didn't start. Ensure `npm install` ran; check the terminal for the `localhost:1420` dev URL and for JS errors in the WebView devtools. |
 | **No microphones listed / silent meter** | Grant OS microphone permission to the app (macOS: Privacy & Security → Microphone). Pick the correct device in Settings; test with the meter. |
-| **Transcription does nothing (local)** | `whisper-cli` not found. Windows: run *Set up local Whisper*. macOS/Linux dev: `brew install whisper-cpp` / ensure `whisper-cli` is on `PATH`. Also confirm a model is downloaded and selected. |
+| **Transcription does nothing (local)** | `whisper-cli` not found. Windows: download one under **Voice engine → Speech → Local models**. macOS/Linux dev: `brew install whisper-cpp` / ensure `whisper-cli` is on `PATH`. Also confirm a model is downloaded and selected. |
 | **Cloud transcription fails** | Re-check the API key in Settings (stored in keychain), provider quota, and network. Bump `RUST_LOG` to see the request error. |
 | **Text doesn't appear in other apps** | macOS: grant Accessibility. Linux: install `xdotool` (X11) or run `ydotoold` (Wayland). Try switching **Insert method** between Type and Paste. |
 | **Paste inserts into the wrong app / not at all** | The focused app may use a non-standard paste shortcut, or focus changed during the insert delay. Switch to **Type keystrokes**, or raise **Insert delay (ms)**. |
-| **Hotkey doesn't toggle recording** | Another app owns the shortcut. Change it in Settings → Global hotkey. |
+| **Hotkey doesn't toggle recording** | Another app owns the shortcut. Change it in Settings → Dictation → Global hotkey. |
 | **Can't find Echo / no way to quit** | Use the tray icon — on Windows it may be hidden behind the notification-area overflow arrow. If your Linux desktop has no status area, check `echo.log` for a tray warning; the global hotkey still works. |
 | **Launch at login won't stick** | On a managed machine the login item can be blocked by policy — Settings reports the error it got. Echo reads the state back from the OS, so removing the entry with your own tools turns the toggle off, as it should. |
 | **Model download stalls** | Network/proxy issue; delete the partial file in `models/` and retry. |
@@ -468,45 +360,6 @@ cargo clippy
   `echo.db`) from the app data directory, then relaunch.
 - **Full reset:** quit Echo and delete the app data directory above. API keys in
   the keychain are separate — remove those from your OS keychain tool if needed.
-
----
-
-## Building installers
-
-```bash
-cd echo-app
-npm run tauri build
-```
-
-> Auto-update artifacts are signed, so a local `tauri build` expects the updater
-> key (see [`docs/RELEASING.md`](docs/RELEASING.md)). For a quick unsigned local
-> build, set `bundle.createUpdaterArtifacts` to `false` in `tauri.conf.json`.
-
-Artifacts land in `echo-app/src-tauri/target/release/bundle/`. Tagging a release
-(`v*`) triggers the GitHub Actions matrix to build Windows / macOS (universal) /
-Linux installers and staple the offline Whisper engine into each. See
-[`docs/RELEASING.md`](docs/RELEASING.md) for the release + auto-update setup.
-
----
-
-## Installing (from a release)
-
-Echo auto-updates once installed (it checks GitHub Releases on launch). The
-installers are **not yet OS-code-signed**, so the first launch shows a warning
-you have to click past — this is expected for an open-source app, not a problem
-with the download:
-
-- **macOS** — the `.dmg` is quarantined, so double-clicking may say *"Echo is
-  damaged and can't be opened."* Remove the quarantine flag once:
-  ```bash
-  xattr -cr /Applications/Echo.app
-  ```
-  Then grant **System Settings → Privacy & Security → Accessibility** so Echo can
-  type into other apps.
-- **Windows** — SmartScreen shows *"Windows protected your PC."* Click **More
-  info → Run anyway**.
-- **Linux** — install the `.deb`/`.rpm`/AppImage. For text injection you need
-  `xdotool` (X11) or `ydotool` + a running `ydotoold` (Wayland).
 
 ---
 
@@ -523,25 +376,6 @@ with the download:
 
 ---
 
-## Status
-
-See [`plan.md`](plan.md) for the full phase breakdown. Summary:
-
-| Phase | Area | Status |
-|---|---|---|
-| 0 | Foundation | ✅ |
-| 1 | Audio pipeline (VAD, device select) | ✅ |
-| 2 | Local ASR (Whisper) | ✅ (`whisper-cli` default; `--features whisper` optional) |
-| 3 | Text injection (Win/macOS/Linux) | ✅ (type + paste) |
-| 4 | Dictionaries | ✅ |
-| 5 | Cloud ASR (9 providers + custom endpoint) | ✅ (Deepgram also streams over WS) |
-| 6 | Telemetry | ✅ |
-| 7 | Plugin system | ✅ |
-| 8 | Packaging | ✅ (offline engine bundled in CI; OS code-signing TBD) |
-| 9 | v1 launch (hotkey, CSP, auto-update, docs) | ✅ (OS code-signing TBD) |
-
----
-
 ## Docs
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) — dev setup & architecture
@@ -549,7 +383,6 @@ See [`plan.md`](plan.md) for the full phase breakdown. Summary:
 - [RELEASING.md](docs/RELEASING.md) — cutting releases & auto-update signing
 - [BUNDLING.md](docs/BUNDLING.md) — staging the offline Whisper engine
 - [WAKE_WORD.md](docs/WAKE_WORD.md) — wake word + command mode, and training a custom phrase
-- [plan.md](plan.md) — implementation plan
 
 ## License
 

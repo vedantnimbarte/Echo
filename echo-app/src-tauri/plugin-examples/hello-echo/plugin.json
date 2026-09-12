@@ -1,0 +1,8 @@
+{
+  "name": "hello-echo",
+  "version": "0.1.0",
+  "description": "An Echo plugin",
+  "author": "",
+  "permissions": [],
+  "entry": "hello_echo.dll"
+}

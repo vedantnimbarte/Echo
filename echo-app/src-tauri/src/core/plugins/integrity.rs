@@ -18,8 +18,8 @@
 //! file has to be agreed to again. That is a real property, and a small one.
 //!
 //! A genuine sandbox needs an OS boundary — a child process with a restricted
-//! token, or a WASM runtime — and a wire protocol replacing the FFI. `plan.md`
-//! §9.1 scopes it; it is not a change that can be smuggled in behind a hash.
+//! token, or a WASM runtime — and a wire protocol replacing the FFI. That is a
+//! project of its own; it is not a change that can be smuggled in behind a hash.
 
 use std::path::Path;
 

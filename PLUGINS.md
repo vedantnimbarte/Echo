@@ -3,6 +3,27 @@
 Echo supports native plugins loaded as shared libraries (`.dll` / `.dylib` /
 `.so`).
 
+**In the app:** *Plugins → Build one* walks through the same material with
+copy-paste snippets, and will scaffold a project that already compiles. This
+file is the reference; that is the walkthrough.
+
+**A working example:** [`echo-app/src-tauri/plugin-examples/hello-echo`](echo-app/src-tauri/plugin-examples/hello-echo)
+is the scaffold's own output, checked in and built as part of the workspace — so
+the snippets below are known to compile rather than assumed to.
+
+## What actually runs today
+
+Worth knowing before you plan a plugin around it. Echo opens your library, calls
+`on_load` when the plugin is enabled, and calls `on_unload` when it is disabled
+or Echo quits. Your plugin gets a data directory. That is the whole of what the
+host currently does.
+
+The capability traits — `OutputPlugin` and `AudioPlugin` in the SDK, `AsrPlugin`
+and `DictionaryPlugin` host-side — define the shape of work still to come.
+**Nothing dispatches to them yet.** Implementing one compiles and installs
+cleanly, and Echo will never call it. Build on the lifecycle hooks until that
+changes.
+
 ## ⚠️ Security: read this before installing anything
 
 **A plugin is not sandboxed. Installing one is equivalent to running an
@@ -58,15 +79,14 @@ transcripts and dictionary entries would have to be serialised, and every
 existing plugin would need rewriting.
 
 That is a project, not a patch, and pretending otherwise is how a checkbox ends
-up in Settings with nothing behind it. `plan.md` §9.1 tracks it.
+up in Settings with nothing behind it.
 
 **Practical advice:** install plugins you have built yourself or whose source
 you have read and compiled. Do not install a prebuilt binary from someone you
 do not trust.
 
 Real enforcement needs an out-of-process or WASM runtime with a capability API.
-That is a future goal, not a current property — the design is tracked in
-`plan.md` §9.1.
+That is a future goal, not a current property.
 
 ## Manifest
 
@@ -84,7 +104,12 @@ Ship a `plugin.json` next to your compiled library:
 ```
 
 - `permissions` may include `asr`, `output`, `audio`, `dictionary`.
-- `entry` is the shared library file name.
+- `entry` is the shared library file name — **the one field people get wrong.**
+  Cargo replaces hyphens with underscores and decorates the name per platform,
+  so a crate called `my-plugin` builds to `my_plugin.dll` on Windows,
+  `libmy_plugin.dylib` on macOS and `libmy_plugin.so` on Linux. `plugin.json` is
+  therefore not portable as written; a scaffolded project has it right for the
+  machine that generated it.
 
 ## The `echo-sdk` crate
 
@@ -133,7 +158,11 @@ Echo-internal types) in `echo-app/src-tauri/src/core/plugins/mod.rs`.
 
 ## Installing
 
-In the app: **Plugins** tab → **Install from file** → select your library
-(the sibling `plugin.json` is read automatically). Toggle enable/disable or
-uninstall from the same screen. Installed plugins are copied to the app data
-directory under `plugins/<name>/`.
+In the app: **Plugins → Installed → Install from file** → select your library
+(the sibling `plugin.json` is read automatically, so the two must be in the same
+directory). Toggle enable/disable or uninstall from the same screen. Installed
+plugins are copied to the app data directory under `plugins/<name>/`.
+
+Changing a plugin means building and installing again. The fingerprint above is
+checked on every load, so a library edited underneath Echo is disabled rather
+than loaded — including when the edit was your own rebuild.

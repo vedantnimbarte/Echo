@@ -26,11 +26,81 @@ import { Performance } from "./Performance";
 import { AudioImport } from "./AudioImport";
 import { HotkeyCapture } from "../common/HotkeyCapture";
 import type { PillSize } from "../pill/Pill";
-import { Page, Group, Field, Check } from "../common/Page";
+import { Page, Tabs, Group, Field, Check } from "../common/Page";
 import { t, LOCALES, setLocale } from "../../i18n";
 import { About } from "./About";
 
 export type SettingsPage = "settings" | "engine" | "output" | "privacy" | "about";
+
+type Lane = "local" | "cloud";
+
+/**
+ * Where a group of controls lives: a page, or a section of one.
+ *
+ * Written as "page.section" so a group declares its home in one string, and
+ * spelled out as a union rather than left to `string` because a typo here would
+ * not fail — the group would simply never appear on any tab.
+ */
+type Home =
+  | "settings.general"
+  | "settings.dictation"
+  | "settings.microphone"
+  | "engine.speech"
+  | "engine.tools"
+  | "engine.advanced"
+  | "output.insert"
+  | "output.formatting"
+  | "output.apps"
+  | "output.advanced"
+  | "privacy"
+  | "about";
+
+type Tab = {
+  id: Home;
+  label: string;
+  /** Sections that only exist for one engine lane say so, rather than opening empty. */
+  when?: (lane: Lane) => boolean;
+};
+
+/**
+ * Sub-navigation for the settings pages.
+ *
+ * Four pages was the right split — a sentence is heard, turned into words,
+ * delivered somewhere, and whatever is kept afterwards is yours — but each page
+ * had grown to seven or eight groups, which is more than anyone scans. So a
+ * page now names its own sections, and where a page has knobs you touch once —
+ * usually because something went wrong — they are gathered under Advanced at
+ * the end of it. Settings has no Advanced: the only rare thing on it is a
+ * microphone detail, and one select does not make a section. Naming it for what
+ * it holds is what makes it findable, which was the whole point.
+ *
+ * Section ids are unique across pages, which is the whole reset mechanism: a
+ * tab picked on one page stops matching when you move to the next, and that
+ * page's first tab takes over. No effect to keep in step.
+ *
+ * Privacy and About have no sections. Four short groups do not need splitting,
+ * and a strip that appears carrying two entries is noise rather than structure.
+ */
+const SETTINGS_TABS: Partial<Record<SettingsPage, Tab[]>> = {
+  settings: [
+    { id: "settings.general", label: "General" },
+    { id: "settings.dictation", label: "Dictation" },
+    { id: "settings.microphone", label: "Microphone" },
+  ],
+  engine: [
+    { id: "engine.speech", label: "Speech" },
+    { id: "engine.tools", label: "Tools" },
+    // GPU and thread counts belong to the offline engine; on cloud the tab
+    // would open on nothing at all.
+    { id: "engine.advanced", label: "Advanced", when: (lane) => lane === "local" },
+  ],
+  output: [
+    { id: "output.insert", label: "Insert" },
+    { id: "output.formatting", label: "Formatting" },
+    { id: "output.apps", label: "Apps" },
+    { id: "output.advanced", label: "Advanced" },
+  ],
+};
 
 // Read through `t` at call time rather than baked into a constant, so a
 // language change takes effect on the next render instead of the next launch.
@@ -60,11 +130,12 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
   const [q, setQ] = useState("");
   const query = q.trim().toLowerCase();
   const searching = query.length > 0;
-  const on = (owner: SettingsPage, terms: string[]) =>
-    searching ? terms.some((t) => t.includes(query)) : owner === page;
-  // While searching, groups arrive out of context — say where each one lives.
-  const label = (owner: SettingsPage, title: string) =>
-    searching ? `${pageMeta(owner).title} · ${title}` : title;
+
+  /* ---- which section is open -------------------------------------------- */
+  // The tab the user last clicked, which may belong to a page they have since
+  // left. Resolved against the current page's sections further down, once the
+  // engine lane is known.
+  const [picked, setPicked] = useState<Home | null>(null);
 
   /* ---- launch at login ---------------------------------------------------- */
   // The OS owns this registration, so it is read back from the OS rather than
@@ -238,6 +309,14 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
     queryKey: ["setting", "injection_method"],
     queryFn: () => commands.getSetting("injection_method"),
   });
+  // Unset means typing, which is what `resolve_delivery` decides on the Rust
+  // side too — so this is the method actually running, not just the one the
+  // picker happens to show.
+  const method = injectionMethod ?? "type";
+  // Auto pastes as readily as paste does — anything with a line break, and
+  // anything long — so the clipboard knob belongs to both. Showing it only on
+  // "paste" hid it from exactly the people whose text was going missing.
+  const pastes = method === "paste" || method === "auto";
   const setAutoInjectMutation = useMutation({
     mutationFn: (v: string) => commands.setSetting("auto_inject", v),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["setting", "auto_inject"] }),
@@ -338,6 +417,36 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
     if (next === "local" && activeProvider !== "local") setProviderMutation.mutate("local");
   }
 
+  /* ---- sections ---------------------------------------------------------- */
+  // Audio a crash interrupted waits under Tools, and nobody would think to look
+  // on a tab for something they did not know survived — so when there is some,
+  // that is the tab the Engine page opens on. The same query AudioImport runs,
+  // shared from the cache rather than asked twice.
+  const { data: recovered = [] } = useQuery({
+    queryKey: ["recovered-recordings"],
+    queryFn: commands.recoveredRecordings,
+  });
+
+  const tabs = (SETTINGS_TABS[page] ?? []).filter((section) => section.when?.(lane) ?? true);
+  // A page with no sections is its own home, so Privacy and About match on the
+  // page id and need no special case below.
+  const tab: Home =
+    tabs.find((section) => section.id === picked)?.id ??
+    (page === "engine" && recovered.length > 0 ? "engine.tools" : (tabs[0]?.id ?? page));
+
+  // Search reaches across every page and section — splitting settings up hides
+  // things by design, and without this, finding a control means guessing twice.
+  const on = (owner: Home, terms: string[]) =>
+    searching ? terms.some((term) => term.includes(query)) : owner === tab;
+  // While searching, groups arrive out of context — say where each one lives,
+  // which is now a page and the section inside it.
+  const label = (owner: Home, title: string) => {
+    if (!searching) return title;
+    const [owning] = owner.split(".") as [SettingsPage];
+    const section = SETTINGS_TABS[owning]?.find((s) => s.id === owner);
+    return [pageMeta(owning).title, section?.label, title].filter(Boolean).join(" · ");
+  };
+
   const meta = pageMeta(page);
 
   const search = (
@@ -353,6 +462,15 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
     </div>
   );
 
+  const sections = (
+    <Tabs
+      label={`${meta.title} sections`}
+      tabs={tabs}
+      current={tab}
+      onSelect={setPicked}
+    />
+  );
+
   return (
     <Page
       title={searching ? "Search" : meta.title}
@@ -362,67 +480,15 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
           : meta.description
       }
       actions={search}
+      // A search is already showing every section at once, so the strip would
+      // be offering to narrow to one of them and then not doing it.
+      tabs={searching ? undefined : sections}
     >
-      {/* ---- Dictation ---------------------------------------------------- */}
-      {on("settings", ["mode", "push to talk", "voice activated", "dictation", "recording"]) && (
-        <Group
-          title={label("settings", "Mode")}
-          hint="Hold to talk waits a beat before opening the microphone, so a shortcut like Ctrl still works in the combinations you type. Tap to toggle leaves the microphone open until you press the hotkey again."
-        >
-          <div className="grid grid-cols-3 gap-2.5">
-            {(
-              [
-                {
-                  id: "hold" as const,
-                  Icon: Hand,
-                  title: "Hold to talk",
-                  sub: "Records while you hold the hotkey",
-                },
-                {
-                  id: "toggle" as const,
-                  Icon: Keyboard,
-                  title: "Tap to toggle",
-                  sub: "Tap to start, tap again to stop",
-                },
-                {
-                  id: "auto" as const,
-                  Icon: AudioWaveform,
-                  title: "Voice activated",
-                  sub: "Records when you speak, stops on silence",
-                },
-              ]
-            ).map(({ id, Icon, title, sub }) => {
-              const active = mode === id;
-              return (
-                <button
-                  key={id}
-                  onClick={() => changeMode(id)}
-                  aria-pressed={active}
-                  className={
-                    "flex flex-col gap-1.5 rounded-xl border p-3.5 text-left transition " +
-                    (active
-                      ? "border-[var(--hairline-strong)] bg-[var(--surface-2)] shadow-[var(--edge-light)]"
-                      : "border-[var(--hairline)] bg-[var(--surface-1)] hover:bg-[var(--surface-2)]")
-                  }
-                >
-                  <span className="flex items-center gap-2 text-[14.5px] font-medium">
-                    <Icon
-                      className="h-4 w-4"
-                      style={{ color: active ? "var(--ink)" : "var(--ink-muted)" }}
-                    />
-                    {title}
-                  </span>
-                  <span className="text-[13px] leading-snug text-[var(--ink-muted)]">{sub}</span>
-                </button>
-              );
-            })}
-          </div>
-        </Group>
-      )}
+      {/* ---- Settings · General ------------------------------------------ */}
 
-      {on("settings", ["pill", "size", "small", "large", "minimal", "line", "capsule", "compact", "overlay", "floating", "drag", "move", "position"]) && (
+      {on("settings.general", ["pill", "size", "small", "large", "minimal", "line", "capsule", "compact", "overlay", "floating", "drag", "move", "position"]) && (
         <Group
-          title={label("settings", "Pill")}
+          title={label("settings.general", "Pill")}
           hint="The floating control you dictate from — drag it anywhere on screen and Echo puts it back there next launch. All three show the same live level, with less and less of the pill around it: along a bar, around the button's edge, or inside a capsule barely bigger than the meter."
         >
           <div className="grid grid-cols-3 gap-2.5">
@@ -485,9 +551,10 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
-      {on("settings", ["launch", "login", "startup", "start", "boot", "autostart", "auto-start", "background", "tray", "quick access", "notification area", "menu bar"]) && (
+
+      {on("settings.general", ["launch", "login", "startup", "start", "boot", "autostart", "auto-start", "background", "tray", "quick access", "notification area", "menu bar"]) && (
         <Group
-          title={label("settings", "Starting Echo")}
+          title={label("settings.general", "Starting Echo")}
           hint="Echo lives in the tray — the notification area on Windows, the menu bar on macOS, the status area on Linux. Click it to reach these settings or to quit. A hotkey can only answer if Echo is already running, so starting it at login is what makes it feel like part of the keyboard rather than an app you remember to open."
         >
           <Check
@@ -505,81 +572,10 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
-      {on("about", [
-        "about", "version", "update", "updates", "release", "upgrade", "new version",
-        "auto-update", "issue", "bug", "report", "github", "source", "open source",
-        "licence", "license", "mit", "contribute", "contributing", "star", "diagnostics",
-        "feature request",
-      ]) && <About label={(title) => label("about", title)} />}
 
-      {on("settings", [
-        "microphone", "mic", "input", "device", "audio", "warm", "ready",
-        "responsiveness", "vad", "voice activity", "speech detection", "silero",
-        "energy", "noise", "keyboard noise",
-      ]) && (
-        <Group title={label("settings", "Microphone")}>
-          <Field label="Input device">
-            <select
-              className="field"
-              value={savedDevice ?? ""}
-              onChange={(e) => setDeviceMutation.mutate(e.target.value)}
-            >
-              <option value="">System default</option>
-              {devices.map((d) => (
-                <option key={d.name} value={d.name}>
-                  {d.name}
-                  {d.is_default ? " (default)" : ""}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          {/* Moved here from Performance, which only renders on the local lane
-              — this is about opening the audio device and has nothing to do
-              with where the words are transcribed. */}
-          <Check
-            checked={warmMic !== "false"}
-            hint={
-              <>
-                Keeping the microphone open for a few seconds after you stop lets
-                the next sentence start instantly, and captures the moment just
-                before you press the key — so a word begun early is not cut off.
-                While it is open, your system will show the microphone as in use.
-              </>
-            }
-            onChange={(v) => setWarmMic(v ? "true" : "false")}
-          >
-            Keep the microphone ready between dictations
-          </Check>
-
-          <Field
-            label="Speech detection"
-            hint="What decides you have started and stopped talking. The neural detector ignores keyboard clatter and fans; the simple one only measures loudness, which is worth trying if speech is being cut off or a noisy room keeps it awake."
-          >
-            <select
-              className="field"
-              value={sileroReady === false ? "energy" : (vadEngine ?? "silero")}
-              disabled={sileroReady === false}
-              onChange={(e) => setVadEngine(e.target.value)}
-            >
-              <option value="silero">Neural — ignores background noise</option>
-              <option value="energy">Simple — loudness only</option>
-            </select>
-          </Field>
-          {/* The setting is honoured only when the model is there, so say so
-              rather than leaving a picker that quietly does nothing. */}
-          {sileroReady === false && (
-            <Problem>
-              The neural model didn’t load on this machine, so Echo is using the
-              simple detector.
-            </Problem>
-          )}
-        </Group>
-      )}
-
-      {on("settings", ["language", "interface", "translation", "locale", "english", "español", "deutsch", "français"]) && (
+      {on("settings.general", ["language", "interface", "translation", "locale", "english", "español", "deutsch", "français"]) && (
         <Group
-          title={label("settings", "Interface language")}
+          title={label("settings.general", "Interface language")}
           hint="This is the language Echo's own buttons and labels use. It has no effect on which language it transcribes — that is set under Engine."
         >
           {/* No Field label: the group is already called Interface language,
@@ -600,9 +596,10 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
-      {on("settings", ["sound", "sounds", "cue", "cues", "tone", "beep", "audio feedback", "chime"]) && (
+
+      {on("settings.general", ["sound", "sounds", "cue", "cues", "tone", "beep", "audio feedback", "chime"]) && (
         <Group
-          title={label("settings", "Sound")}
+          title={label("settings.general", "Sound")}
           hint="A short rising tone when Echo starts listening and a falling one when it stops. Useful when the pill is behind the window you are dictating into."
         >
           <Check
@@ -614,9 +611,69 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
-      {on("settings", ["hotkey", "shortcut", "keyboard", "chord", "global", "ctrl", "alt", "shift", "modifier"]) && (
+
+      {/* ---- Settings · Dictation ---------------------------------------- */}
+
+      {on("settings.dictation", ["mode", "push to talk", "voice activated", "dictation", "recording"]) && (
         <Group
-          title={label("settings", "Global hotkey")}
+          title={label("settings.dictation", "Mode")}
+          hint="Hold to talk waits a beat before opening the microphone, so a shortcut like Ctrl still works in the combinations you type. Tap to toggle leaves the microphone open until you press the hotkey again."
+        >
+          <div className="grid grid-cols-3 gap-2.5">
+            {(
+              [
+                {
+                  id: "hold" as const,
+                  Icon: Hand,
+                  title: "Hold to talk",
+                  sub: "Records while you hold the hotkey",
+                },
+                {
+                  id: "toggle" as const,
+                  Icon: Keyboard,
+                  title: "Tap to toggle",
+                  sub: "Tap to start, tap again to stop",
+                },
+                {
+                  id: "auto" as const,
+                  Icon: AudioWaveform,
+                  title: "Voice activated",
+                  sub: "Records when you speak, stops on silence",
+                },
+              ]
+            ).map(({ id, Icon, title, sub }) => {
+              const active = mode === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => changeMode(id)}
+                  aria-pressed={active}
+                  className={
+                    "flex flex-col gap-1.5 rounded-xl border p-3.5 text-left transition " +
+                    (active
+                      ? "border-[var(--hairline-strong)] bg-[var(--surface-2)] shadow-[var(--edge-light)]"
+                      : "border-[var(--hairline)] bg-[var(--surface-1)] hover:bg-[var(--surface-2)]")
+                  }
+                >
+                  <span className="flex items-center gap-2 text-[14.5px] font-medium">
+                    <Icon
+                      className="h-4 w-4"
+                      style={{ color: active ? "var(--ink)" : "var(--ink-muted)" }}
+                    />
+                    {title}
+                  </span>
+                  <span className="text-[13px] leading-snug text-[var(--ink-muted)]">{sub}</span>
+                </button>
+              );
+            })}
+          </div>
+        </Group>
+      )}
+
+
+      {on("settings.dictation", ["hotkey", "shortcut", "keyboard", "chord", "global", "ctrl", "alt", "shift", "modifier"]) && (
+        <Group
+          title={label("settings.dictation", "Global hotkey")}
           hint="A modifier on its own works too — tap Ctrl, Alt or Shift and release it without pressing anything else. Held as part of a combination it behaves normally, so Ctrl+C is untouched. Fn can't be used: your keyboard handles it in firmware and the key never reaches Echo."
         >
           <HotkeyCapture
@@ -634,18 +691,109 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
-      {on("settings", ["wake", "wake word", "hands free", "hey", "phrase", "always on"]) && (
+
+      {on("settings.dictation", ["wake", "wake word", "hands free", "hey", "phrase", "always on"]) && (
         <Group
-          title={label("settings", "Wake word")}
+          title={label("settings.dictation", "Wake word")}
           hint="Off by default. When on, Echo listens for the phrase and starts dictating without the hotkey."
         >
           <WakeWordSettings />
         </Group>
       )}
 
-      {/* ---- Engine ------------------------------------------------------- */}
-      {on("engine", ["provider", "engine", "whisper", "openai", "groq", "deepgram", "cloud", "offline", "local", "online", "off", "no transcription"]) && (
-        <Group title={label("engine", "Speech engine")}>
+
+      {/* ---- Settings · Microphone --------------------------------------- */}
+      {on("settings.microphone", [
+        "microphone", "mic", "input", "device", "audio", "warm", "ready",
+        "responsiveness",
+      ]) && (
+        // Not "Microphone": the tab already says that, and a group repeating
+        // its own tab's name reads as a heading that forgot what it was for.
+        <Group title={label("settings.microphone", "Input device")}>
+          {/* No Field label, as under Interface language: the group is already
+              called Input device and the select is the first thing under it.
+              The control keeps the name for anyone reading by screen reader. */}
+          <select
+            className="field w-full"
+            aria-label="Input device"
+            value={savedDevice ?? ""}
+            onChange={(e) => setDeviceMutation.mutate(e.target.value)}
+          >
+            <option value="">System default</option>
+            {devices.map((d) => (
+              <option key={d.name} value={d.name}>
+                {d.name}
+                {d.is_default ? " (default)" : ""}
+              </option>
+            ))}
+          </select>
+
+          {/* Moved here from Performance, which only renders on the local lane
+              — this is about opening the audio device and has nothing to do
+              with where the words are transcribed. */}
+          <Check
+            checked={warmMic !== "false"}
+            hint={
+              <>
+                Keeping the microphone open for a few seconds after you stop lets
+                the next sentence start instantly, and captures the moment just
+                before you press the key — so a word begun early is not cut off.
+                While it is open, your system will show the microphone as in use.
+              </>
+            }
+            onChange={(v) => setWarmMic(v ? "true" : "false")}
+          >
+            Keep the microphone ready between dictations
+          </Check>
+        </Group>
+      )}
+
+            {on("settings.microphone", [
+        "vad", "voice activity", "speech detection", "silero", "energy", "noise",
+        "keyboard noise", "detector", "cut off", "silence",
+      ]) && (
+        <Group
+          title={label("settings.microphone", "Speech detection")}
+          hint="What decides you have started and stopped talking. The neural detector ignores keyboard clatter and fans; the simple one only measures loudness, which is worth trying if speech is being cut off or a noisy room keeps it awake."
+        >
+          {/* No Field label: the group is already called Speech detection and
+              the select is the only thing under it, so a label would say the
+              same words twice. The control keeps the name for screen readers. */}
+          <select
+            className="field w-full"
+            aria-label="Speech detection"
+            value={sileroReady === false ? "energy" : (vadEngine ?? "silero")}
+            disabled={sileroReady === false}
+            onChange={(e) => setVadEngine(e.target.value)}
+          >
+            <option value="silero">Neural — ignores background noise</option>
+            <option value="energy">Simple — loudness only</option>
+          </select>
+          {/* The setting is honoured only when the model is there, so say so
+              rather than leaving a picker that quietly does nothing. */}
+          {sileroReady === false && (
+            <Problem>
+              The neural model didn’t load on this machine, so Echo is using the
+              simple detector.
+            </Problem>
+          )}
+        </Group>
+      )}
+
+      {/* ---- About -------------------------------------------------------- */}
+
+      {on("about", [
+        "about", "version", "update", "updates", "release", "upgrade", "new version",
+        "auto-update", "issue", "bug", "report", "github", "source", "open source",
+        "licence", "license", "mit", "contribute", "contributing", "star", "diagnostics",
+        "feature request",
+      ]) && <About label={(title) => label("about", title)} />}
+
+
+      {/* ---- Engine · Speech --------------------------------------------- */}
+
+      {on("engine.speech", ["provider", "engine", "whisper", "openai", "groq", "deepgram", "cloud", "offline", "local", "online", "off", "no transcription"]) && (
+        <Group title={label("engine.speech", "Speech engine")}>
           {/* Two lanes rather than one list of eleven. The question is never
               "which of these names" — it is whether your voice stays on this
               machine, and that answer decides everything under it. Each card
@@ -722,16 +870,29 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
       {/* Models and compute belong to the offline engine; on cloud they would
           be controls for something that isn't running. Search reaches across
           pages, so a search still shows them. */}
-      {on("engine", ["model", "models", "local", "download", "remove", "delete", "disk", "storage"]) &&
+
+      {on("engine.speech", ["model", "models", "local", "download", "remove", "delete", "disk", "storage"]) &&
         (searching || lane === "local") && (
-          <Group title={label("engine", "Local models")}>
+          <Group title={label("engine.speech", "Local models")}>
             <ModelSelector />
           </Group>
         )}
 
-      {on("engine", ["language", "auto-detect", "english", "multilingual"]) && (
+
+      {on("engine.speech", ["api key", "key", "openai", "groq", "deepgram", "cloud", "keychain", "provider", "azure", "google", "mistral", "elevenlabs", "assemblyai", "speechmatics"]) &&
+        (searching || lane === "cloud") && (
+          <Group
+            title={label("engine.speech", "Cloud provider")}
+            hint="Keys are stored in your operating system's keychain, not in Echo's database. Audio for the provider you choose is sent to it as you speak; everything else stays on this machine."
+          >
+            <CloudProviders />
+          </Group>
+        )}
+
+
+      {on("engine.speech", ["language", "auto-detect", "english", "multilingual"]) && (
         <Group
-          title={label("engine", "Language")}
+          title={label("engine.speech", "Language")}
           hint="Auto-detect works well across a whole utterance but can guess wrong on short ones. Pinning your language is more accurate if you always dictate in it. English-only models ignore this."
         >
           <select
@@ -764,45 +925,44 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
-      {on("engine", ["gpu", "cuda", "nvidia", "metal", "acceleration", "accelerated", "threads", "cpu", "performance", "speed", "slow", "warm", "microphone"]) &&
-        (searching || lane === "local") && <Performance />}
 
-      {on("engine", ["api key", "key", "openai", "groq", "deepgram", "cloud", "keychain", "provider", "azure", "google", "mistral", "elevenlabs", "assemblyai", "speechmatics"]) &&
-        (searching || lane === "cloud") && (
-          <Group
-            title={label("engine", "Cloud provider")}
-            hint="Keys are stored in your operating system's keychain, not in Echo's database. Audio for the provider you choose is sent to it as you speak; everything else stays on this machine."
-          >
-            <CloudProviders />
-          </Group>
-        )}
+      {/* ---- Engine · Tools ---------------------------------------------- */}
 
-      {on("engine", ["import", "file", "audio file", "recording", "mp3", "wav", "transcribe file", "voice memo"]) && (
+      {on("engine.tools", ["import", "file", "audio file", "recording", "mp3", "wav", "transcribe file", "voice memo"]) && (
         <Group
-          title={label("engine", "Transcribe a file")}
+          title={label("engine.tools", "Transcribe a file")}
           hint="Uses the offline engine and the model selected above, so nothing is uploaded."
         >
           <AudioImport />
         </Group>
       )}
 
-      {on("engine", ["command", "command mode", "llm", "ollama", "rewrite", "instruction"]) && (
+
+      {on("engine.tools", ["command", "command mode", "llm", "ollama", "rewrite", "instruction"]) && (
         <Group
-          title={label("engine", "Command mode")}
+          title={label("engine.tools", "Command mode")}
           hint="Speak an instruction instead of dictating text. Off by default."
         >
           <CommandMode />
         </Group>
       )}
 
-      {/* ---- Output ------------------------------------------------------- */}
-      {on("output", ["insert", "inject", "type", "paste", "clipboard", "output", "delay"]) && (
-        <Group title={label("output", "Insert into the focused app")}>
+
+      {/* ---- Engine · Advanced ------------------------------------------- */}
+
+      {on("engine.advanced", ["gpu", "cuda", "nvidia", "metal", "acceleration", "accelerated", "threads", "cpu", "performance", "speed", "slow", "warm", "microphone"]) &&
+        (searching || lane === "local") && <Performance />}
+
+
+      {/* ---- Output · Insert --------------------------------------------- */}
+
+      {on("output.insert", ["insert", "inject", "type", "paste", "clipboard", "output", "method"]) && (
+        <Group title={label("output.insert", "Insert into the focused app")}>
           <Check
             checked={autoInject !== "false"}
             onChange={(v) => setAutoInjectMutation.mutate(v ? "true" : "false")}
           >
-            Insert the transcript as soon as it's ready
+            Insert the transcript as soon as it’s ready
           </Check>
 
           <Field
@@ -825,7 +985,7 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
           >
             <select
               className="field w-64"
-              value={injectionMethod ?? "type"}
+              value={method}
               onChange={(e) => setInjectionMethodMutation.mutate(e.target.value)}
             >
               <option value="type">Type keystrokes (universal)</option>
@@ -833,41 +993,80 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
               <option value="auto">Auto — type short text, paste long</option>
             </select>
           </Field>
-
-          {injectionMethod === "paste" && (
-            <Field
-              label="Clipboard hold (ms)"
-              hint="How long Echo leaves the text on your clipboard before restoring what was there. Raise it if text goes missing — Electron apps, terminals and remote desktops often need longer than the default to read it."
-            >
-              <input
-                type="number"
-                min={20}
-                step={20}
-                className="field w-32"
-                defaultValue={clipboardSettle ?? "180"}
-                onBlur={(e) => setClipboardSettleMutation.mutate(e.target.value || "180")}
-              />
-            </Field>
-          )}
-
-          <Field
-            label="Insert delay (ms)"
-            hint="A pause before Echo starts typing. Leave it at zero unless text lands in the wrong place — some apps need a moment to take focus back after the pill closes."
-          >
-            <input
-              type="number"
-              min={0}
-              className="field w-32"
-              defaultValue={injectDelay ?? "0"}
-              onBlur={(e) => setInjectDelayMutation.mutate(e.target.value || "0")}
-            />
-          </Field>
         </Group>
       )}
 
-      {on("output", ["punctuation", "comma", "period", "format", "capital", "numbers", "spacing", "tidy"]) && (
+      {on("output.insert", ["live", "stream", "partial", "as you speak", "realtime", "real time"]) && (
         <Group
-          title={label("output", "Formatting")}
+          title={label("output.insert", "Live text")}
+          hint="Off by default, and worth understanding before you turn it on: streaming rewrites text inside the focused app as the decoder revises itself, and it cannot see you typing into the same field at the same time. Turn it on per app under Per-app profiles. Each update re-decodes everything you have said so far, so without GPU acceleration the words arrive roughly every two seconds rather than keeping pace with your voice — run `echo --benchmark` to see where your machine lands."
+        >
+          <Check
+            checked={streamPartials === "true"}
+            onChange={(v) => setStreamPartialsMutation.mutate(v ? "true" : "false")}
+          >
+            Type words as I speak them, instead of waiting for the sentence
+          </Check>
+        </Group>
+      )}
+
+
+      {on("output.insert", ["undo", "scratch", "retry", "again", "mistake", "wrong", "fix", "take back"]) && (
+        <Group
+          title={label("output.insert", "When it gets it wrong")}
+          hint={
+            <>
+              <p>
+                Both shortcuts are global: by the time you notice, the focus is
+                in the app that got the text.
+              </p>
+              <p className="mt-2">
+                Undo sends the focused app its own undo shortcut, so it works
+                wherever that does — and can’t delete text you typed yourself
+                afterwards.
+              </p>
+              <p className="mt-2">
+                Retry re-runs the audio Echo already has. Nothing leaves this
+                machine unless you pick a cloud provider, and the audio is held
+                in memory only, one utterance at a time, never written to disk.
+              </p>
+            </>
+          }
+        >
+          <FixUps />
+        </Group>
+      )}
+
+
+      {on("output.insert", ["password", "secure", "safety", "mask", "credential", "login"]) && (
+        <Group
+          title={label("output.insert", "Password fields")}
+          hint={
+            secureDetection
+              ? "Echo asks the accessibility API whether the focused control is masked. Where it can't tell, it types as normal — refusing whenever the system stays quiet would break dictation in every app that publishes no accessibility tree."
+              : "This system can't answer the question, so the guard never fires here. On Linux it would need AT-SPI over D-Bus, and under Wayland usually not even then. Nothing is protecting you — that's why it says so rather than showing a switch that does nothing."
+          }
+        >
+          <Check
+            checked={blockSecure !== "false"}
+            onChange={(v) =>
+              setFormatSetting.mutate({ key: "block_secure_fields", value: v ? "true" : "false" })
+            }
+          >
+            Never type into a password field — and never save it to History
+          </Check>
+          {!secureDetection && (
+            <Problem>Not available on this system: the guard can't detect anything here.</Problem>
+          )}
+        </Group>
+      )}
+
+
+      {/* ---- Output · Formatting ----------------------------------------- */}
+
+      {on("output.formatting", ["punctuation", "comma", "period", "format", "capital", "numbers", "spacing", "tidy"]) && (
+        <Group
+          title={label("output.formatting", "Formatting")}
           hint="Runs after your dictionary, on the finished sentence. Turn the whole group off for a particular app under Per-app profiles — a terminal usually wants the words exactly as spoken."
         >
           <Check
@@ -942,72 +1141,63 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
-      {on("output", ["password", "secure", "safety", "mask", "credential", "login"]) && (
+
+      {/* ---- Output · Apps ----------------------------------------------- */}
+
+      {on("output.apps", ["app", "per app", "profile", "profiles", "exclude", "override", "terminal"]) && (
         <Group
-          title={label("output", "Password fields")}
-          hint={
-            secureDetection
-              ? "Echo asks the accessibility API whether the focused control is masked. Where it can't tell, it types as normal — refusing whenever the system stays quiet would break dictation in every app that publishes no accessibility tree."
-              : "This system can't answer the question, so the guard never fires here. On Linux it would need AT-SPI over D-Bus, and under Wayland usually not even then. Nothing is protecting you — that's why it says so rather than showing a switch that does nothing."
-          }
+          title={label("output.apps", "Per-app profiles")}
+          hint="Override how Echo behaves in specific applications."
         >
-          <Check
-            checked={blockSecure !== "false"}
-            onChange={(v) =>
-              setFormatSetting.mutate({ key: "block_secure_fields", value: v ? "true" : "false" })
-            }
-          >
-            Never type into a password field — and never save it to History
-          </Check>
-          {!secureDetection && (
-            <Problem>Not available on this system: the guard can't detect anything here.</Problem>
+          <AppProfiles />
+        </Group>
+      )}
+
+
+      {/* ---- Output · Advanced ------------------------------------------- */}
+
+      {on("output.advanced", [
+        "delay", "timing", "clipboard", "hold", "settle", "slow", "missing",
+        "wrong place", "late",
+      ]) && (
+        <Group
+          title={label("output.advanced", "Timing")}
+          hint="For when text arrives late, lands somewhere else, or never arrives at all. Leave these alone until it does."
+        >
+          {pastes && (
+            <Field
+              label="Clipboard hold (ms)"
+              hint="How long Echo leaves the text on your clipboard before restoring what was there. Raise it if text goes missing — Electron apps, terminals and remote desktops often need longer than the default to read it."
+            >
+              <input
+                type="number"
+                min={20}
+                step={20}
+                className="field w-32"
+                defaultValue={clipboardSettle ?? "180"}
+                onBlur={(e) => setClipboardSettleMutation.mutate(e.target.value || "180")}
+              />
+            </Field>
           )}
-        </Group>
-      )}
 
-      {on("output", ["live", "stream", "partial", "as you speak", "realtime", "real time"]) && (
-        <Group
-          title={label("output", "Live text")}
-          hint="Off by default, and worth understanding before you turn it on: streaming rewrites text inside the focused app as the decoder revises itself, and it cannot see you typing into the same field at the same time. Turn it on per app under Per-app profiles. Each update re-decodes everything you have said so far, so without GPU acceleration the words arrive roughly every two seconds rather than keeping pace with your voice — run `echo --benchmark` to see where your machine lands."
-        >
-          <Check
-            checked={streamPartials === "true"}
-            onChange={(v) => setStreamPartialsMutation.mutate(v ? "true" : "false")}
+          <Field
+            label="Insert delay (ms)"
+            hint="A pause before Echo starts typing. Leave it at zero unless text lands in the wrong place — some apps need a moment to take focus back after the pill closes."
           >
-            Type words as I speak them, instead of waiting for the sentence
-          </Check>
+            <input
+              type="number"
+              min={0}
+              className="field w-32"
+              defaultValue={injectDelay ?? "0"}
+              onBlur={(e) => setInjectDelayMutation.mutate(e.target.value || "0")}
+            />
+          </Field>
         </Group>
       )}
 
-      {on("output", ["undo", "scratch", "retry", "again", "mistake", "wrong", "fix", "take back"]) && (
+      {on("output.advanced", ["permission", "accessibility", "xdotool", "ydotool", "macos", "linux"]) && (
         <Group
-          title={label("output", "When it gets it wrong")}
-          hint={
-            <>
-              <p>
-                Both shortcuts are global: by the time you notice, the focus is
-                in the app that got the text.
-              </p>
-              <p className="mt-2">
-                Undo sends the focused app its own undo shortcut, so it works
-                wherever that does — and can’t delete text you typed yourself
-                afterwards.
-              </p>
-              <p className="mt-2">
-                Retry re-runs the audio Echo already has. Nothing leaves this
-                machine unless you pick a cloud provider, and the audio is held
-                in memory only, one utterance at a time, never written to disk.
-              </p>
-            </>
-          }
-        >
-          <FixUps />
-        </Group>
-      )}
-
-      {on("output", ["permission", "accessibility", "xdotool", "ydotool", "macos", "linux"]) && (
-        <Group
-          title={label("output", "Permissions")}
+          title={label("output.advanced", "Permissions")}
           hint={
             <>
               macOS needs Accessibility permission. Linux needs <code>xdotool</code> (X11) or{" "}
@@ -1034,30 +1224,8 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
-      {on("output", ["app", "per app", "profile", "profiles", "exclude", "override", "terminal"]) && (
-        <Group
-          title={label("output", "Per-app profiles")}
-          hint="Override how Echo behaves in specific applications."
-        >
-          <AppProfiles />
-        </Group>
-      )}
 
       {/* ---- Privacy ------------------------------------------------------ */}
-      {on("privacy", ["request", "network", "egress", "offline", "outbound", "privacy"]) && (
-        <Group
-          title={label("privacy", "Request log")}
-          hint="This lists requests Echo itself made. It is not proof that nothing else left your machine — Echo can’t see traffic from other programs, and a native plugin can make requests that bypass this log entirely."
-        >
-          <EgressLog />
-        </Group>
-      )}
-
-      {on("privacy", ["telemetry", "usage", "events", "analytics"]) && (
-        <Group title={label("privacy", "Telemetry")}>
-          <TelemetrySettings />
-        </Group>
-      )}
 
       {on("privacy", ["history", "transcript", "retention", "delete", "export"]) && (
         <Group title={label("privacy", "History")}>
@@ -1085,6 +1253,7 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         </Group>
       )}
 
+
       {on("privacy", ["learn", "auto-learn", "corrections", "dictionary", "teach"]) && (
         <Group
           title={label("privacy", "Learning")}
@@ -1098,6 +1267,23 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
           </Check>
         </Group>
       )}
+
+      {on("privacy", ["telemetry", "usage", "events", "analytics"]) && (
+        <Group title={label("privacy", "Telemetry")}>
+          <TelemetrySettings />
+        </Group>
+      )}
+
+
+      {on("privacy", ["request", "network", "egress", "offline", "outbound", "privacy"]) && (
+        <Group
+          title={label("privacy", "Request log")}
+          hint="This lists requests Echo itself made. It is not proof that nothing else left your machine — Echo can’t see traffic from other programs, and a native plugin can make requests that bypass this log entirely."
+        >
+          <EgressLog />
+        </Group>
+      )}
+
     </Page>
   );
 }

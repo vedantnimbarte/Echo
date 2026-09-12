@@ -5,7 +5,7 @@ import {
   BookOpen,
   SlidersHorizontal,
   Puzzle,
-  Mic,
+  History,
   Cpu,
   TextCursorInput,
   ShieldCheck,
@@ -33,12 +33,14 @@ type NavItem = { id: Page; label: string; Icon: React.ElementType };
 
 /**
  * Settings split along the path a sentence takes through Echo: it is heard
- * (Settings), turned into words (Engine), delivered somewhere (Output), and
- * whatever is kept afterwards is yours to see (Privacy). Four short pages
+ * (Settings), turned into words (Voice engine), delivered somewhere (Output),
+ * and whatever is kept afterwards is yours to see (Privacy). Four short pages
  * instead of one long scroll — you land on the topic you came for.
  */
 const SETTINGS_NAV: NavItem[] = [
-  { id: "engine", label: "Engine", Icon: Cpu },
+  // "Voice engine", not "Engine": on its own the word could be any of the
+  // machinery in here, and the one it names is the part that hears you.
+  { id: "engine", label: "Voice engine", Icon: Cpu },
   { id: "output", label: "Output", Icon: TextCursorInput },
   { id: "privacy", label: "Privacy", Icon: ShieldCheck },
 ];
@@ -64,9 +66,14 @@ const FOOT_NAV: NavItem[] = [
  * underneath.
  */
 const LIBRARY_NAV: NavItem[] = [
-  { id: "dictation", label: "Dictation", Icon: Mic },
+  // The page ids are the ones the code has always used and are not worth
+  // churning; these are the names on the buttons. "History" says what the page
+  // holds, where "Dictation" named the activity and left you to guess that the
+  // record of it lived there. "Custom dictionary" separates your own words from
+  // the model's vocabulary, which is what people assume "Dictionary" means.
+  { id: "dictation", label: "History", Icon: History },
   { id: "insights", label: "Insights", Icon: BarChart3 },
-  { id: "dictionary", label: "Dictionary", Icon: BookOpen },
+  { id: "dictionary", label: "Custom dictionary", Icon: BookOpen },
   { id: "plugins", label: "Plugins", Icon: Puzzle },
 ];
 
@@ -168,10 +175,11 @@ function NavButton({
 export default function App() {
   // The settings window observes state only — the pill owns the hotkey toggle.
   useEchoEvents();
-  // Dictation, not Settings: the window is opened to see what you dictated far
+  // History, not Settings: the window is opened to see what you dictated far
   // more often than to change how it works, and configuration is the thing you
   // do once. It is also the first item in the sidebar, so the landing page and
-  // the top of the list agree.
+  // the top of the list agree. The id stays "dictation" — renaming the button
+  // is not a reason to churn every reference to the page behind it.
   const [page, setPage] = useState<Page>("dictation");
   // A view preference, not a setting — it belongs to this machine's window, so
   // it stays out of the settings database.

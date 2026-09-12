@@ -167,6 +167,18 @@ pub fn disable_plugin(state: State<'_, AppState>, name: String) -> Result<()> {
     Ok(())
 }
 
+/// Write a starter plugin project into `parent_dir/<name>/` and return the
+/// directory it created.
+///
+/// `parent_dir` comes from the native folder picker, so the user has already
+/// chosen where this lands. `name` is typed, which is why it is validated
+/// rather than trusted: it becomes a path segment underneath that folder.
+#[tauri::command]
+pub fn scaffold_plugin(parent_dir: String, name: String) -> Result<String> {
+    let dir = crate::core::plugins::scaffold::write(&PathBuf::from(parent_dir), &name)?;
+    Ok(dir.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 pub fn uninstall_plugin(state: State<'_, AppState>, name: String) -> Result<()> {
     state.plugins.lock().unwrap().unload(&name)?;
