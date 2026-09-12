@@ -105,6 +105,56 @@ export function Page({
 }
 
 /**
+ * A page's sub-navigation: one section of it at a time.
+ *
+ * Underlined rather than the sidebar's filled pill. The sidebar's shape means
+ * "which page", and borrowing it here would say the wrong thing twice on the
+ * same screen — these switch the body of the page you are already on.
+ *
+ * Generic over the id so a caller keeps its own union of section names and a
+ * typo stays a type error rather than a section that silently never opens.
+ */
+export function Tabs<Id extends string>({
+  label,
+  tabs,
+  current,
+  onSelect,
+}: {
+  /** Names the strip for a screen reader, e.g. "Engine sections". */
+  label: string;
+  tabs: readonly { id: Id; label: string }[];
+  current: Id;
+  onSelect: (id: Id) => void;
+}) {
+  // One section is not a choice, and a strip offering a single destination is
+  // furniture. The caller can hand over its whole list without checking.
+  if (tabs.length < 2) return null;
+
+  return (
+    <nav aria-label={label} className="mb-7 flex gap-5 border-b border-[var(--hairline)]">
+      {tabs.map((tab) => {
+        const open = tab.id === current;
+        return (
+          <button
+            key={tab.id}
+            onClick={() => onSelect(tab.id)}
+            aria-current={open ? "true" : undefined}
+            className={
+              "-mb-px border-b-2 pb-2.5 text-[14px] tracking-tight transition-colors " +
+              (open
+                ? "border-[var(--ink)] font-medium text-[var(--ink)]"
+                : "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]")
+            }
+          >
+            {tab.label}
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
+/**
  * One labelled group of controls.
  *
  * `hint` is the group's explanation. It sits behind an info icon on the title

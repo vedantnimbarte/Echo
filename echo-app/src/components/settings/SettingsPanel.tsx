@@ -26,7 +26,7 @@ import { Performance } from "./Performance";
 import { AudioImport } from "./AudioImport";
 import { HotkeyCapture } from "../common/HotkeyCapture";
 import type { PillSize } from "../pill/Pill";
-import { Page, Group, Field, Check } from "../common/Page";
+import { Page, Tabs, Group, Field, Check } from "../common/Page";
 import { t, LOCALES, setLocale } from "../../i18n";
 import { About } from "./About";
 
@@ -462,33 +462,13 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
     </div>
   );
 
-  // Underlined rather than the sidebar's filled pill: this switches the body of
-  // one page, and borrowing the shape that means "which page" would say the
-  // wrong thing twice on the same screen.
-  const sections = tabs.length > 1 && (
-    <nav
-      aria-label={`${meta.title} sections`}
-      className="mb-7 flex gap-5 border-b border-[var(--hairline)]"
-    >
-      {tabs.map((section) => {
-        const open = section.id === tab;
-        return (
-          <button
-            key={section.id}
-            onClick={() => setPicked(section.id)}
-            aria-current={open ? "true" : undefined}
-            className={
-              "-mb-px border-b-2 pb-2.5 text-[14px] tracking-tight transition-colors " +
-              (open
-                ? "border-[var(--ink)] font-medium text-[var(--ink)]"
-                : "border-transparent text-[var(--ink-muted)] hover:text-[var(--ink)]")
-            }
-          >
-            {section.label}
-          </button>
-        );
-      })}
-    </nav>
+  const sections = (
+    <Tabs
+      label={`${meta.title} sections`}
+      tabs={tabs}
+      current={tab}
+      onSelect={setPicked}
+    />
   );
 
   return (
@@ -502,7 +482,7 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
       actions={search}
       // A search is already showing every section at once, so the strip would
       // be offering to narrow to one of them and then not doing it.
-      tabs={searching ? undefined : sections || undefined}
+      tabs={searching ? undefined : sections}
     >
       {/* ---- Settings · General ------------------------------------------ */}
 
