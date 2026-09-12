@@ -8,6 +8,13 @@ any OpenAI-compatible endpoint you host yourself. Your choice, your keys.
 
 Built with **Rust · Tauri v2 · React 19 · TypeScript · TailwindCSS v4 · SQLite**.
 
+![Echo's main window: a searchable list of recent transcripts beside a summary of words dictated, speaking speed and streak. The sidebar lists History, Insights, Custom dictionary, Plugins, Voice engine, Output and Privacy.](docs/images/echo-history.png)
+
+*What Echo keeps after you dictate — with sample transcripts, and the offline
+engine running (`Local · base.en`, top right). You dictate from a small
+always-on-top pill rather than from this window, which is why it is not in
+shot.*
+
 **Using Echo** — [Features](#features) · [Installing](#installing) · [Transcription backends](#transcription-backends) · [Text injection](#text-injection-per-os) · [Per-app profiles](#per-app-profiles) · [What Echo sends](#what-echo-sends-and-where) · [Global hotkey](#global-hotkey) · [Tray & login](#tray-icon-and-starting-at-login) · [Privacy](#privacy) · [Troubleshooting](#debugging--troubleshooting)
 
 **Building Echo** — [CONTRIBUTING.md](CONTRIBUTING.md) covers the repository layout, dev setup, architecture and release builds · [More docs](#docs)

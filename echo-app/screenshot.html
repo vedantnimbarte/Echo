@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Echo</title>
+    <!--
+      The harness behind docs/images/echo-history.png.
+
+      Echo's UI is a Tauri webview, so nothing renders without the Rust side
+      answering `invoke`. This page supplies a fake backend and then loads the
+      real frontend, which means the screenshot is the actual interface rather
+      than a mockup — and can be regenerated after a UI change instead of going
+      quietly stale:
+
+          cd echo-app && npm run dev
+          chrome --headless --disable-gpu --hide-scrollbars --window-size=1180,760 --virtual-time-budget=9000 --screenshot=../docs/images/echo-history.png http://localhost:1420/screenshot.html
+
+      The sample data below is sample data. The shapes match the real command
+      return types; the numbers are chosen to be plausible rather than
+      flattering, which is why the speaking rate is 140 wpm and not 200.
+    -->
+    <script>
+      // Shapes match the real command return types.
+      const now = Date.now();
+      const ago = (m) => new Date(now - m * 60000).toISOString();
+
+      const ANSWERS = {
+        get_history: [
+          {
+            id: 5,
+            text: "Let's move the release to Thursday so the signing work has room to land first.",
+            language: "en",
+            provider: "local",
+            created_at: ago(4),
+          },
+          {
+            id: 4,
+            text: "Reply to Priya: the benchmark numbers are from my machine, not a target — I'll send the harness so you can run it on yours.",
+            language: "en",
+            provider: "local",
+            created_at: ago(26),
+          },
+          {
+            id: 3,
+            text: "git commit -m \"fix: restore the clipboard after a paste that never landed\"",
+            language: "en",
+            provider: "local",
+            created_at: ago(52),
+          },
+          {
+            id: 2,
+            text: "Note for the docs: the permission list in a plugin manifest is advisory. Say so plainly rather than implying a sandbox.",
+            language: "en",
+            provider: "local",
+            created_at: ago(140),
+          },
+          {
+            id: 1,
+            text: "Remember to check whether the wake word still fires after the microphone is released.",
+            language: "en",
+            provider: "local",
+            created_at: ago(190),
+          },
+        ],
+        get_insights: {
+          transcripts: 412,
+          words: 38940,
+          days: 27,
+          words_last_7_days: 7310,
+          since: new Date(now - 27 * 864e5).toISOString(),
+          spoken_ms: 16_690_000,
+          timed_words: 38940,
+          timed_transcripts: 412,
+          dictionary_fixes: 96,
+          cleanup_fixes: 1240,
+          streak: 9,
+          longest_streak: 14,
+          apps: [{ key: "code.exe", transcripts: 260, words: 24100 }],
+          providers: [{ key: "local", transcripts: 412, words: 38940 }],
+          languages: [{ key: "en", transcripts: 412, words: 38940 }],
+          hours: Array.from({ length: 24 }, (_, h) => (h > 8 && h < 19 ? 30 : 2)),
+          daily: Array.from({ length: 14 }, (_, i) => ({
+            date: new Date(now - (13 - i) * 864e5).toISOString().slice(0, 10),
+            words: 380 + ((i * 137) % 520),
+            transcripts: 12 + (i % 9),
+          })),
+        },
+        get_dictation_stats: null,
+        get_audio_devices: [{ name: "Yeti Nano", is_default: true }],
+        list_models: [
+          { name: "base.en", downloaded: true, size_mb: 142, english_only: true },
+          { name: "small", downloaded: false, size_mb: 466, english_only: false },
+        ],
+        list_cloud_providers: [],
+        list_dictionary: [],
+        list_plugins: [],
+        list_profiles: [],
+        list_app_profiles: [],
+        list_wake_words: [],
+        get_egress_log: [],
+        retry_targets: [],
+        installed_packs: [],
+        supported_import_formats: ["wav", "mp3"],
+        get_egress_status: { offline_capable: true, hosts: [] },
+        get_telemetry_summary: [],
+        spoken_punctuation_languages: ["en"],
+        dictation_languages: [{ code: "auto", label: "Auto-detect" }, { code: "en", label: "English" }],
+        silero_available: true,
+        recovered_recordings: [],
+        get_hotkey: "CommandOrControl+Shift+Space",
+        secure_field_detection: true,
+        wake_word_ready: false,
+        wake_word_active: false,
+        wake_word_status: "disabled",
+        is_recording: false,
+        get_autostart: true,
+        check_accessibility_permission: true,
+        gpu_status: {
+          detected: "CPU only",
+          available_pack: null,
+          available_pack_mb: null,
+          pack_installed: false,
+          active: false,
+          failed: false,
+          enabled: false,
+          threads: 4,
+        },
+        hotkey_support: { session: "native", desktop: null, can_bind: true, supports_bare_modifier: true, advice: "" },
+      };
+
+      const settings = new Map([
+        ["onboarding_complete", "true"],
+        ["asr_provider", "local"],
+        ["whisper_model", "base.en"],
+      ]);
+
+      window.__TAURI_INTERNALS__ = {
+        metadata: { currentWindow: { label: "main" }, currentWebview: { label: "main" } },
+        transformCallback: (cb) => { const id = Math.random(); window[`_cb${id}`] = cb; return id; },
+        invoke: (c, a) => {
+          if (c === "get_setting") return Promise.resolve(settings.get(a?.key) ?? null);
+          if (c === "set_setting") { settings.set(a?.key, a?.value); return Promise.resolve(null); }
+          if (c.startsWith("plugin:")) return Promise.resolve(c.startsWith("plugin:event|") ? 1 : null);
+          return Promise.resolve(c in ANSWERS ? ANSWERS[c] : null);
+        },
+      };
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
