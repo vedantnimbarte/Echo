@@ -97,10 +97,17 @@ pub fn should_paste(text: &str) -> bool {
 /// Resolve the configured `injection_method` against the text about to be
 /// delivered. `"auto"` — and anything unrecognised — defers to
 /// [`should_paste`]; an explicit choice is always honoured.
+///
+/// An unset setting is typing. That is what it has meant since before `"auto"`
+/// existed, and `"auto"` is a choice someone makes rather than a behaviour that
+/// arrives on its own. The default lives here rather than at each call site
+/// because it did not: dictation defaulted it before calling, History re-insert
+/// and Retry did not, so the same unset setting typed in one place and pasted in
+/// the other.
 pub fn use_paste_for(setting: Option<&str>, text: &str) -> bool {
     match setting {
         Some("paste") => true,
-        Some("type") => false,
+        None | Some("type") => false,
         _ => should_paste(text),
     }
 }
@@ -643,6 +650,18 @@ mod tests {
         assert!(use_paste_for(Some("paste"), "hi"));
         assert!(use_paste_for(Some("auto"), &long));
         assert!(!use_paste_for(Some("auto"), "hi"));
+    }
+
+    /// Someone who has never opened the picker types, whatever the text is and
+    /// whichever path delivers it. Dictation defaulted the setting before
+    /// calling and History re-insert and Retry did not, so the same unset
+    /// setting used to type in one place and paste in the other.
+    #[test]
+    fn an_unset_method_types_like_it_always_has() {
+        let long = "a".repeat(AUTO_PASTE_CHARS + 1);
+        assert!(!use_paste_for(None, &long));
+        assert!(!use_paste_for(None, "one\ntwo"));
+        assert!(!use_paste_for(None, "hi"));
     }
 
     #[test]
