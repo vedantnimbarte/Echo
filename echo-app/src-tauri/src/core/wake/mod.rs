@@ -22,8 +22,7 @@ pub use onnx::{WakeModel, WakeSpotter};
 
 /// openWakeWord's pinned model release. Bump deliberately: the feature models
 /// and the phrase classifiers are trained together and must stay in step.
-const RELEASE: &str =
-    "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1";
+const RELEASE: &str = "https://github.com/dscripka/openWakeWord/releases/download/v0.5.1";
 
 /// Feature models shared by every phrase — downloaded once.
 const MELSPEC_FILE: &str = "melspectrogram.onnx";
@@ -89,12 +88,30 @@ const PHRASE_CATALOG: &[PhraseSpec] = &[
 /// curl -sL -O <RELEASE>/<file> && sha256sum <file>
 /// ```
 const DIGESTS: &[(&str, &str)] = &[
-    ("melspectrogram.onnx", "ba2b0e0f8b7b875369a2c89cb13360ff53bac436f2895cced9f479fa65eb176f"),
-    ("embedding_model.onnx", "70d164290c1d095d1d4ee149bc5e00543250a7316b59f31d056cff7bd3075c1f"),
-    ("hey_jarvis_v0.1.onnx", "94a13cfe60075b132f6a472e7e462e8123ee70861bc3fb58434a73712ee0d2cb"),
-    ("alexa_v0.1.onnx", "6ff566a01d12670e8d9e3c59da32651db1575d17272a601b7f8a39283dfbae3e"),
-    ("hey_mycroft_v0.1.onnx", "c2a311e8fa1338de89c31b3b46dc4dffd4af2f9a8d6ddead48893c2d301b1f18"),
-    ("hey_rhasspy_v0.1.onnx", "5a9b3ed3be2910e35780e097905aa9f35a9c10038df47914cf2b3ec4d670f6ea"),
+    (
+        "melspectrogram.onnx",
+        "ba2b0e0f8b7b875369a2c89cb13360ff53bac436f2895cced9f479fa65eb176f",
+    ),
+    (
+        "embedding_model.onnx",
+        "70d164290c1d095d1d4ee149bc5e00543250a7316b59f31d056cff7bd3075c1f",
+    ),
+    (
+        "hey_jarvis_v0.1.onnx",
+        "94a13cfe60075b132f6a472e7e462e8123ee70861bc3fb58434a73712ee0d2cb",
+    ),
+    (
+        "alexa_v0.1.onnx",
+        "6ff566a01d12670e8d9e3c59da32651db1575d17272a601b7f8a39283dfbae3e",
+    ),
+    (
+        "hey_mycroft_v0.1.onnx",
+        "c2a311e8fa1338de89c31b3b46dc4dffd4af2f9a8d6ddead48893c2d301b1f18",
+    ),
+    (
+        "hey_rhasspy_v0.1.onnx",
+        "5a9b3ed3be2910e35780e097905aa9f35a9c10038df47914cf2b3ec4d670f6ea",
+    ),
 ];
 
 /// The pinned digest for a downloadable file.
@@ -262,9 +279,13 @@ impl WakeModelManager {
                     let _ = outer.send(((index as f32 + p) / 2.0).clamp(0.0, 1.0)).await;
                 }
             });
-            let result =
-                download_file(&format!("{RELEASE}/{file}"), &dest, sha256_for(file)?, sub_tx)
-                    .await;
+            let result = download_file(
+                &format!("{RELEASE}/{file}"),
+                &dest,
+                sha256_for(file)?,
+                sub_tx,
+            )
+            .await;
             let _ = relay.await;
             result?;
         }
@@ -317,7 +338,9 @@ mod digest_tests {
         for (file, digest) in DIGESTS {
             assert_eq!(digest.len(), 64, "{file} has a malformed digest");
             assert!(
-                digest.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
+                digest
+                    .chars()
+                    .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
                 "{file} must be lowercase hex"
             );
         }

@@ -148,7 +148,10 @@ fn migrating_an_already_current_database_changes_nothing() {
         .query_row("SELECT count(*) FROM schema_migrations", [], |r| r.get(0))
         .unwrap();
     assert_eq!(rows, 6, "one row per version, not one per launch");
-    assert_eq!(repo::get_setting(&conn, "keep").unwrap().as_deref(), Some("me"));
+    assert_eq!(
+        repo::get_setting(&conn, "keep").unwrap().as_deref(),
+        Some("me")
+    );
 }
 
 /// The upgrade path, which is the one that reaches existing users.
@@ -286,10 +289,16 @@ fn settings_round_trip_and_overwrite_in_place() {
     assert_eq!(repo::get_setting(&conn, "missing").unwrap(), None);
 
     repo::set_setting(&conn, "mode", "toggle").unwrap();
-    assert_eq!(repo::get_setting(&conn, "mode").unwrap().as_deref(), Some("toggle"));
+    assert_eq!(
+        repo::get_setting(&conn, "mode").unwrap().as_deref(),
+        Some("toggle")
+    );
 
     repo::set_setting(&conn, "mode", "hold").unwrap();
-    assert_eq!(repo::get_setting(&conn, "mode").unwrap().as_deref(), Some("hold"));
+    assert_eq!(
+        repo::get_setting(&conn, "mode").unwrap().as_deref(),
+        Some("hold")
+    );
 
     let rows: i64 = conn
         .query_row("SELECT count(*) FROM settings", [], |r| r.get(0))
@@ -322,10 +331,16 @@ fn an_entry_can_be_moved_between_a_profile_and_global() {
     let id = repo::insert_dictionary_entry(&conn, &entry("k8s", None)).unwrap();
 
     repo::set_dictionary_entry_profile(&conn, id, Some(profile_id)).unwrap();
-    assert_eq!(repo::list_dictionary_entries(&conn).unwrap()[0].profile_id, Some(profile_id));
+    assert_eq!(
+        repo::list_dictionary_entries(&conn).unwrap()[0].profile_id,
+        Some(profile_id)
+    );
 
     repo::set_dictionary_entry_profile(&conn, id, None).unwrap();
-    assert_eq!(repo::list_dictionary_entries(&conn).unwrap()[0].profile_id, None);
+    assert_eq!(
+        repo::list_dictionary_entries(&conn).unwrap()[0].profile_id,
+        None
+    );
 }
 
 // ── History ──────────────────────────────────────────────────────────────────
@@ -371,8 +386,12 @@ fn app_profiles_match_regardless_of_case() {
     let conn = open();
     repo::upsert_app_profile(&conn, &app_profile("Slack.EXE")).unwrap();
 
-    assert!(repo::find_app_profile(&conn, "slack.exe").unwrap().is_some());
-    assert!(repo::find_app_profile(&conn, "SLACK.EXE").unwrap().is_some());
+    assert!(repo::find_app_profile(&conn, "slack.exe")
+        .unwrap()
+        .is_some());
+    assert!(repo::find_app_profile(&conn, "SLACK.EXE")
+        .unwrap()
+        .is_some());
     assert!(repo::find_app_profile(&conn, "code.exe").unwrap().is_none());
 }
 
@@ -383,8 +402,14 @@ fn a_disabled_app_profile_is_not_matched() {
     app.enabled = false;
     repo::upsert_app_profile(&conn, &app).unwrap();
 
-    assert!(repo::find_app_profile(&conn, "slack.exe").unwrap().is_none());
-    assert_eq!(repo::list_app_profiles(&conn).unwrap().len(), 1, "still listed for editing");
+    assert!(repo::find_app_profile(&conn, "slack.exe")
+        .unwrap()
+        .is_none());
+    assert_eq!(
+        repo::list_app_profiles(&conn).unwrap().len(),
+        1,
+        "still listed for editing"
+    );
 }
 
 /// Upserting the same application twice updates the existing row.
@@ -406,7 +431,11 @@ fn upserting_an_app_profile_updates_it_and_returns_its_own_id() {
     let returned = repo::upsert_app_profile(&conn, &updated).unwrap();
 
     assert_eq!(returned, slack_id, "returned the wrong row's id");
-    assert_eq!(repo::list_app_profiles(&conn).unwrap().len(), 2, "must update, not insert");
+    assert_eq!(
+        repo::list_app_profiles(&conn).unwrap().len(),
+        2,
+        "must update, not insert"
+    );
 
     let stored = repo::find_app_profile(&conn, "slack.exe").unwrap().unwrap();
     assert_eq!(stored.label.as_deref(), Some("Slack"));
@@ -465,7 +494,10 @@ fn trimming_egress_keeps_the_most_recent_entries() {
         .into_iter()
         .map(|e| e.host)
         .collect();
-    assert_eq!(hosts, vec!["host9.example", "host8.example", "host7.example"]);
+    assert_eq!(
+        hosts,
+        vec!["host9.example", "host8.example", "host7.example"]
+    );
 }
 
 // ── Dictation stats ──────────────────────────────────────────────────────────

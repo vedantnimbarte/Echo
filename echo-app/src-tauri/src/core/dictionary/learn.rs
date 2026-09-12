@@ -87,10 +87,7 @@ fn correction_from(original: &str, edited: &str) -> Option<Correction> {
 }
 
 /// Strip the common prefix and suffix, returning the differing middle of each.
-fn changed_span<'a>(
-    from: &'a [String],
-    to: &'a [String],
-) -> Option<(&'a [String], &'a [String])> {
+fn changed_span<'a>(from: &'a [String], to: &'a [String]) -> Option<(&'a [String], &'a [String])> {
     let prefix = from
         .iter()
         .zip(to.iter())
@@ -233,7 +230,10 @@ mod tests {
     #[test]
     fn learns_a_phonetic_mishearing_spanning_two_words() {
         assert_eq!(
-            corrections("deploy to cooper netties today", "deploy to Kubernetes today"),
+            corrections(
+                "deploy to cooper netties today",
+                "deploy to Kubernetes today"
+            ),
             vec![("cooper netties".into(), "Kubernetes".into())]
         );
     }
@@ -301,7 +301,10 @@ mod tests {
 
     #[test]
     fn consonant_skeleton_brings_homophones_together() {
-        assert_eq!(consonant_skeleton("cooper netties"), consonant_skeleton("kubernetes"));
+        assert_eq!(
+            consonant_skeleton("cooper netties"),
+            consonant_skeleton("kubernetes")
+        );
         assert_ne!(consonant_skeleton("cat"), consonant_skeleton("elephant"));
     }
 

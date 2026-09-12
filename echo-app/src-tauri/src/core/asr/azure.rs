@@ -149,7 +149,10 @@ mod tests {
     #[test]
     fn the_host_is_built_from_the_region() {
         let url = transcribe_url("westeurope");
-        assert!(url.starts_with("https://westeurope.api.cognitive.microsoft.com/"), "{url}");
+        assert!(
+            url.starts_with("https://westeurope.api.cognitive.microsoft.com/"),
+            "{url}"
+        );
         assert!(url.contains("api-version="), "{url}");
     }
 

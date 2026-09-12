@@ -7,7 +7,10 @@ use crate::{
 };
 
 #[tauri::command]
-pub fn get_history(state: State<'_, AppState>, limit: Option<i64>) -> Result<Vec<TranscriptionRecord>> {
+pub fn get_history(
+    state: State<'_, AppState>,
+    limit: Option<i64>,
+) -> Result<Vec<TranscriptionRecord>> {
     let conn = state.db.lock().unwrap();
     repositories::list_history(&conn, limit.unwrap_or(100))
 }
@@ -30,9 +33,7 @@ pub fn get_dictation_stats(
 /// Same source and the same caveat as [`get_dictation_stats`]: it is History,
 /// so it is empty when History is off.
 #[tauri::command]
-pub fn get_insights(
-    state: State<'_, AppState>,
-) -> Result<crate::storage::repositories::Insights> {
+pub fn get_insights(state: State<'_, AppState>) -> Result<crate::storage::repositories::Insights> {
     let conn = state.db.lock().unwrap();
     crate::storage::repositories::insights(&conn)
 }

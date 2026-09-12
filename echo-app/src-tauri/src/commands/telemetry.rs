@@ -1,10 +1,7 @@
 use tauri::State;
 
 use crate::{
-    core::telemetry::TelemetrySummaryItem,
-    error::Result,
-    state::AppState,
-    storage::repositories,
+    core::telemetry::TelemetrySummaryItem, error::Result, state::AppState, storage::repositories,
 };
 
 /// Counts of locally stored telemetry events, grouped by type.
@@ -26,7 +23,11 @@ pub fn clear_telemetry(state: State<'_, AppState>) -> Result<()> {
 pub fn set_telemetry_enabled(state: State<'_, AppState>, enabled: bool) -> Result<()> {
     {
         let conn = state.db.lock().unwrap();
-        repositories::set_setting(&conn, "telemetry_enabled", if enabled { "true" } else { "false" })?;
+        repositories::set_setting(
+            &conn,
+            "telemetry_enabled",
+            if enabled { "true" } else { "false" },
+        )?;
     }
     state.telemetry.set_enabled(enabled);
     Ok(())

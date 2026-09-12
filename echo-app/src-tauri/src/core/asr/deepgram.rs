@@ -64,8 +64,7 @@ struct DgStreamResult {
 /// With no language Deepgram is asked to detect one; naming it is both more
 /// accurate and cheaper, so the two cases must not be confused.
 fn listen_url(model: &str, language: Option<&str>) -> String {
-    let mut url =
-        format!("https://api.deepgram.com/v1/listen?model={model}&smart_format=true");
+    let mut url = format!("https://api.deepgram.com/v1/listen?model={model}&smart_format=true");
     match language {
         Some(lang) => url.push_str(&format!("&language={lang}")),
         None => url.push_str("&detect_language=true"),
@@ -226,7 +225,11 @@ impl AsrProvider for DeepgramProvider {
                 if chunk.is_empty() {
                     continue; // VAD utterance boundary — Deepgram endpoints itself
                 }
-                if write.send(Message::Binary(pcm_le_bytes(&chunk))).await.is_err() {
+                if write
+                    .send(Message::Binary(pcm_le_bytes(&chunk)))
+                    .await
+                    .is_err()
+                {
                     break;
                 }
             }
@@ -358,8 +361,8 @@ mod tests {
     /// detection is off.
     #[test]
     fn a_response_without_language_or_confidence_still_parses() {
-        let seg = parse(r#"{"results":{"channels":[{"alternatives":[{"transcript":"hi"}]}]}}"#)
-            .unwrap();
+        let seg =
+            parse(r#"{"results":{"channels":[{"alternatives":[{"transcript":"hi"}]}]}}"#).unwrap();
         assert_eq!(seg.text, "hi");
         assert_eq!(seg.language, None);
         assert_eq!(seg.confidence, None);

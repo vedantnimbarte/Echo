@@ -37,7 +37,9 @@ impl AsrManager {
     pub async fn set_active(&self, name: &str) -> Result<()> {
         let providers = self.providers.read().await;
         if !providers.contains_key(name) {
-            return Err(EchoError::NotFound(format!("ASR provider '{name}' not registered")));
+            return Err(EchoError::NotFound(format!(
+                "ASR provider '{name}' not registered"
+            )));
         }
         drop(providers);
         *self.active_provider.write().await = name.to_string();
@@ -48,7 +50,11 @@ impl AsrManager {
         self.active_provider.read().await.clone()
     }
 
-    pub async fn transcribe(&self, audio: Vec<f32>, language: Option<&str>) -> Result<TranscriptSegment> {
+    pub async fn transcribe(
+        &self,
+        audio: Vec<f32>,
+        language: Option<&str>,
+    ) -> Result<TranscriptSegment> {
         self.active().await?.transcribe(audio, language).await
     }
 
@@ -132,6 +138,8 @@ impl AsrManager {
         drop(providers);
 
         let notify = self.on_fallback.read().await.clone();
-        Ok(super::fallback::FallbackProvider::wrap(provider, local, notify))
+        Ok(super::fallback::FallbackProvider::wrap(
+            provider, local, notify,
+        ))
     }
 }

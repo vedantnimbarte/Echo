@@ -177,7 +177,12 @@ async fn measure(app: &tauri::AppHandle) -> String {
     let asr_note = measure_asr(&state, &model, &audio, &mut timings).await;
 
     // ── Table ────────────────────────────────────────────────────────────────
-    let width = timings.iter().map(|t| t.label.len()).max().unwrap_or(10).max(24);
+    let width = timings
+        .iter()
+        .map(|t| t.label.len())
+        .max()
+        .unwrap_or(10)
+        .max(24);
     let _ = writeln!(
         out,
         "  {:<width$}  {:>9}  {:>9}  {:>9}  {:>5}",
@@ -220,7 +225,10 @@ fn budgets(startup: Option<std::time::Duration>) -> String {
         None => "unknown".into(),
     };
     let _ = writeln!(out, "  startup            {startup:<12} target < 2s");
-    let _ = writeln!(out, "                     (process start → setup complete, not first paint)");
+    let _ = writeln!(
+        out,
+        "                     (process start → setup complete, not first paint)"
+    );
 
     match procinfo::resident_bytes() {
         Some(bytes) => {
@@ -265,7 +273,9 @@ async fn measure_asr(
     timings: &mut Vec<Timing>,
 ) -> Option<String> {
     if !state.models.is_downloaded(model) {
-        return Some(format!("  (no transcription timings: '{model}' is not downloaded)\n"));
+        return Some(format!(
+            "  (no transcription timings: '{model}' is not downloaded)\n"
+        ));
     }
     let Some(cli_binary) = state.binaries.resolve() else {
         return Some("  (no transcription timings: whisper-cli is not installed)\n".into());
@@ -374,7 +384,7 @@ async fn measure_asr(
             "  These timings are too scattered to conclude anything from — something
                else on this machine was competing for the CPU. Re-run when it is idle.
 "
-                .into(),
+            .into(),
         );
     }
 
@@ -403,7 +413,9 @@ async fn measure_asr(
 
 /// A sine at `amp`, `samples` long at 16 kHz.
 fn tone(amp: f32, samples: usize) -> Vec<f32> {
-    (0..samples).map(|i| (i as f32 * 0.05).sin() * amp).collect()
+    (0..samples)
+        .map(|i| (i as f32 * 0.05).sin() * amp)
+        .collect()
 }
 
 #[cfg(test)]
@@ -413,7 +425,10 @@ mod tests {
     fn timing(ms_values: &[u64]) -> Timing {
         Timing {
             label: "t".into(),
-            samples: ms_values.iter().map(|m| Duration::from_millis(*m)).collect(),
+            samples: ms_values
+                .iter()
+                .map(|m| Duration::from_millis(*m))
+                .collect(),
         }
     }
 

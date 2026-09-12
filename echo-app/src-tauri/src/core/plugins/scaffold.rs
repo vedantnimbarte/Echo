@@ -203,11 +203,26 @@ and the `permissions` list above is advisory — nothing enforces it.
     );
 
     Ok(vec![
-        ScaffoldFile { path: "Cargo.toml", contents: cargo_toml },
-        ScaffoldFile { path: "src/lib.rs", contents: lib_rs },
-        ScaffoldFile { path: "plugin.json", contents: plugin_json },
-        ScaffoldFile { path: "README.md", contents: readme },
-        ScaffoldFile { path: ".gitignore", contents: "/target\n".to_string() },
+        ScaffoldFile {
+            path: "Cargo.toml",
+            contents: cargo_toml,
+        },
+        ScaffoldFile {
+            path: "src/lib.rs",
+            contents: lib_rs,
+        },
+        ScaffoldFile {
+            path: "plugin.json",
+            contents: plugin_json,
+        },
+        ScaffoldFile {
+            path: "README.md",
+            contents: readme,
+        },
+        ScaffoldFile {
+            path: ".gitignore",
+            contents: "/target\n".to_string(),
+        },
     ])
 }
 
@@ -276,7 +291,10 @@ mod tests {
         for ok in ["hello", "hello-echo", "plugin2", "a"] {
             assert!(validate_name(ok).is_ok(), "{ok} should be accepted");
         }
-        assert!(validate_name("Hello").is_err(), "uppercase is not a crate name");
+        assert!(
+            validate_name("Hello").is_err(),
+            "uppercase is not a crate name"
+        );
         assert!(validate_name("").is_err());
         assert!(validate_name(&"a".repeat(MAX_NAME + 1)).is_err());
     }
@@ -286,7 +304,10 @@ mod tests {
     #[test]
     fn the_manifest_entry_matches_this_platform_and_the_lib_target() {
         let entry = artifact_name("hello-echo");
-        assert!(entry.contains("hello_echo"), "cargo replaces hyphens: {entry}");
+        assert!(
+            entry.contains("hello_echo"),
+            "cargo replaces hyphens: {entry}"
+        );
 
         if cfg!(target_os = "windows") {
             assert_eq!(entry, "hello_echo.dll");
@@ -309,7 +330,11 @@ mod tests {
     #[test]
     fn the_generated_manifest_is_one_the_installer_can_read() {
         let files = render("hello-echo").unwrap();
-        let json = &files.iter().find(|f| f.path == "plugin.json").unwrap().contents;
+        let json = &files
+            .iter()
+            .find(|f| f.path == "plugin.json")
+            .unwrap()
+            .contents;
         let manifest: crate::core::plugins::PluginManifest = serde_json::from_str(json).unwrap();
 
         assert_eq!(manifest.name, "hello-echo");

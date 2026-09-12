@@ -184,7 +184,10 @@ fn the_vad_gate_the_listener_uses_does_not_break_detection() {
         }
     }
 
-    assert!(dropped > 0, "the VAD dropped nothing, so this proved nothing");
+    assert!(
+        dropped > 0,
+        "the VAD dropped nothing, so this proved nothing"
+    );
     let gated = gated.expect("the phrase was missed once the VAD gate was applied");
     assert!(
         (gated - continuous).abs() < 0.2,

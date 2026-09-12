@@ -335,7 +335,13 @@ pub fn dictation_stats(conn: &Connection) -> Result<DictationStats> {
     );
     let words_last_7_days = conn.query_row(&recent, [], |r| r.get(0))?;
 
-    Ok(DictationStats { transcripts, words, days, words_last_7_days, since })
+    Ok(DictationStats {
+        transcripts,
+        words,
+        days,
+        words_last_7_days,
+        since,
+    })
 }
 
 // ── Insights ─────────────────────────────────────────────────────────────────
@@ -412,7 +418,11 @@ fn tally(conn: &Connection, column: &str) -> Result<Vec<Tally>> {
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt
         .query_map([], |r| {
-            Ok(Tally { key: r.get(0)?, transcripts: r.get(1)?, words: r.get(2)? })
+            Ok(Tally {
+                key: r.get(0)?,
+                transcripts: r.get(1)?,
+                words: r.get(2)?,
+            })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
     Ok(rows)
@@ -430,7 +440,11 @@ fn streaks(days: &[i64], today: i64) -> (i64, i64) {
     let mut current = 0i64;
 
     for (i, day) in days.iter().enumerate() {
-        run = if i > 0 && day - days[i - 1] == 1 { run + 1 } else { 1 };
+        run = if i > 0 && day - days[i - 1] == 1 {
+            run + 1
+        } else {
+            1
+        };
         longest = longest.max(run);
         // A run counts as live if it reaches today or stopped at yesterday;
         // anything older has been broken by a day with nothing in it.
@@ -472,21 +486,28 @@ pub fn insights(conn: &Connection) -> Result<Insights> {
     let mut stmt = conn.prepare(&daily_sql)?;
     let rows = stmt
         .query_map([], |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get(2)?, r.get(3)?))
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, i64>(1)?,
+                r.get(2)?,
+                r.get(3)?,
+            ))
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
 
     let day_numbers: Vec<i64> = rows.iter().map(|(_, n, _, _)| *n).collect();
-    let today: i64 = conn.query_row(
-        "SELECT CAST(julianday(date('now')) AS INTEGER)",
-        [],
-        |r| r.get(0),
-    )?;
+    let today: i64 = conn.query_row("SELECT CAST(julianday(date('now')) AS INTEGER)", [], |r| {
+        r.get(0)
+    })?;
     let (streak, longest_streak) = streaks(&day_numbers, today);
 
     let daily = rows
         .into_iter()
-        .map(|(date, _, words, transcripts)| DayWords { date, words, transcripts })
+        .map(|(date, _, words, transcripts)| DayWords {
+            date,
+            words,
+            transcripts,
+        })
         .collect();
 
     let mut hours = vec![0i64; 24];
@@ -521,7 +542,6 @@ pub fn insights(conn: &Connection) -> Result<Insights> {
         daily,
     })
 }
-
 
 // ── Egress log ───────────────────────────────────────────────────────────────
 
@@ -609,9 +629,8 @@ pub struct InstalledPlugin {
 
 /// Every installed plugin, in name order.
 pub fn list_plugins(conn: &Connection) -> Result<Vec<InstalledPlugin>> {
-    let mut stmt = conn.prepare(
-        "SELECT name, enabled, manifest, lib_sha256 FROM plugins ORDER BY name",
-    )?;
+    let mut stmt =
+        conn.prepare("SELECT name, enabled, manifest, lib_sha256 FROM plugins ORDER BY name")?;
     let rows = stmt
         .query_map([], |r| {
             Ok(InstalledPlugin {

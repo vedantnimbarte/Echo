@@ -142,7 +142,11 @@ fn send_plain_key(vk: u16, n: usize, label: &str) -> Result<()> {
                 ki: KEYBDINPUT {
                     wVk: VIRTUAL_KEY(vk),
                     wScan: 0,
-                    dwFlags: if up { KEYEVENTF_KEYUP } else { Default::default() },
+                    dwFlags: if up {
+                        KEYEVENTF_KEYUP
+                    } else {
+                        Default::default()
+                    },
                     time: 0,
                     dwExtraInfo: 0,
                 },
@@ -189,7 +193,11 @@ fn send_ctrl_chord(vk: u16, label: &str) -> Result<()> {
                     ki: KEYBDINPUT {
                         wVk: VIRTUAL_KEY(vk),
                         wScan: 0,
-                        dwFlags: if up { KEYEVENTF_KEYUP } else { Default::default() },
+                        dwFlags: if up {
+                            KEYEVENTF_KEYUP
+                        } else {
+                            Default::default()
+                        },
                         time: 0,
                         dwExtraInfo: 0,
                     },

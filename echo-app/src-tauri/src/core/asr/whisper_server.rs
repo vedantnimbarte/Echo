@@ -172,8 +172,8 @@ impl WhisperServer {
             form = form.text("prompt", prompt);
         }
 
-        let timeout =
-            BASE_REQUEST_TIMEOUT + Duration::from_secs((audio_seconds * TIMEOUT_PER_AUDIO_SECOND) as u64);
+        let timeout = BASE_REQUEST_TIMEOUT
+            + Duration::from_secs((audio_seconds * TIMEOUT_PER_AUDIO_SECOND) as u64);
 
         let resp = self
             .http
@@ -193,10 +193,9 @@ impl WhisperServer {
             )));
         }
 
-        let body: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| EchoError::AsrProvider(format!("whisper-server sent invalid JSON: {e}")))?;
+        let body: serde_json::Value = resp.json().await.map_err(|e| {
+            EchoError::AsrProvider(format!("whisper-server sent invalid JSON: {e}"))
+        })?;
 
         let text = body
             .get("text")

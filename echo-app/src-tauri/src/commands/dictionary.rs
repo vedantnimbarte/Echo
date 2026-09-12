@@ -72,10 +72,7 @@ pub async fn add_dictionary_entry(
 }
 
 #[tauri::command]
-pub async fn delete_dictionary_entry(
-    state: State<'_, AppState>,
-    id: i64,
-) -> Result<()> {
+pub async fn delete_dictionary_entry(state: State<'_, AppState>, id: i64) -> Result<()> {
     let raw = {
         let conn = state.db.lock().unwrap();
         repositories::delete_dictionary_entry(&conn, id)?;
@@ -141,9 +138,7 @@ pub async fn import_dictionary(state: State<'_, AppState>, path: String) -> Resu
 
         let mut added = 0usize;
         for entry in imported {
-            if entry.phrase.trim().is_empty()
-                || existing.contains(&entry.phrase.to_lowercase())
-            {
+            if entry.phrase.trim().is_empty() || existing.contains(&entry.phrase.to_lowercase()) {
                 continue;
             }
             let row = DictionaryEntry {

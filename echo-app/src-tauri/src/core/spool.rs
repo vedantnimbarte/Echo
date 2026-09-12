@@ -177,8 +177,7 @@ mod tests {
     struct Dir(PathBuf);
     impl Dir {
         fn new(tag: &str) -> Self {
-            let p = std::env::temp_dir()
-                .join(format!("echo-spool-{}-{tag}", std::process::id()));
+            let p = std::env::temp_dir().join(format!("echo-spool-{}-{tag}", std::process::id()));
             let _ = fs::remove_dir_all(&p);
             fs::create_dir_all(&p).unwrap();
             Self(p)
@@ -212,7 +211,9 @@ mod tests {
         s.write(&[-0.25; 8_000]);
         drop(s); // The crash: no `finish`, so the file stays.
 
-        let out = recover(d.path()).unwrap().expect("a second of audio is worth keeping");
+        let out = recover(d.path())
+            .unwrap()
+            .expect("a second of audio is worth keeping");
         assert!(is_recovered(&out));
         assert!(out.exists());
         // Consumed, so the next launch does not recover it a second time.

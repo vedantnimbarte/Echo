@@ -169,8 +169,14 @@ mod tests {
             compose(Some("Kubernetes".into()), Some("we deployed it".into())),
             Some("Kubernetes. we deployed it".into())
         );
-        assert_eq!(compose(Some("Kubernetes".into()), None), Some("Kubernetes".into()));
-        assert_eq!(compose(None, Some("we deployed it".into())), Some("we deployed it".into()));
+        assert_eq!(
+            compose(Some("Kubernetes".into()), None),
+            Some("Kubernetes".into())
+        );
+        assert_eq!(
+            compose(None, Some("we deployed it".into())),
+            Some("we deployed it".into())
+        );
         assert_eq!(compose(None, None), None);
     }
 }

@@ -218,7 +218,10 @@ mod tests {
         // that as an empty transcript would drop the utterance on the first poll.
         for status in ["queued", "processing"] {
             let json = format!(r#"{{"id":"1","status":"{status}"}}"#);
-            assert!(matches!(state(&json).unwrap(), JobState::Working), "{status}");
+            assert!(
+                matches!(state(&json).unwrap(), JobState::Working),
+                "{status}"
+            );
         }
     }
 

@@ -107,10 +107,8 @@ impl AudioService {
     }
 
     pub fn list_input_devices(&self) -> Result<Vec<AudioDevice>> {
-        let default_name: Option<String> = self
-            .host
-            .default_input_device()
-            .and_then(|d| d.name().ok());
+        let default_name: Option<String> =
+            self.host.default_input_device().and_then(|d| d.name().ok());
 
         let devices: Vec<AudioDevice> = self
             .host
@@ -456,7 +454,10 @@ mod tests {
         // real time would reinstate the very clipping it exists to prevent.
         let newest = (100 * 1024 - 1) as f32;
         assert_eq!(*ring.back().unwrap(), newest);
-        assert_eq!(*ring.front().unwrap(), newest - (PRE_ROLL_SAMPLES - 1) as f32);
+        assert_eq!(
+            *ring.front().unwrap(),
+            newest - (PRE_ROLL_SAMPLES - 1) as f32
+        );
     }
 
     #[test]
@@ -472,6 +473,9 @@ mod tests {
     fn pre_roll_below_the_window_keeps_everything() {
         let mut ring = VecDeque::new();
         push_pre_roll(&mut ring, &[1.0, 2.0, 3.0]);
-        assert_eq!(ring.iter().copied().collect::<Vec<_>>(), vec![1.0, 2.0, 3.0]);
+        assert_eq!(
+            ring.iter().copied().collect::<Vec<_>>(),
+            vec![1.0, 2.0, 3.0]
+        );
     }
 }

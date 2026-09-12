@@ -49,7 +49,10 @@ const SCRATCH_PHRASES: &[(&str, &[&str])] = &[
     ("en", &["scratch that", "undo that"]),
     ("es", &["borra eso", "anula eso", "olvida eso"]),
     ("fr", &["annule ça", "annule ca", "oublie ça", "oublie ca"]),
-    ("de", &["streich das", "lösch das", "losch das", "vergiss das"]),
+    (
+        "de",
+        &["streich das", "lösch das", "losch das", "vergiss das"],
+    ),
     ("it", &["cancella quello", "annulla quello"]),
     ("pt", &["apaga isso", "anula isso", "esquece isso"]),
     ("nl", &["wis dat", "vergeet dat"]),
@@ -106,7 +109,12 @@ mod tests {
 
     #[test]
     fn the_spoken_phrases_are_recognized_however_they_are_punctuated() {
-        for said in ["scratch that", "Scratch that.", "  SCRATCH THAT!  ", "Undo that"] {
+        for said in [
+            "scratch that",
+            "Scratch that.",
+            "  SCRATCH THAT!  ",
+            "Undo that",
+        ] {
             assert!(is_scratch_phrase(said, None), "{said:?} should undo");
         }
     }
@@ -121,7 +129,10 @@ mod tests {
             "scratch",
             "",
         ] {
-            assert!(!is_scratch_phrase(said, None), "{said:?} should be typed, not obeyed");
+            assert!(
+                !is_scratch_phrase(said, None),
+                "{said:?} should be typed, not obeyed"
+            );
         }
     }
 

@@ -202,7 +202,9 @@ mod tests {
             std::fs::write(m.model_path(name), b"x").unwrap();
         }
 
-        let picked = m.smaller_downloaded("small.en").expect("something smaller exists");
+        let picked = m
+            .smaller_downloaded("small.en")
+            .expect("something smaller exists");
         assert_eq!(picked.name, "tiny.en", "the smallest installed should win");
 
         let _ = std::fs::remove_dir_all(&dir);

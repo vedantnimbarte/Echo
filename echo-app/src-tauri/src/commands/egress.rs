@@ -54,7 +54,9 @@ pub fn get_egress_status(state: State<'_, AppState>) -> Result<EgressStatus> {
         reasons.push(format!("Transcription uses the {asr} cloud API"));
     }
 
-    let command_on = get("command_mode_enabled").map(|v| v == "true").unwrap_or(false);
+    let command_on = get("command_mode_enabled")
+        .map(|v| v == "true")
+        .unwrap_or(false);
     let command_provider = get("command_llm_provider").unwrap_or_else(|| "ollama".into());
     if command_on && command_provider == "openai" {
         reasons.push("Command mode sends selected text to OpenAI".into());

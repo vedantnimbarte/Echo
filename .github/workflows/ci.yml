@@ -39,11 +39,19 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
       - name: Cache cargo
         uses: swatinem/rust-cache@v2
         with:
           workspaces: echo-app/src-tauri
+
+      # Without this the formatting drifts straight back, and `cargo fmt --check`
+      # stops being usable for spotting your own drift because it is already
+      # reporting everyone else's. Formatting is platform-independent, so the
+      # macOS job below does not repeat it.
+      - name: cargo fmt --check
+        run: cargo fmt --manifest-path echo-app/src-tauri/Cargo.toml --check
+
       - name: cargo clippy
         run: cargo clippy --manifest-path echo-app/src-tauri/Cargo.toml --all-targets
 

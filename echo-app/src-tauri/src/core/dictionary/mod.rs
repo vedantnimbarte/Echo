@@ -77,7 +77,11 @@ impl DictionaryEngine {
                 continue;
             }
             // Budget check before the push, so the prompt never overruns.
-            let addition = if prompt.is_empty() { term.len() } else { term.len() + 2 };
+            let addition = if prompt.is_empty() {
+                term.len()
+            } else {
+                term.len() + 2
+            };
             if prompt.len() + addition > MAX_PROMPT_CHARS {
                 break;
             }
@@ -148,12 +152,10 @@ fn find_from(text: &str, phrase_lower: &[char], from: usize) -> Option<(usize, u
     if from > text.len() {
         return None;
     }
-    text[from..]
-        .char_indices()
-        .find_map(|(offset, _)| {
-            let start = from + offset;
-            match_at(text, start, phrase_lower).map(|end| (start, end))
-        })
+    text[from..].char_indices().find_map(|(offset, _)| {
+        let start = from + offset;
+        match_at(text, start, phrase_lower).map(|end| (start, end))
+    })
 }
 
 /// If `phrase_lower` matches `text` at `start`, the byte offset just past it.
@@ -224,7 +226,10 @@ mod tests {
         // A disabled entry is not vocabulary either.
         let mut disabled = entry("k8s", "Kubernetes", None);
         disabled.enabled = false;
-        assert_eq!(DictionaryEngine::new(vec![disabled]).prompt_terms(None), None);
+        assert_eq!(
+            DictionaryEngine::new(vec![disabled]).prompt_terms(None),
+            None
+        );
     }
 
     #[test]
@@ -309,7 +314,10 @@ mod tests {
     #[test]
     fn a_multibyte_phrase_is_matched_and_replaced() {
         let e = DictionaryEngine::new(vec![entry("\u{e9}l\u{e8}ve", "student", None)]);
-        assert_eq!(e.process_for("un \u{e9}l\u{e8}ve ici", None), "un student ici");
+        assert_eq!(
+            e.process_for("un \u{e9}l\u{e8}ve ici", None),
+            "un student ici"
+        );
     }
 
     #[test]

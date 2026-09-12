@@ -369,14 +369,17 @@ mod tests {
         let base = state("en", "", &[("Mic A", true)]);
         // A hover that changes nothing must compare equal, or every hover would
         // swap the menu object the popup is about to open.
-        assert_eq!(base.fingerprint(), state("en", "", &[("Mic A", true)]).fingerprint());
+        assert_eq!(
+            base.fingerprint(),
+            state("en", "", &[("Mic A", true)]).fingerprint()
+        );
 
         for changed in [
-            state("de", "", &[("Mic A", true)]),                   // tick moved
-            state("en", "Mic A", &[("Mic A", true)]),              // device chosen
-            state("en", "", &[("Mic A", false)]),                  // OS default moved
+            state("de", "", &[("Mic A", true)]),      // tick moved
+            state("en", "Mic A", &[("Mic A", true)]), // device chosen
+            state("en", "", &[("Mic A", false)]),     // OS default moved
             state("en", "", &[("Mic A", true), ("Mic B", false)]), // plugged in
-            state("en", "", &[]),                                  // unplugged
+            state("en", "", &[]),                     // unplugged
         ] {
             assert_ne!(base.fingerprint(), changed.fingerprint());
         }

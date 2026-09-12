@@ -72,9 +72,9 @@ pub fn speech_gate(samples: &[f32]) -> GateDecision {
     let mut speech_windows = 0usize;
 
     for window in samples.chunks(WINDOW_SAMPLES) {
-        let (sum_sq, peak) = window.iter().fold((0.0_f32, 0.0_f32), |(s, p), v| {
-            (s + v * v, p.max(v.abs()))
-        });
+        let (sum_sq, peak) = window
+            .iter()
+            .fold((0.0_f32, 0.0_f32), |(s, p), v| (s + v * v, p.max(v.abs())));
         let rms = (sum_sq / window.len() as f32).sqrt();
         peak_rms = peak_rms.max(rms);
 
@@ -98,9 +98,7 @@ mod tests {
 
     /// A sine at `amp`, one second long at 16 kHz.
     fn tone(amp: f32) -> Vec<f32> {
-        (0..16_000)
-            .map(|i| (i as f32 * 0.05).sin() * amp)
-            .collect()
+        (0..16_000).map(|i| (i as f32 * 0.05).sin() * amp).collect()
     }
 
     #[test]

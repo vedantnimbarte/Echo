@@ -78,4 +78,3 @@ pub struct TranscriptionRecord {
     #[serde(default)]
     pub cleanup_fixes: i64,
 }
-

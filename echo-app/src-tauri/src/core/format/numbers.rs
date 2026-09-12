@@ -25,33 +25,70 @@ use super::{key, words};
 
 /// Number words below twenty, where each is its own value.
 const UNITS: &[(&str, u64)] = &[
-    ("zero", 0), ("one", 1), ("two", 2), ("three", 3), ("four", 4),
-    ("five", 5), ("six", 6), ("seven", 7), ("eight", 8), ("nine", 9),
-    ("ten", 10), ("eleven", 11), ("twelve", 12), ("thirteen", 13),
-    ("fourteen", 14), ("fifteen", 15), ("sixteen", 16), ("seventeen", 17),
-    ("eighteen", 18), ("nineteen", 19),
+    ("zero", 0),
+    ("one", 1),
+    ("two", 2),
+    ("three", 3),
+    ("four", 4),
+    ("five", 5),
+    ("six", 6),
+    ("seven", 7),
+    ("eight", 8),
+    ("nine", 9),
+    ("ten", 10),
+    ("eleven", 11),
+    ("twelve", 12),
+    ("thirteen", 13),
+    ("fourteen", 14),
+    ("fifteen", 15),
+    ("sixteen", 16),
+    ("seventeen", 17),
+    ("eighteen", 18),
+    ("nineteen", 19),
 ];
 
 /// The tens, which combine with a unit ("twenty five").
 const TENS: &[(&str, u64)] = &[
-    ("twenty", 20), ("thirty", 30), ("forty", 40), ("fifty", 50),
-    ("sixty", 60), ("seventy", 70), ("eighty", 80), ("ninety", 90),
+    ("twenty", 20),
+    ("thirty", 30),
+    ("forty", 40),
+    ("fifty", 50),
+    ("sixty", 60),
+    ("seventy", 70),
+    ("eighty", 80),
+    ("ninety", 90),
 ];
 
 /// Multipliers that scale whatever came before them.
 const SCALES: &[(&str, u64)] = &[
-    ("hundred", 100), ("thousand", 1_000), ("million", 1_000_000),
+    ("hundred", 100),
+    ("thousand", 1_000),
+    ("million", 1_000_000),
     ("billion", 1_000_000_000),
 ];
 
 /// Ordinal words below twenty. Paired with their cardinal value, because what
 /// gets written is the digits plus a suffix worked out from that value.
 const UNIT_ORDINALS: &[(&str, u64)] = &[
-    ("first", 1), ("second", 2), ("third", 3), ("fourth", 4), ("fifth", 5),
-    ("sixth", 6), ("seventh", 7), ("eighth", 8), ("ninth", 9), ("tenth", 10),
-    ("eleventh", 11), ("twelfth", 12), ("thirteenth", 13), ("fourteenth", 14),
-    ("fifteenth", 15), ("sixteenth", 16), ("seventeenth", 17),
-    ("eighteenth", 18), ("nineteenth", 19),
+    ("first", 1),
+    ("second", 2),
+    ("third", 3),
+    ("fourth", 4),
+    ("fifth", 5),
+    ("sixth", 6),
+    ("seventh", 7),
+    ("eighth", 8),
+    ("ninth", 9),
+    ("tenth", 10),
+    ("eleventh", 11),
+    ("twelfth", 12),
+    ("thirteenth", 13),
+    ("fourteenth", 14),
+    ("fifteenth", 15),
+    ("sixteenth", 16),
+    ("seventeenth", 17),
+    ("eighteenth", 18),
+    ("nineteenth", 19),
 ];
 
 /// Units that follow a number and are conventionally written as a symbol or
@@ -59,7 +96,7 @@ const UNIT_ORDINALS: &[(&str, u64)] = &[
 const UNIT_WORDS: &[(&str, &str, bool)] = &[
     ("percent", "%", false),
     ("degrees", "\u{b0}", false),
-    ("dollars", "$", false),   // handled as a prefix below
+    ("dollars", "$", false), // handled as a prefix below
     ("euros", "\u{20ac}", false),
     ("pounds", "\u{a3}", false),
     ("kilometres", "km", true),
@@ -153,7 +190,10 @@ fn ordinal_suffix(value: u64) -> &'static str {
 
 /// The value of an ordinal word below twenty, if it is one.
 fn ordinal_value(word: &str) -> Option<u64> {
-    UNIT_ORDINALS.iter().find(|(w, _)| *w == word).map(|(_, v)| *v)
+    UNIT_ORDINALS
+        .iter()
+        .find(|(w, _)| *w == word)
+        .map(|(_, v)| *v)
 }
 
 /// The value of a cardinal tens word, which is the only thing a unit ordinal

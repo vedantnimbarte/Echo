@@ -145,9 +145,7 @@ pub async fn run(
     let (request, pointer, endpoint) = match cfg.provider.as_str() {
         "openai" => {
             let key = api_key.ok_or_else(|| {
-                EchoError::Config(
-                    "Command mode is set to OpenAI but no API key is stored".into(),
-                )
+                EchoError::Config("Command mode is set to OpenAI but no API key is stored".into())
             })?;
             let url = "https://api.openai.com/v1/chat/completions".to_string();
             (
@@ -162,13 +160,11 @@ pub async fn run(
         "ollama" => {
             let url = format!("{}/api/chat", cfg.endpoint.trim_end_matches('/'));
             (
-                client
-                    .post(&url)
-                    .json(&json!({
-                        "model": cfg.model,
-                        "messages": messages,
-                        "stream": false,
-                    })),
+                client.post(&url).json(&json!({
+                    "model": cfg.model,
+                    "messages": messages,
+                    "stream": false,
+                })),
                 "/message/content",
                 url,
             )

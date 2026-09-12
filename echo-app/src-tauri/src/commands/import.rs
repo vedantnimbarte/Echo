@@ -128,7 +128,11 @@ fn validate(path: &Path) -> Result<()> {
         return Err(EchoError::Config(format!(
             "Echo can transcribe {} files; '{}' is not one of them.",
             SUPPORTED_EXTENSIONS.join(", "),
-            if ext.is_empty() { "(no extension)" } else { &ext }
+            if ext.is_empty() {
+                "(no extension)"
+            } else {
+                &ext
+            }
         )));
     }
     Ok(())

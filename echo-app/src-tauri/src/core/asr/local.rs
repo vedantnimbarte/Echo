@@ -174,7 +174,10 @@ impl AsrProvider for LocalWhisperProvider {
         let audio_seconds = (audio.len() / 16_000) as u32;
         let wav = pcm_f32_to_wav(&audio, 16_000)?;
 
-        let text = match self.try_server(&decode, &wav, audio_seconds, lang, &prompt).await {
+        let text = match self
+            .try_server(&decode, &wav, audio_seconds, lang, &prompt)
+            .await
+        {
             Some(Ok(text)) => text,
             Some(Err(e)) => {
                 // The server failed. If it was the accelerated one, latch that
@@ -256,7 +259,13 @@ impl DecodeJob {
             };
             match self
                 .server
-                .transcribe(&sig, wav.clone(), audio_seconds, &self.language, self.prompt.clone())
+                .transcribe(
+                    &sig,
+                    wav.clone(),
+                    audio_seconds,
+                    &self.language,
+                    self.prompt.clone(),
+                )
                 .await
             {
                 Ok(text) => return Ok(text),
@@ -273,8 +282,15 @@ impl DecodeJob {
             .binaries
             .resolve()
             .ok_or_else(|| EchoError::NotFound("No whisper-cli binary is installed".into()))?;
-        run_cli(&binary, &self.model_path, &wav, &self.language, self.decode, self.prompt.as_deref())
-            .await
+        run_cli(
+            &binary,
+            &self.model_path,
+            &wav,
+            &self.language,
+            self.decode,
+            self.prompt.as_deref(),
+        )
+        .await
     }
 }
 
@@ -410,9 +426,10 @@ impl LocalWhisperProvider {
         language: &str,
         prompt: &Option<String>,
     ) -> Result<String> {
-        let binary = self.binaries.resolve().ok_or_else(|| {
-            EchoError::NotFound("No whisper-cli binary is installed".into())
-        })?;
+        let binary = self
+            .binaries
+            .resolve()
+            .ok_or_else(|| EchoError::NotFound("No whisper-cli binary is installed".into()))?;
         run_cli(
             &binary,
             &self.model_path,
@@ -456,7 +473,11 @@ mod tests {
     /// be worth one.
     #[test]
     fn a_partial_waits_for_enough_new_speech() {
-        assert!(!should_decode_partial(PARTIAL_INTERVAL_SAMPLES - 1, 0, false));
+        assert!(!should_decode_partial(
+            PARTIAL_INTERVAL_SAMPLES - 1,
+            0,
+            false
+        ));
         assert!(should_decode_partial(PARTIAL_INTERVAL_SAMPLES, 0, false));
     }
 
@@ -464,7 +485,11 @@ mod tests {
     /// behind the speaker with every extra one started.
     #[test]
     fn a_decode_already_running_blocks_another() {
-        assert!(!should_decode_partial(PARTIAL_INTERVAL_SAMPLES * 4, 0, true));
+        assert!(!should_decode_partial(
+            PARTIAL_INTERVAL_SAMPLES * 4,
+            0,
+            true
+        ));
     }
 
     /// Each partial re-decodes everything said so far, so the cost grows with

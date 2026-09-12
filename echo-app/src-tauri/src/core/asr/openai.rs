@@ -43,7 +43,11 @@ struct TranscriptionResponse {
 /// Users type base URLs both ways, and `http://localhost:8000/v1/` +
 /// `audio/transcriptions` must not become a 404 over a slash.
 pub fn join_url(base: &str, path: &str) -> String {
-    format!("{}/{}", base.trim_end_matches('/'), path.trim_start_matches('/'))
+    format!(
+        "{}/{}",
+        base.trim_end_matches('/'),
+        path.trim_start_matches('/')
+    )
 }
 
 impl WhisperApiProvider {
@@ -83,7 +87,12 @@ impl WhisperApiProvider {
     ///
     /// Rebuilt per attempt rather than cloned: a `multipart::Form` is consumed
     /// by `send`, so the retry needs its own.
-    fn form(&self, wav: Vec<u8>, language: Option<&str>, prompt: Option<&str>) -> Result<multipart::Form> {
+    fn form(
+        &self,
+        wav: Vec<u8>,
+        language: Option<&str>,
+        prompt: Option<&str>,
+    ) -> Result<multipart::Form> {
         let part = multipart::Part::bytes(wav)
             .file_name("audio.wav")
             .mime_str("audio/wav")
@@ -165,8 +174,7 @@ impl AsrProvider for WhisperApiProvider {
             });
         }
 
-        Err(last_err
-            .unwrap_or_else(|| EchoError::AsrProvider("transcription failed".into())))
+        Err(last_err.unwrap_or_else(|| EchoError::AsrProvider("transcription failed".into())))
     }
 }
 
@@ -194,7 +202,12 @@ mod tests {
 
     #[test]
     fn the_endpoint_is_derived_from_whatever_base_the_user_gave() {
-        let p = WhisperApiProvider::new("custom", "http://localhost:8000/v1", "whisper-1", "k".into());
+        let p = WhisperApiProvider::new(
+            "custom",
+            "http://localhost:8000/v1",
+            "whisper-1",
+            "k".into(),
+        );
         assert_eq!(p.endpoint, "http://localhost:8000/v1/audio/transcriptions");
         assert_eq!(p.name(), "custom");
     }

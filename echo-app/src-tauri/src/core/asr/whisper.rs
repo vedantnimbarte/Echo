@@ -3,9 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use tokio::sync::mpsc;
-use whisper_rs::{
-    FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters,
-};
+use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 use super::{AsrProvider, TranscriptSegment};
 use crate::error::{EchoError, Result};
@@ -99,7 +97,9 @@ impl AsrProvider for WhisperProvider {
         while let Some(chunk) = audio_rx.recv().await {
             if chunk.is_empty() {
                 if !buffer.is_empty() {
-                    let segment = self.transcribe(std::mem::take(&mut buffer), language).await?;
+                    let segment = self
+                        .transcribe(std::mem::take(&mut buffer), language)
+                        .await?;
                     if !segment.text.is_empty() {
                         let _ = tx.send(segment).await;
                     }

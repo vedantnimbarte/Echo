@@ -50,9 +50,7 @@ fn build_session(path: &Path) -> Result<Session> {
         .with_optimization_level(GraphOptimizationLevel::Level3)
         .map_err(|e| EchoError::Config(format!("ort opt level: {e}")))?
         .commit_from_file(path)
-        .map_err(|e| {
-            EchoError::Config(format!("ort load wake model {}: {e}", path.display()))
-        })
+        .map_err(|e| EchoError::Config(format!("ort load wake model {}: {e}", path.display())))
 }
 
 impl WakeModel {
@@ -93,11 +91,8 @@ impl WakeModel {
     /// Turn a window of `EMBED_WINDOW * MEL_BINS` mel values into one 96-d
     /// speech embedding.
     fn embed(&self, mel_window: &[f32]) -> Result<Vec<f32>> {
-        let input = Tensor::from_array((
-            [1usize, EMBED_WINDOW, MEL_BINS, 1],
-            mel_window.to_vec(),
-        ))
-        .map_err(|e| EchoError::AsrProvider(format!("wake embed input: {e}")))?;
+        let input = Tensor::from_array(([1usize, EMBED_WINDOW, MEL_BINS, 1], mel_window.to_vec()))
+            .map_err(|e| EchoError::AsrProvider(format!("wake embed input: {e}")))?;
 
         let mut session = self
             .embedding
@@ -116,11 +111,8 @@ impl WakeModel {
 
     /// Score `CLASSIFIER_FRAMES` stacked embeddings against the wake phrase.
     fn classify(&self, features: &[f32]) -> Result<f32> {
-        let input = Tensor::from_array((
-            [1usize, CLASSIFIER_FRAMES, EMBED_DIM],
-            features.to_vec(),
-        ))
-        .map_err(|e| EchoError::AsrProvider(format!("wake score input: {e}")))?;
+        let input = Tensor::from_array(([1usize, CLASSIFIER_FRAMES, EMBED_DIM], features.to_vec()))
+            .map_err(|e| EchoError::AsrProvider(format!("wake score input: {e}")))?;
 
         let mut session = self
             .classifier
@@ -146,9 +138,15 @@ const MEL_FRAMES_PER_CHUNK: usize = CHUNK / 160;
 // and that a classifier window is reachable from the mel buffer we retain.
 // These are compile-time so retuning CHUNK or MEL_PAD without re-deriving them
 // fails the build rather than silently degrading detection.
-const _: () = assert!(CHUNK.is_multiple_of(160), "chunk must be a whole number of mel hops");
+const _: () = assert!(
+    CHUNK.is_multiple_of(160),
+    "chunk must be a whole number of mel hops"
+);
 const _: () = assert!(MEL_FRAMES_PER_CHUNK == 8);
-const _: () = assert!(MEL_PAD.is_multiple_of(160), "overlap must be a whole number of hops");
+const _: () = assert!(
+    MEL_PAD.is_multiple_of(160),
+    "overlap must be a whole number of hops"
+);
 const _: () = assert!(EMBED_WINDOW * 2 >= EMBED_WINDOW + MEL_FRAMES_PER_CHUNK);
 
 /// Chunks to ignore after a detection, so one spoken phrase fires once rather
@@ -292,7 +290,6 @@ impl WakeSpotter {
             }
         }
     }
-
 }
 
 /// Keep only the last `max` elements, dropping from the front.

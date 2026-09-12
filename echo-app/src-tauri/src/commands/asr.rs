@@ -61,9 +61,10 @@ pub async fn register_local_provider(state: &AppState) -> Result<()> {
             "Whisper model '{model}' is not downloaded yet"
         )));
     }
-    let binary = state.binaries.resolve().ok_or_else(|| {
-        EchoError::NotFound("The whisper-cli binary is not installed yet".into())
-    })?;
+    let binary = state
+        .binaries
+        .resolve()
+        .ok_or_else(|| EchoError::NotFound("The whisper-cli binary is not installed yet".into()))?;
     let _ = binary; // presence check only; the provider re-resolves per call
     let (threads, gpu_allowed) = {
         let conn = state.db.lock().unwrap();
@@ -258,7 +259,9 @@ pub fn gpu_status(state: State<'_, AppState>) -> GpuStatus {
         detected: state.binaries.gpu().label(),
         available_pack: available.map(|p| p.id().to_string()),
         available_pack_mb: available.map(|p| p.download_mb()),
-        pack_installed: available.map(|p| state.binaries.pack_installed(p)).unwrap_or(false),
+        pack_installed: available
+            .map(|p| state.binaries.pack_installed(p))
+            .unwrap_or(false),
         active: enabled && state.binaries.active_gpu_pack().is_some(),
         failed: state.binaries.gpu_failed(),
         enabled,
@@ -271,9 +274,7 @@ pub fn gpu_status(state: State<'_, AppState>) -> GpuStatus {
 #[tauri::command]
 pub async fn download_gpu_pack(app: AppHandle, state: State<'_, AppState>) -> Result<()> {
     let pack = state.binaries.available_gpu_pack().ok_or_else(|| {
-        EchoError::NotFound(
-            "No accelerated whisper build is available for this machine".into(),
-        )
+        EchoError::NotFound("No accelerated whisper build is available for this machine".into())
     })?;
 
     let binaries = state.binaries.clone();

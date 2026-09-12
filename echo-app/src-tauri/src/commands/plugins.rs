@@ -40,12 +40,18 @@ pub fn list_plugins(state: State<'_, AppState>) -> Result<Vec<PluginInfo>> {
             let manifest = serde_json::from_str::<PluginManifest>(&row.manifest).ok();
             PluginInfo {
                 name: row.name,
-                version: manifest.as_ref().map(|m| m.version.clone()).unwrap_or_default(),
+                version: manifest
+                    .as_ref()
+                    .map(|m| m.version.clone())
+                    .unwrap_or_default(),
                 description: manifest
                     .as_ref()
                     .map(|m| m.description.clone())
                     .unwrap_or_default(),
-                author: manifest.as_ref().map(|m| m.author.clone()).unwrap_or_default(),
+                author: manifest
+                    .as_ref()
+                    .map(|m| m.author.clone())
+                    .unwrap_or_default(),
                 enabled: row.enabled,
                 permissions: manifest.map(|m| m.permissions).unwrap_or_default(),
             }
