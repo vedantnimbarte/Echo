@@ -51,7 +51,9 @@ describe("the app shell", () => {
     // The four pages Settings is split into. If any throws on mount, this fails.
     // `findAllBy` because a page name appears in the nav *and* as a heading once
     // that page is open — the assertion is that the shell rendered them at all.
-    for (const page of ["Settings", "Engine", "Output", "Privacy", "About"]) {
+    // These are the names on the buttons, which is also what pins the sidebar
+    // and each page's own heading to the same words.
+    for (const page of ["Settings", "Voice engine", "Output", "Privacy", "About"]) {
       expect((await screen.findAllByText(page)).length).toBeGreaterThan(0);
     }
   });

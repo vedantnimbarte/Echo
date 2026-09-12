@@ -8,7 +8,7 @@
   "pill.genericError": "Une erreur s'est produite",
   "settings.settings.title": "Réglages",
   "settings.settings.description": "Comment l'enregistrement démarre et comment Echo se comporte pendant qu'il écoute.",
-  "settings.engine.title": "Moteur",
+  "settings.engine.title": "Moteur vocal",
   "settings.engine.description": "Ce qui transforme votre voix en texte, et les modèles utilisés.",
   "settings.output.title": "Sortie",
   "settings.output.description": "Où va le texte final, et comment il y arrive.",

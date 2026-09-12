@@ -8,7 +8,7 @@
   "pill.genericError": "Algo ha salido mal",
   "settings.settings.title": "Ajustes",
   "settings.settings.description": "Cómo empieza la grabación y cómo se comporta Echo mientras escucha.",
-  "settings.engine.title": "Motor",
+  "settings.engine.title": "Motor de voz",
   "settings.engine.description": "Lo que convierte tu voz en texto y los modelos que utiliza.",
   "settings.output.title": "Salida",
   "settings.output.description": "Adónde va el texto final y cómo llega hasta allí.",

@@ -89,7 +89,7 @@ export function DictionaryPanel() {
 
   return (
     <Page
-      title="Dictionary"
+      title="Custom dictionary"
       description="Words Echo gets wrong, and what to write instead. Replacements run on every finished transcript."
       actions={
         <>
