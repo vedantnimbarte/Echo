@@ -8,7 +8,7 @@
 //! and it renders the thing it exists for. Anything more specific becomes a
 //! restatement of the markup and has to be rewritten every time the copy changes.
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -269,6 +269,75 @@ describe("every settings page", () => {
 
     expect(await screen.findByText("Local models")).toBeTruthy();
     expect(settings.get("asr_provider")).toBe("local");
+  });
+});
+
+describe("the plugins panel", () => {
+  it("keeps the guide out of the way until it is asked for", async () => {
+    const user = userEvent.setup();
+    mount(<PluginsPanel />);
+
+    // Installed opens, and the install action belongs to it.
+    expect(await screen.findByRole("button", { name: /Install from file/i })).toBeTruthy();
+    expect(screen.queryByText(/Five steps/i)).toBeNull();
+
+    await openSection(user, "Build one");
+    expect(await screen.findByText(/Five steps/i)).toBeTruthy();
+    // The guide has nothing to install, so the page's action goes with it.
+    // By role, not by text: step 5 names the button in a sentence, and a text
+    // query cannot tell the instruction from the thing it points at.
+    expect(screen.queryByRole("button", { name: /Install from file/i })).toBeNull();
+  });
+
+  // Someone with nothing installed is the person most likely to want to write
+  // one, so the empty state is where the offer belongs.
+  it("offers the guide from the empty state", async () => {
+    const user = userEvent.setup();
+    mount(<PluginsPanel />);
+
+    await user.click(await screen.findByRole("button", { name: "write your own" }));
+    expect(await screen.findByText(/Five steps/i)).toBeTruthy();
+  });
+
+  // The panel used to promise transcription engines and output targets, which
+  // the host does not dispatch to. The guide says so, and this pins the saying.
+  it("says which parts of the plugin API actually run", async () => {
+    const user = userEvent.setup();
+    mount(<PluginsPanel />);
+    await openSection(user, "Build one");
+
+    expect(await screen.findByText(/Echo will not yet call it/i)).toBeTruthy();
+  });
+
+  it("scaffolds into the folder that was picked, under the name that was typed", async () => {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    vi.mocked(open).mockResolvedValueOnce("/home/you/plugins");
+
+    const user = userEvent.setup();
+    mount(<PluginsPanel />);
+    await openSection(user, "Build one");
+
+    await user.click(await screen.findByRole("button", { name: /Choose a folder/i }));
+
+    await waitFor(() => expect(invoked).toContain("scaffold_plugin"));
+    // Where it landed, so the next step is findable rather than guessed at.
+    expect(await screen.findByText("/home/you/plugins/my-plugin")).toBeTruthy();
+  });
+
+  // The backend validates too — this is the courtesy that stops a round trip,
+  // and the message that explains what a legal name is.
+  it("will not offer to scaffold a name cargo would refuse", async () => {
+    const user = userEvent.setup();
+    mount(<PluginsPanel />);
+    await openSection(user, "Build one");
+
+    const name = await screen.findByLabelText("Plugin name");
+    await user.clear(name);
+    await user.type(name, "My Plugin!");
+
+    const button = await screen.findByRole("button", { name: /Choose a folder/i });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(await screen.findByText(/lowercase letters, digits and hyphens/i)).toBeTruthy();
   });
 });
 

@@ -68,6 +68,8 @@ export const ANSWERS: Record<string, unknown> = {
   list_app_profiles: [],
   installed_packs: [],
   supported_import_formats: ["wav", "mp3", "m4a"],
+  /** The directory the scaffold reports having written. */
+  scaffold_plugin: "/home/you/plugins/my-plugin",
   get_egress_status: { offline_capable: true, hosts: [] },
   get_telemetry_summary: [],
   get_dictation_stats: null,

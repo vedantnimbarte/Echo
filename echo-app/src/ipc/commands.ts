@@ -342,6 +342,14 @@ export const commands = {
   uninstallPlugin: (name: string) =>
     invoke<void>("uninstall_plugin", { name }),
 
+  /**
+   * Write a starter plugin project into `parentDir/<name>/`, returning the
+   * directory it created. Refuses a name that is not a plain crate name, and
+   * refuses to overwrite a directory that already exists.
+   */
+  scaffoldPlugin: (parentDir: string, name: string) =>
+    invoke<string>("scaffold_plugin", { parentDir, name }),
+
   quit: () => invoke<void>("quit"),
 
   /** Read from the OS each time, not from echo.db — the registration is not ours. */
