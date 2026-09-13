@@ -44,6 +44,10 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # xdg-utils is listed because the AppImage bundler copies /usr/bin/xdg-open
+      # into the image. ubuntu-latest happens to ship it preinstalled and the
+      # ubuntu-24.04-arm image does not, so the first arm64 release compiled
+      # for eight minutes and then failed to bundle.
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
@@ -54,6 +58,7 @@ jobs:
             librsvg2-dev \
             patchelf \
             libasound2-dev \
+            xdg-utils \
             cmake
 
       - name: Set up Rust
