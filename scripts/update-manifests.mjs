@@ -6,7 +6,7 @@
 // Run after the release build has attached its assets. Writes:
 //   - SHA256SUMS.txt in the asset directory (upload it to the release)
 //   - packaging/winget/manifests/...  a whole versioned manifest directory
-//   - packaging/homebrew/echo.rb version + SHA256 per macOS architecture
+//   - packaging/homebrew/echo.rb version + SHA256
 //   - packaging/snap/snapcraft.yaml  version
 //
 //   - website/src/lib/links.ts   VERSION, which the download links build from
@@ -84,10 +84,7 @@ console.log(`wrote ${sumsFile} (${entries.length} assets)`);
 const find = (re) => entries.find((n) => re.test(n));
 
 const winInstaller = find(/-setup\.exe$/);
-// Named by the Tauri bundler, per architecture. A bare /\.dmg$/ would take
-// whichever sorts first now that a release can carry two.
-const armDmg = find(/_aarch64\.dmg$/);
-const intelDmg = find(/_x64\.dmg$/);
+const macDmg = find(/\.dmg$/);
 
 // ── winget ──────────────────────────────────────────────────────────────────
 //
@@ -156,67 +153,21 @@ if (winInstaller) {
 
 // ── homebrew ────────────────────────────────────────────────────────────────
 
-//
-// The cask has two shapes, and which one a release gets depends on whether its
-// Intel build succeeded — that build is allowed to fail without blocking the
-// release (see `continue-on-error` in release.yml). With both .dmg files it
-// takes Homebrew's `arch` form: one URL interpolating #{arch}, a sha256 per
-// architecture. With only the arm64 one it stays single-arch and refuses Intel
-// outright, rather than pointing Intel Macs at a file that does not exist.
-// (`arch` plus `sha256 arm:, intel:` rather than on_arm/on_intel blocks: only
-// the file name and its hash differ, which is the case `brew style` wants the
-// compact form for.)
-//
-// The url line is regenerated too, not just the hashes: it carries the arch in
-// the file name, and the names are the bundler's, so they are checked here.
-
-if (armDmg) {
-  const base = `https://github.com/${REPO}/releases/download/v#{version}/Echo_#{version}_`;
-  for (const [name, expected] of [
-    [armDmg, `Echo_${version}_aarch64.dmg`],
-    [intelDmg, `Echo_${version}_x64.dmg`],
-  ]) {
-    // Warn, not throw: SHA256SUMS.txt is already written, and failing this
-    // step would keep it off the release for every platform.
-    if (name && name !== expected) {
-      console.warn(`! dmg is named ${name} but the cask URL builds ${expected}; update packaging/homebrew/echo.rb`);
-    }
+if (macDmg) {
+  // The cask builds its URL from #{version}, so the file name has to match the
+  // pattern it expects — warn rather than silently producing a 404 link.
+  const expected = `Echo_${version}_aarch64.dmg`;
+  if (macDmg !== expected) {
+    console.warn(
+      `! dmg is named ${macDmg} but the cask URL builds ${expected}; update packaging/homebrew/echo.rb`
+    );
   }
-
-  const header = intelDmg
-    ? `  arch arm: "aarch64", intel: "x64"\n\n` +
-      `  version "${version}"\n` +
-      `  sha256 arm:   "${sums.get(armDmg)}",\n` +
-      `         intel: "${sums.get(intelDmg)}"\n\n` +
-      `  url "${base}#{arch}.dmg",\n`
-    : `  version "${version}"\n` +
-      `  sha256 "${sums.get(armDmg)}"\n\n` +
-      `  url "${base}aarch64.dmg",\n`;
-
-  const armOnly =
-    "  # Apple Silicon only for this version: its release has no Intel .dmg.\n" +
-    "  # scripts/update-manifests.mjs drops this line for a release that has one.\n" +
-    "  depends_on arch: :arm64\n";
-
   await patch("packaging/homebrew/echo.rb", [
-    [
-      /^(?:  arch .*\n\n)?  version ".*"\n  sha256 .*\n(?: +intel: .*\n)?\n  url ".*",\n/m,
-      header,
-      "version/sha256/url",
-    ],
-    // Matches with or without an existing arch restriction (and the comment
-    // above it), so this both adds and removes it.
-    [
-      /^(?:  #.*\n)*(?:  depends_on arch: :arm64\n)?(?=  depends_on macos:)/m,
-      intelDmg ? "" : armOnly,
-      "depends_on",
-    ],
+    [/^  version ".*"$/m, `  version "${version}"`, "version"],
+    [/^  sha256 ".*"$/m, `  sha256 "${sums.get(macDmg)}"`, "sha256"],
   ]);
-  if (!intelDmg) {
-    console.warn("! no x64 .dmg asset; the Homebrew cask stays Apple Silicon only");
-  }
 } else {
-  console.warn("! no aarch64 .dmg asset; leaving the Homebrew cask alone");
+  console.warn("! no .dmg asset; leaving the Homebrew cask alone");
 }
 
 // ── snap ────────────────────────────────────────────────────────────────────

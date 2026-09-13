@@ -13,8 +13,8 @@ cask "echo" do
     strategy :github_latest
   end
 
-  # Apple Silicon only for this version: its release has no Intel .dmg.
-  # scripts/update-manifests.mjs drops this line for a release that has one.
+  # Apple Silicon only: the ONNX Runtime behind Echo's voice-activity detection
+  # publishes no Intel macOS binaries, so no x86_64 build exists.
   depends_on arch: :arm64
   depends_on macos: ">= :monterey"
 

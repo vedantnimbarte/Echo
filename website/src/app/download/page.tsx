@@ -8,7 +8,7 @@ import { DOWNLOADS, INSTALL, LINKS, VERSION } from "@/lib/links";
 export const metadata: Metadata = {
   title: "Download — Echo",
   description:
-    "Download Echo for macOS, Windows, and Linux. Free, open-source, and a few megabytes.",
+    "Download Echo for macOS (Apple Silicon), Windows, and Linux. Free, open-source, and a few megabytes.",
 };
 
 const ICONS: Record<string, React.ReactNode> = {
@@ -51,8 +51,7 @@ const PLATFORMS: Platform[] = [
     cta: "Download for macOS",
     href: DOWNLOADS.macos,
     cmd: INSTALL.unix,
-    req: "macOS 12 Monterey or later · Intel needs 13.4+ for Silero VAD and the wake word",
-    alt: [{ label: "Intel .dmg", href: DOWNLOADS.macosIntel }],
+    req: "macOS 12 Monterey or later · Apple Silicon (M1 and newer)",
     featured: true,
   },
   {

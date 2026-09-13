@@ -49,21 +49,6 @@ if [ "$platform" = "linux" ]; then
     esac
 fi
 
-# macOS releases carry one .dmg per architecture as well. `uname -m` alone is
-# not enough: a shell running under Rosetta (an x86_64 terminal or Homebrew on
-# an Apple Silicon Mac) reports x86_64, and would install the Intel build —
-# which runs, translated and slower, on a machine the native build suits.
-# sysctl.proc_translated is 1 under translation, 0 native, and absent on Intel
-# hardware and on macOS older than Big Sur, hence the fallback.
-if [ "$platform" = "macos" ]; then
-    if [ "$arch" = "arm64" ] || [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = "1" ]; then
-        arch="arm64"
-        dmg='_aarch64\.dmg$'
-    else
-        dmg='_x64\.dmg$'
-    fi
-fi
-
 if [ -n "${ECHO_VERSION:-}" ]; then
     api="https://api.github.com/repos/$REPO/releases/tags/$ECHO_VERSION"
 else
@@ -85,8 +70,8 @@ tag="$(printf '%s' "$release_json" | grep '"tag_name"' | sed -E 's/.*"tag_name":
 [ -n "$tag" ] || die "No published release found for $REPO. If you're expecting one, it may still be a draft."
 
 if [ "$platform" = "macos" ]; then
-    url="$(asset_url "$dmg")"
-    [ -n "$url" ] || die "No $arch .dmg in release $tag. Releases up to v0.4.0 are Apple Silicon only."
+    url="$(asset_url '\.dmg$')"
+    [ -n "$url" ] || die "No .dmg in release $tag."
 else
     url="$(asset_url "$appimage")"
     [ -n "$url" ] || die "No $arch .AppImage in release $tag. Releases up to v0.4.0 are x86_64 only; a .deb may be available — see the release page."

@@ -156,9 +156,9 @@ const PLATFORMS = [
   },
   {
     os: "macOS",
-    setup: "Apple Silicon and Intel",
+    setup: "Apple Silicon only",
     detail:
-      "Grant Microphone and Accessibility on first run. On Intel, Silero VAD and the wake word need macOS 13.4 or later.",
+      "Grant Microphone and Accessibility on first run. There's no Intel build: ONNX Runtime publishes no Intel-macOS binaries.",
   },
   {
     os: "Linux",

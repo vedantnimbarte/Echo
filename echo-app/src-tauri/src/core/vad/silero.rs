@@ -32,99 +32,6 @@ const SPEECH_THRESHOLD: f32 = 0.5;
 /// ~24 frames * 32 ms ≈ 770 ms of trailing pad before an utterance ends.
 const SILENCE_FRAMES: usize = 24;
 
-/// Load the ONNX Runtime dylib on Intel macOS, before the first session.
-///
-/// Every other target links ONNX Runtime statically and this does nothing.
-/// `x86_64-apple-darwin` has no static build to link (see the `ort` note in
-/// `Cargo.toml`), so there `ort` is built with `load-dynamic` and needs telling
-/// where the library is. Left to itself it looks for `libonnxruntime.dylib`
-/// beside the executable, in `Contents/MacOS`; the release stages it into the
-/// same `resources/bin` as whisper-cli instead, which lands in
-/// `Contents/Resources/bin`, which is found from the executable's directory so
-/// it holds wherever the app is installed.
-///
-/// `ORT_DYLIB_PATH` overrides it, because a `cargo run`/`cargo test` binary is
-/// not inside a bundle: point it at an unpacked `onnxruntime-osx-x86_64-1.23.2`.
-///
-/// **Everything that can fail is checked before `ort` is called**, and that is
-/// not belt and braces. In `ort` 2.0.0-rc.12 a failed `init_from` does not
-/// return its error, it deadlocks: building the error calls ONNX Runtime's
-/// `CreateStatus`, which needs the library that just failed to load, which
-/// re-enters the `std::sync::Once` still running the first load. (Reproduced
-/// with a missing path; the thread never returns.) `SileroModel::load` runs in
-/// app setup, so that would be a launch that hangs forever. Past the checks,
-/// `ort`'s own load does the same dlopen and finds the same symbol, and cannot
-/// fail — except by version, and 1.23.2 is exactly the API this target asks
-/// for (a stray older `ORT_DYLIB_PATH` would still hang; it is a developer
-/// override).
-///
-/// The result is computed once. The checks spawn `sw_vers`, and a failed load
-/// must not be retried by the wake word later either.
-///
-/// Callers already fall back on an error (energy VAD; wake word reported
-/// unavailable). The realistic cause is macOS 12 or 13.0-13.3: the 1.23.2
-/// dylib is built for 13.4 and up, while Echo itself supports 12, and whether
-/// dyld refuses such a dylib cleanly or loads it and crashes later is not
-/// something to find out on a user's Mac — hence the explicit version gate.
-#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-pub(crate) fn load_onnx_runtime() -> Result<()> {
-    static LOADED: std::sync::OnceLock<std::result::Result<(), String>> =
-        std::sync::OnceLock::new();
-    LOADED
-        .get_or_init(|| {
-            // `sw_vers` over a syscall crate: this runs once, and a missing
-            // or odd answer just skips the gate rather than failing it.
-            let version = std::process::Command::new("/usr/bin/sw_vers")
-                .arg("-productVersion")
-                .output()
-                .ok()
-                .and_then(|o| String::from_utf8(o.stdout).ok())
-                .and_then(|v| {
-                    let mut parts = v.trim().split('.').map(|p| p.parse::<u32>().ok());
-                    Some((parts.next()??, parts.next().flatten().unwrap_or(0)))
-                });
-            if let Some((major, minor)) = version {
-                if (major, minor) < (13, 4) {
-                    return Err(format!(
-                        "the bundled ONNX Runtime needs macOS 13.4 or later, this is {major}.{minor}"
-                    ));
-                }
-            }
-
-            let path = match std::env::var_os("ORT_DYLIB_PATH") {
-                Some(p) => std::path::PathBuf::from(p),
-                None => std::env::current_exe()
-                    .map_err(|e| format!("locating the executable: {e}"))?
-                    .parent()
-                    .ok_or("the executable has no parent directory")?
-                    .join("../Resources/bin/libonnxruntime.dylib"),
-            };
-            // The plugin loader's `libloading` (0.8), not `ort`'s (0.9) — same
-            // dlopen either way, and no second version to compile.
-            // SAFETY: loading ONNX Runtime runs only its static initialisers,
-            // which `ort` is about to run anyway; the handle is dropped again
-            // (a refcount, so `ort`'s own dlopen below keeps it loaded).
-            unsafe {
-                let lib = libloading::Library::new(&path)
-                    .map_err(|e| format!("loading {}: {e}", path.display()))?;
-                lib.get::<unsafe extern "C" fn()>(b"OrtGetApiBase")
-                    .map_err(|e| format!("{} is not ONNX Runtime: {e}", path.display()))?;
-            }
-
-            ort::init_from(&path)
-                .map_err(|e| format!("loading {}: {e}", path.display()))?
-                .commit();
-            Ok(())
-        })
-        .clone()
-        .map_err(|why| EchoError::Config(format!("ONNX Runtime unavailable: {why}")))
-}
-
-#[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
-pub(crate) fn load_onnx_runtime() -> Result<()> {
-    Ok(())
-}
-
 /// Loaded Silero ONNX session. Shared read-only behind an `Arc`; the inner
 /// `Mutex` exists only because `Session::run` needs `&mut self` — there is no
 /// real contention since at most one recording runs at a time.
@@ -136,7 +43,6 @@ impl SileroModel {
     /// Build the ONNX session from the embedded model. Returns an error if the
     /// ONNX Runtime fails to initialise (caller falls back to energy VAD).
     pub fn load() -> Result<Self> {
-        load_onnx_runtime()?;
         let session = Session::builder()
             .map_err(|e| EchoError::Config(format!("ort session builder: {e}")))?
             .with_optimization_level(GraphOptimizationLevel::Level3)
