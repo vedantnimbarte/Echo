@@ -49,7 +49,8 @@ cloud. Enable entries individually, import and export as JSON.
 application, so a terminal can take the words exactly as spoken.
 
 **Never types into a password field.** Windows and macOS ask the accessibility
-API. Linux cannot, and Settings says so rather than pretending.
+API; Linux asks AT-SPI, which answers for fewer apps. Settings says how much of
+your desktop is actually covered rather than pretending.
 
 **You can see what left.** A log of every outbound request Echo made, telemetry
 that is local-only and opt-in, and API keys held in the OS keychain.
@@ -109,8 +110,28 @@ Echo asks Windows UI Automation, or the macOS Accessibility API, whether the
 focused control is masked, and refuses to type into it. That code compiles on
 both platforms in CI but **has never been exercised against a real password
 box**, so treat it as a seatbelt of unknown strength rather than a guarantee.
-On Linux it does nothing at all: the question needs AT-SPI over D-Bus, and
-under Wayland usually not even that answers. Settings says so plainly.
+
+On Linux Echo listens on the AT-SPI accessibility bus for focus changes and
+asks the focused control whether it is a password field. That is weaker in
+ways Settings spells out for your machine:
+
+- **No accessibility bus, no guard.** Minimal window managers and some Wayland
+  sessions never start one; Echo then types everywhere, as before.
+- **Accessibility off, GTK only.** Chromium, Electron, Firefox and Qt publish
+  nothing unless the session's accessibility switch is on. Echo reads that
+  switch but never flips it — it is desktop-wide, persists across logins, and
+  costs every app memory and CPU. On GNOME you can opt in with
+  `gsettings set org.gnome.desktop.interface toolkit-accessibility true` and
+  then restart the browser.
+- **Apps with no accessibility tree** (most terminals, games) send no focus
+  events and are typed into as normal.
+
+What has been run: under WSLg on Ubuntu 24.04, with session accessibility off,
+a GTK 3 `GtkEntry` and a GTK 4 `GtkPasswordEntry` were reported as password
+fields and their unmasked counterparts as ordinary ones, and with no session
+bus the guard reported itself unavailable. That was the detection call, not a
+full dictation into the app. Chromium, Electron, Firefox, Qt, and real GNOME,
+KDE or wlroots desktops are unverified.
 
 ### Support tiers — what has actually been run
 
@@ -123,7 +144,7 @@ somebody dictating into twenty applications, so here is the honest state:
 | **Windows x64** | Tested | Developed and used here. Text injection, the password-field guard, the tray, offline Whisper and the GPU pack have all been exercised by hand. |
 | **macOS arm64** | Community | Compiles, unit-tests and self-tests in CI on a macOS runner, but has not been driven by hand. Accessibility and Automation permissions, and the password-field guard, are unverified against real applications. Bug reports welcome and expected. |
 | **macOS x86_64** | Unsupported | No build exists. `ort` ships no prebuilt ONNX Runtime for Intel macOS, so Silero VAD and the wake word cannot link. See [docs/RELEASING.md](docs/RELEASING.md). |
-| **Linux X11** | Community | Needs `xdotool`. No password-field detection on any Linux — the question needs AT-SPI over D-Bus. |
+| **Linux X11** | Community | Needs `xdotool`. Password-field detection goes through AT-SPI: GTK apps only unless session accessibility is on, nothing without an accessibility bus, and unverified in browsers and Qt apps. |
 | **Linux Wayland** | Degraded | Needs `ydotool` plus the `ydotoold` daemon, and some compositors refuse synthetic input outright. Per-app profiles do not work: no Wayland protocol reports which window is focused. |
 
 If you use Echo on a Community-tier platform and it works, saying so is a
@@ -138,8 +159,8 @@ link here rather than repeating it.
 |---|---|---|
 | **Windows** | **WebView2 runtime** — preinstalled on Windows 11; on Windows 10 grab the *Evergreen* runtime from [Microsoft](https://developer.microsoft.com/microsoft-edge/webview2/). Typing into other apps needs nothing extra. | Microphone |
 | **macOS** *(Apple Silicon only)* | Nothing. | **Microphone** and **Accessibility**. Without Accessibility, Echo can hear you but cannot type. |
-| **Linux (X11)** | **`xdotool`**, for typing into other apps. The AppImage also needs FUSE — `sudo apt install libfuse2` on Debian/Ubuntu; a `.deb` and an `.rpm` are attached to each release too. | Microphone |
-| **Linux (Wayland)** | **`ydotool`** *and* a running **`ydotoold`** daemon. Some compositors refuse synthetic input whatever you install. | Microphone |
+| **Linux (X11)** | **`xdotool`**, for typing into other apps. The AppImage also needs FUSE — `sudo apt install libfuse2` on Debian/Ubuntu; a `.deb` and an `.rpm` are attached to each release too. The password-field guard needs the AT-SPI bus (`at-spi2-core`, standard on GNOME, KDE and most full desktops). | Microphone. For the password-field guard to cover browsers, Electron and Qt apps: session accessibility on (see [the guard](#the-password-field-guard-is-unverified-on-real-hardware)) |
+| **Linux (Wayland)** | **`ydotool`** *and* a running **`ydotoold`** daemon. Some compositors refuse synthetic input whatever you install. The password-field guard needs `at-spi2-core`, as on X11. | Microphone. Session accessibility, as on X11 |
 
 **Why Apple Silicon only:** the ONNX Runtime behind Silero VAD and the wake word
 publishes no Intel-macOS binaries, so there is no x86_64 build — an Intel Mac
