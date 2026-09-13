@@ -34,6 +34,19 @@ impl AsrManager {
         self.providers.write().await.insert(name, provider);
     }
 
+    /// Drop every provider whose name starts with `prefix`.
+    ///
+    /// Exists for plugin engines, which must stop being selectable when their
+    /// plugin is disabled. If one of them is active, the active name is left
+    /// alone — the next recording then reports it missing rather than quietly
+    /// transcribing with something the user did not pick.
+    pub async fn unregister_prefixed(&self, prefix: &str) {
+        self.providers
+            .write()
+            .await
+            .retain(|name, _| !name.starts_with(prefix));
+    }
+
     pub async fn set_active(&self, name: &str) -> Result<()> {
         let providers = self.providers.read().await;
         if !providers.contains_key(name) {

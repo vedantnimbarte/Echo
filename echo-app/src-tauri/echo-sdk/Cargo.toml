@@ -1,6 +1,6 @@
 [package]
 name = "echo-sdk"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT"
 description = "Public API for writing Echo plugins (native shared-library plugins loaded by the Echo voice keyboard)."

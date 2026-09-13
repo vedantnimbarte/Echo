@@ -11,18 +11,60 @@ file is the reference; that is the walkthrough.
 is the scaffold's own output, checked in and built as part of the workspace — so
 the snippets below are known to compile rather than assumed to.
 
-## What actually runs today
+## What runs, and when
 
-Worth knowing before you plan a plugin around it. Echo opens your library, calls
-`on_load` when the plugin is enabled, and calls `on_unload` when it is disabled
-or Echo quits. Your plugin gets a data directory. That is the whole of what the
-host currently does.
+Echo opens your library, calls `on_load` when the plugin is enabled, and calls
+`on_unload` when it is disabled or Echo quits. Your plugin gets a data
+directory. **Only enabled plugins take part in anything below**: disabling one
+unloads it, and every stage reads the loaded set as it goes, so it stops being
+called mid-recording too.
 
-The capability traits — `OutputPlugin` and `AudioPlugin` in the SDK, `AsrPlugin`
-and `DictionaryPlugin` host-side — define the shape of work still to come.
-**Nothing dispatches to them yet.** Implementing one compiles and installs
-cleanly, and Echo will never call it. Build on the lifecycle hooks until that
-changes.
+A plugin does more by implementing a capability trait from `echo-sdk` and
+saying so. The host holds your plugin as a `Box<dyn Plugin>`, and Rust cannot
+downcast a trait object to another trait, so each capability has a method on
+`Plugin` that defaults to `None`:
+
+```rust
+fn as_output(&self) -> Option<&dyn OutputPlugin> { Some(self) }
+```
+
+Without that line Echo never calls the trait, however it is implemented.
+
+In the order a spoken sentence meets them:
+
+| # | Capability | Called | Can it change the result? |
+| - | ---------- | ------ | ------------------------- |
+| 1 | `AudioPlugin::process` | Every captured chunk (16 kHz mono `f32`, tens of ms), before voice detection. | Yes — detection and the decoder hear what you return. |
+| 2 | `AsrPlugin::transcribe` | Each whole utterance, **only if the user selects your engine**, listed as `plugin:<name>`. | It *is* the result. On failure the offline engine retries the utterance. |
+| 3 | `DictionaryPlugin::entries` | When the plugin is enabled and whenever the dictionary changes — not per transcript. | Yes, through the dictionary: your entries apply after the user's own, so theirs win. |
+| 4 | `OutputPlugin::on_transcript` | Each delivered transcript, **after** it has been typed, on a background thread, in order. | No. It observes. |
+
+Two of those deserve their reasons:
+
+- **Output observes rather than transforms.** Delivering the user's words is the
+  one thing that must not fail, and a hook able to rewrite or swallow them puts
+  every sentence at the mercy of the least careful plugin installed. So it runs
+  after the text is typed, on its own thread: a slow webhook never delays
+  typing, and a crash cannot take the words back. It is not sent transcripts
+  from an app whose history the user turned off — a plugin that writes text
+  down is history by another name — nor anything the password guard, "scratch
+  that" or a failed command-mode run withheld. It receives the text, the focused
+  app's id, and the language.
+- **Audio is the hot path.** It runs for every chunk while the microphone is
+  open, so the stage only exists when some enabled plugin offers it, Echo logs
+  what it cost after each recording, and a hook that errors (or returns an empty
+  buffer, which downstream means "microphone stopped") has that chunk's changes
+  thrown away and is not called again until the plugin is re-enabled.
+
+### Errors and panics
+
+Return `PluginError` from a hook and Echo logs it and carries on without that
+plugin's contribution. A panic is contained too, but not by Echo: your library
+has its own copy of the Rust standard library, and a panic from one copy cannot
+be caught by another — the process would abort. So `export_plugin!` wraps your
+plugin in `echo_sdk::Guarded`, which catches the panic *inside your library* and
+hands Echo an error instead. That relies on unwinding, Cargo's default; build
+with `panic = "abort"` and a panic takes Echo with it.
 
 ## ⚠️ Security: read this before installing anything
 
@@ -103,7 +145,9 @@ Ship a `plugin.json` next to your compiled library:
 }
 ```
 
-- `permissions` may include `asr`, `output`, `audio`, `dictionary`.
+- `permissions` may include `asr`, `output`, `audio`, `dictionary`. It is what
+  the user is shown before installing, not what decides the calls — that is the
+  `as_*` methods — so keep the two in agreement.
 - `entry` is the shared library file name — **the one field people get wrong.**
   Cargo replaces hyphens with underscores and decorates the name per platform,
   so a crate called `my-plugin` builds to `my_plugin.dll` on Windows,
@@ -123,7 +167,7 @@ Depend on it and implement `Plugin`:
 crate-type = ["cdylib"]
 
 [dependencies]
-echo-sdk = "0.1"
+echo-sdk = "0.2"
 ```
 
 ```rust
@@ -145,16 +189,31 @@ export_plugin!(MyPlugin);
 
 `export_plugin!` emits the `echo_plugin_create` symbol that returns a
 heap-allocated boxed trait object the host takes ownership of, so you never
-write the `unsafe extern "C"` boilerplate by hand. Your plugin type must also
-implement `Default`.
+write the `unsafe extern "C"` boilerplate by hand. It also wraps your type in
+`Guarded` (see *Errors and panics* above) and emits `echo_plugin_abi_version`.
+Your plugin type must also implement `Default`.
 
-The capability traits `OutputPlugin` and `AudioPlugin` also live in `echo-sdk`;
-`AsrPlugin` and `DictionaryPlugin` are defined by the host (they reference
-Echo-internal types) in `echo-app/src-tauri/src/core/plugins/mod.rs`.
+All four capability traits — `AudioPlugin`, `AsrPlugin`, `DictionaryPlugin`,
+`OutputPlugin` — and the plain data types they exchange (`Transcript`,
+`Transcription`, `DictionaryEntry`) live in `echo-sdk`. Nothing a plugin
+implements refers to a type inside Echo.
 
-> **ABI note:** because the trait object crosses the dynamic-library boundary,
-> plugins must be built against a matching `echo-sdk` version and the same Rust
-> toolchain as the host.
+### ABI and versions
+
+The trait object crosses the dynamic-library boundary as a raw vtable, so both
+sides must agree on the trait's exact shape. Adding the `as_*` methods changed
+that shape: **a plugin built against echo-sdk 0.1 must be rebuilt against 0.2**
+(its code needs no changes unless it wants a capability).
+
+A mismatch is not left to chance. `echo_sdk::ABI_VERSION` is compiled into your
+library behind a plain C function, and Echo reads it before calling anything
+else in the library. A library without the marker (echo-sdk 0.1) or with a
+different number is refused at install or enable, with a message saying to
+rebuild. The marker is compiled in rather than read from `plugin.json`, because
+a hand-edited manifest can claim a version the binary was never built with.
+
+What Echo cannot detect is a different **Rust toolchain**: build with the same
+Rust version and target as the Echo you install into.
 
 ## Installing
 

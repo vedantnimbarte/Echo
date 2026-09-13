@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::{
+    core::lock::LockLive,
     core::plugins::{PluginContext, PluginInfo, PluginManifest},
     error::{EchoError, Result},
     state::AppState,
@@ -82,7 +83,11 @@ pub fn inspect_plugin(path: String) -> Result<PluginManifest> {
 /// host privileges. This is a consent gate, not a sandbox — it cannot stop a
 /// malicious plugin, it only stops one being loaded without the user being told.
 #[tauri::command]
-pub fn install_plugin(state: State<'_, AppState>, path: String, acknowledged: bool) -> Result<()> {
+pub async fn install_plugin(
+    state: State<'_, AppState>,
+    path: String,
+    acknowledged: bool,
+) -> Result<()> {
     if !acknowledged {
         return Err(EchoError::PermissionDenied(
             "Plugin install was not confirmed. Plugins run in-process with full              access to Echo and your files; the permission list in the manifest              is advisory and is not enforced."
@@ -124,12 +129,43 @@ pub fn install_plugin(state: State<'_, AppState>, path: String, acknowledged: bo
 
     let ctx = make_context(state.plugins_dir.clone());
     let lib = installed_lib_path(&state.plugins_dir, &manifest);
-    state.plugins.lock().unwrap().load(&lib, &ctx)?;
+    state.plugins.lock_live().load(&lib, &ctx)?;
+    sync_capabilities(&state).await;
     Ok(())
 }
 
+/// Bring every capability that is registered rather than dispatched per call
+/// back in line with what is loaded: dictionary entries and ASR engines.
+///
+/// Output and audio need nothing here — they read the loaded set when a
+/// recording starts. These two are held elsewhere (the dictionary engine, the
+/// ASR manager) and would otherwise keep a disabled plugin's contribution, or
+/// never see a newly enabled one. Called after every load or unload, and once
+/// at startup.
+pub(crate) async fn sync_capabilities(state: &AppState) {
+    use crate::core::asr::AsrProvider;
+    use crate::core::plugins::dispatch::{PluginAsrProvider, ASR_PREFIX};
+
+    let plugins = state.plugins.lock_live().plugins();
+
+    state.asr.unregister_prefixed(ASR_PREFIX).await;
+    for provider in plugins.into_iter().filter_map(PluginAsrProvider::new) {
+        tracing::info!(provider = provider.name(), "Plugin engine available");
+        state.asr.register(Arc::new(provider)).await;
+    }
+
+    let raw = {
+        let conn = state.db.lock_live();
+        repositories::list_dictionary_entries(&conn)
+    };
+    match raw {
+        Ok(raw) => crate::commands::dictionary::refresh_engine(state, raw).await,
+        Err(e) => tracing::error!("Couldn't rebuild the dictionary after a plugin change: {e}"),
+    }
+}
+
 #[tauri::command]
-pub fn enable_plugin(state: State<'_, AppState>, name: String) -> Result<()> {
+pub async fn enable_plugin(state: State<'_, AppState>, name: String) -> Result<()> {
     let manifest = read_installed_manifest(&state.plugins_dir, &name)?;
     {
         let conn = state.db.lock().unwrap();
@@ -156,20 +192,33 @@ pub fn enable_plugin(state: State<'_, AppState>, name: String) -> Result<()> {
         }
     }
 
-    let mut loader = state.plugins.lock().unwrap();
-    if !loader.is_loaded(&name) {
-        loader.load(&lib, &ctx)?;
+    let loaded = {
+        let mut loader = state.plugins.lock_live();
+        if loader.is_loaded(&name) {
+            Ok(())
+        } else {
+            loader.load(&lib, &ctx).map(|_| ())
+        }
+    };
+    if let Err(e) = loaded {
+        // Refused — most often a library built against an older echo-sdk. Left
+        // marked enabled, the toggle would claim a plugin that is not running.
+        let conn = state.db.lock_live();
+        repositories::set_plugin_enabled(&conn, &name, false)?;
+        return Err(e);
     }
+    sync_capabilities(&state).await;
     Ok(())
 }
 
 #[tauri::command]
-pub fn disable_plugin(state: State<'_, AppState>, name: String) -> Result<()> {
+pub async fn disable_plugin(state: State<'_, AppState>, name: String) -> Result<()> {
     {
         let conn = state.db.lock().unwrap();
         repositories::set_plugin_enabled(&conn, &name, false)?;
     }
-    state.plugins.lock().unwrap().unload(&name)?;
+    state.plugins.lock_live().unload(&name)?;
+    sync_capabilities(&state).await;
     Ok(())
 }
 
@@ -186,8 +235,11 @@ pub fn scaffold_plugin(parent_dir: String, name: String) -> Result<String> {
 }
 
 #[tauri::command]
-pub fn uninstall_plugin(state: State<'_, AppState>, name: String) -> Result<()> {
-    state.plugins.lock().unwrap().unload(&name)?;
+pub async fn uninstall_plugin(state: State<'_, AppState>, name: String) -> Result<()> {
+    state.plugins.lock_live().unload(&name)?;
+    // Before the directory goes: a registered plugin engine holds the library
+    // open, and Windows will not delete a DLL that is still mapped.
+    sync_capabilities(&state).await;
     {
         let conn = state.db.lock().unwrap();
         repositories::delete_plugin(&conn, &name)?;

@@ -14,10 +14,11 @@ import { Group } from "../common/Page";
  * drift apart. The example it produces is a workspace member, so a snippet that
  * stops compiling fails the build.
  *
- * It is deliberately honest about the part that would otherwise waste an
- * afternoon — the host loads plugins and runs their lifecycle hooks, and does
- * not yet dispatch to the capability traits. Writing an ASR plugin today
- * produces a library Echo will load and then never ask anything of.
+ * It is deliberately specific about when each capability runs, because that is
+ * the part a trait signature cannot tell you and the part a plugin's design
+ * hangs on: an output hook that runs after typing cannot change the text, and
+ * an audio hook that runs on every chunk cannot afford to be slow. The order
+ * here is the order in `core/plugins/dispatch.rs`.
  */
 
 /** A copyable block of code. The copy button is why this is not a bare `pre`. */
@@ -101,14 +102,34 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-echo-sdk = "0.1"`;
+echo-sdk = "0.2"`;
 
 const LIB_RS = `use std::io::Write;
+use std::path::PathBuf;
+use std::sync::OnceLock;
 
-use echo_sdk::{export_plugin, Plugin, PluginContext, PluginError, PluginResult};
+use echo_sdk::{
+    export_plugin, OutputPlugin, Plugin, PluginContext, PluginError, PluginResult, Transcript,
+};
 
 #[derive(Default)]
-struct MyPlugin;
+struct MyPlugin {
+    // Hooks take &self because Echo calls them from more than one thread, so
+    // anything learned after creation goes in a cell like this one.
+    log: OnceLock<PathBuf>,
+}
+
+impl MyPlugin {
+    fn append(&self, line: &str) -> PluginResult<()> {
+        let path = self.log.get().ok_or("not loaded yet")?;
+        let mut log = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .map_err(|e| PluginError::new(e.to_string()))?;
+        writeln!(log, "{line}").map_err(|e| PluginError::new(e.to_string()))
+    }
+}
 
 impl Plugin for MyPlugin {
     fn name(&self) -> &str {
@@ -122,24 +143,31 @@ impl Plugin for MyPlugin {
     fn on_load(&self, ctx: &PluginContext) -> PluginResult<()> {
         // ctx.data_dir is the directory Echo hands you to keep files in.
         std::fs::create_dir_all(&ctx.data_dir).map_err(|e| PluginError::new(e.to_string()))?;
-
-        let mut log = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(ctx.data_dir.join("my-plugin.log"))
-            .map_err(|e| PluginError::new(e.to_string()))?;
-
-        writeln!(log, "my-plugin loaded").map_err(|e| PluginError::new(e.to_string()))?;
-        Ok(())
+        let _ = self.log.set(ctx.data_dir.join("my-plugin.log"));
+        self.append("my-plugin loaded")
     }
 
     fn on_unload(&self) -> PluginResult<()> {
         Ok(())
     }
+
+    // The line that makes this an output plugin.
+    fn as_output(&self) -> Option<&dyn OutputPlugin> {
+        Some(self)
+    }
 }
 
-// Emits \`echo_plugin_create\`, the one symbol Echo looks up after opening the
-// library. Write it by hand and you own the unsafe; this macro does not.
+impl OutputPlugin for MyPlugin {
+    // Called after the text has been typed, on a thread of its own.
+    fn on_transcript(&self, transcript: &Transcript) -> PluginResult<()> {
+        let app = transcript.app.as_deref().unwrap_or("an unknown app");
+        let chars = transcript.text.chars().count();
+        self.append(&format!("delivered {chars} characters to {app}"))
+    }
+}
+
+// Emits the symbols Echo looks up after opening the library, and catches a
+// panic in any hook before it can leave it.
 export_plugin!(MyPlugin);`;
 
 const PLUGIN_JSON = `{
@@ -147,9 +175,36 @@ const PLUGIN_JSON = `{
   "version": "0.1.0",
   "description": "What it does",
   "author": "You",
-  "permissions": [],
+  "permissions": ["output"],
   "entry": "my_plugin.dll"
 }`;
+
+/**
+ * The four capabilities, in the order a spoken sentence meets them. Each is
+ * switched on by returning `Some(self)` from its `as_*` method on `Plugin`.
+ */
+const CAPABILITIES = [
+  {
+    method: "as_audio",
+    trait: "AudioPlugin",
+    when: "Every captured chunk, before speech detection. The hot path: its cost is logged after each recording, and a hook that fails stops being called until the plugin is enabled again.",
+  },
+  {
+    method: "as_asr",
+    trait: "AsrPlugin",
+    when: "Each whole utterance, if the user picks your engine — it is listed as plugin:<name> and does nothing until chosen. A failure falls back to the offline engine.",
+  },
+  {
+    method: "as_dictionary",
+    trait: "DictionaryPlugin",
+    when: "Asked when the plugin is enabled and whenever the dictionary changes. Entries apply after the user's own, so theirs win.",
+  },
+  {
+    method: "as_output",
+    trait: "OutputPlugin",
+    when: "Each delivered transcript, after it has been typed, on a thread of its own. It observes: it cannot change the text or stop it arriving.",
+  },
+];
 
 /** What `cargo build --release` really produces, per platform. */
 const ARTIFACTS = [
@@ -244,37 +299,47 @@ export function BuildGuide() {
       </Group>
 
       <Group
-        title="What a plugin can do today"
-        hint="Stated plainly because the gap is not obvious from the SDK: the traits exist and compile, so nothing warns you that the host never calls them."
+        title="What a plugin can do"
+        hint="Only enabled plugins take part. Disabling one stops every call to it, mid-recording included."
       >
         <P>
           Echo opens your library, calls <code className="font-mono">on_load</code>{" "}
           when the plugin is enabled, and calls{" "}
           <code className="font-mono">on_unload</code> when it is disabled or Echo
-          quits. You get a data directory of your own to write in. That is the
-          whole of what runs.
+          quits. To do more, implement a capability trait and return{" "}
+          <code className="font-mono">Some(self)</code> from the matching method —
+          without that line Echo never calls the trait, however it is written.
         </P>
+        <dl className="max-w-[62ch] space-y-2.5 text-[13.5px] leading-relaxed">
+          {CAPABILITIES.map(({ method, trait, when }) => (
+            <div key={method}>
+              <dt className="font-mono text-[12.5px] text-[var(--ink)]">
+                {trait} · {method}
+              </dt>
+              <dd className="text-[var(--ink-muted)]">{when}</dd>
+            </div>
+          ))}
+        </dl>
         <P>
-          The capability traits — <code className="font-mono">OutputPlugin</code>,{" "}
-          <code className="font-mono">AudioPlugin</code>, and the host-side{" "}
-          <code className="font-mono">AsrPlugin</code> and{" "}
-          <code className="font-mono">DictionaryPlugin</code> — are the agreed
-          shape of work still to come. Implementing one compiles and installs,
-          and Echo will not yet call it. Build on the lifecycle hooks until that
-          changes.
+          A panic in any hook is caught inside your library by{" "}
+          <code className="font-mono">export_plugin!</code> and logged as an
+          error, and nothing a plugin does can lose the user's text. Return a{" "}
+          <code className="font-mono">PluginError</code> anyway: an error says
+          what went wrong.
         </P>
       </Group>
 
       <Group title="Before you start">
         <P>
           You need a Rust toolchain — <code className="font-mono">rustup</code>{" "}
-          from rust-lang.org. One constraint has no warning attached and is worth
-          reading twice: a plugin hands Echo a trait object across a dynamic
-          library boundary, which is only sound if both sides were built the same
-          way. Build your plugin with the same Rust version and target as the
-          Echo you are installing into, against a matching{" "}
-          <code className="font-mono">echo-sdk</code>. A mismatch does not fail to
-          load. It loads, and then misbehaves.
+          from rust-lang.org. One constraint is worth reading twice: a plugin
+          hands Echo a trait object across a dynamic library boundary, which is
+          only sound if both sides agree on its shape. Echo checks the{" "}
+          <code className="font-mono">echo-sdk</code> version your library was
+          built against and refuses a mismatch, so a plugin built for an older
+          Echo has to be rebuilt. What it cannot check is the compiler: build with
+          the same Rust version and target as the Echo you are installing into,
+          or it loads and then misbehaves.
         </P>
       </Group>
 
@@ -308,16 +373,17 @@ export function BuildGuide() {
 
           <Step n={3} title="Implement Plugin, and export it">
             <P>
-              Four methods and a macro. Return a{" "}
-              <code className="font-mono">PluginError</code> rather than
-              panicking: a panic crossing the library boundary takes Echo down
-              with it.
+              Four lifecycle methods, one capability and a macro. This is the
+              scaffold's plugin: an output plugin that notes how long each
+              delivered transcript was and which app it went to — not the words
+              themselves.
             </P>
             <Code>{LIB_RS}</Code>
             <P>
               <code className="font-mono">export_plugin!</code> emits{" "}
-              <code className="font-mono">echo_plugin_create</code>, the one
-              symbol Echo looks for. Your type must implement{" "}
+              <code className="font-mono">echo_plugin_create</code> and the SDK
+              version check Echo reads first, and wraps your type so a panic
+              stays inside the library. Your type must implement{" "}
               <code className="font-mono">Default</code>, and this is the
               boilerplate you should never hand-write — it is the only{" "}
               <code className="font-mono">unsafe</code> in the contract.

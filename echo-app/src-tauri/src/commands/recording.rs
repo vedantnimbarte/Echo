@@ -88,6 +88,40 @@ pub async fn begin_recording(
     let audio_rx = state.audio.start_capture(device_name.as_deref())?;
     let (transcript_tx, mut transcript_rx) = mpsc::channel::<TranscriptSegment>(32);
 
+    // Plugins, read once for the session: which capabilities anyone offers
+    // decides which stages exist at all. A plugin enabled mid-recording joins
+    // at the next one; one disabled mid-recording stops being called at once,
+    // because both stages re-read the loaded set as they go.
+    let (audio_plugins, output_plugins) = {
+        let plugins = state.plugins.lock_live().plugins();
+        (
+            plugins.iter().any(|p| p.plugin().as_audio().is_some()),
+            plugins.iter().any(|p| p.plugin().as_output().is_some()),
+        )
+    };
+    let loaded_plugins = {
+        let app = app.clone();
+        move || app.state::<AppState>().plugins.lock_live().plugins()
+    };
+
+    // Audio plugins sit between capture and the VAD, so what they do to the
+    // signal is what speech detection and the decoder hear. Without one, the
+    // stage is not inserted and capture feeds the VAD directly, as it always has.
+    let audio_rx = if audio_plugins {
+        let (tx, rx) = mpsc::channel::<Vec<f32>>(256);
+        tokio::spawn(crate::core::plugins::dispatch::audio_stage(
+            audio_rx,
+            tx,
+            loaded_plugins.clone(),
+        ));
+        rx
+    } else {
+        audio_rx
+    };
+    // Output plugins get their own thread; see `dispatch::output_worker`.
+    let output_tx =
+        output_plugins.then(|| crate::core::plugins::dispatch::output_worker(loaded_plugins));
+
     // VAD gating stage: sits between raw audio capture and the ASR pipeline.
     // It forwards only speech chunks and emits an empty-vec sentinel at each
     // speech→silence transition so the ASR provider knows an utterance ended.
@@ -467,6 +501,21 @@ pub async fn begin_recording(
                     }
                 };
 
+                // What output plugins will be told, prepared now because
+                // injection consumes the text, and sent only after it: plugin
+                // code must neither delay the words reaching the cursor nor run
+                // alongside a paste that is borrowing the clipboard. An app
+                // whose history is off is withheld — a plugin that writes
+                // transcripts down is a history the user did not agree to.
+                let for_plugins = (output_tx.is_some()
+                    && delivery.record_history
+                    && !to_inject.is_empty())
+                .then(|| crate::core::plugins::Transcript {
+                    text: to_inject.clone(),
+                    app: focused.clone(),
+                    language: spoken.map(str::to_owned),
+                });
+
                 // Inject into the focused application if enabled.
                 if delivery.auto_inject && !to_inject.is_empty() {
                     info!(
@@ -530,6 +579,12 @@ pub async fn begin_recording(
                         empty = to_inject.is_empty(),
                         "Transcript not injected"
                     );
+                }
+
+                // Delivered — or rescued to the clipboard — so the text is
+                // safe whatever a plugin does with its copy.
+                if let (Some(tx), Some(transcript)) = (&output_tx, for_plugins) {
+                    let _ = tx.send(transcript);
                 }
             } else {
                 if let Err(e) = app_clone.emit(

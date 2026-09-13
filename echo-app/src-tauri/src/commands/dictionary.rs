@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::{
+    core::lock::LockLive,
     error::{EchoError, Result},
     state::AppState,
     storage::{models::DictionaryEntry, repositories},
@@ -33,7 +34,18 @@ pub(crate) async fn refresh_engine(state: &AppState, raw: Vec<DictionaryEntry>) 
     SYNC_WANTED.notify_one();
 }
 
+/// Also where enabled dictionary plugins contribute: their entries are
+/// appended after the user's, so a rule the user wrote for the same phrase
+/// runs first and wins. Asked here rather than per transcript, which keeps
+/// plugin code off the transcript path entirely. They join only the engine,
+/// never the database, so sync never writes a plugin's entries to the shared
+/// file — another machine may not have the plugin.
 async fn load_engine(state: &AppState, raw: Vec<DictionaryEntry>) {
+    let from_plugins = {
+        // Snapshot, then release the loader before any plugin code runs.
+        let plugins = state.plugins.lock_live().plugins();
+        crate::core::plugins::dispatch::dictionary_entries(&plugins)
+    };
     let entries = raw
         .into_iter()
         .map(|e| crate::core::dictionary::DictionaryEntry {
@@ -43,6 +55,7 @@ async fn load_engine(state: &AppState, raw: Vec<DictionaryEntry>) {
             enabled: e.enabled,
             profile_id: e.profile_id,
         })
+        .chain(from_plugins)
         .collect();
     state.dictionary.write().await.update_entries(entries);
 }

@@ -322,14 +322,44 @@ describe("the plugins panel", () => {
     expect(await screen.findByText(/Five steps/i)).toBeTruthy();
   });
 
-  // The panel used to promise transcription engines and output targets, which
-  // the host does not dispatch to. The guide says so, and this pins the saying.
-  it("says which parts of the plugin API actually run", async () => {
+  // The guide once had to warn that capabilities were never called. They are
+  // now, and an author needs to know the one line that switches one on.
+  it("tells an author how a capability gets called", async () => {
     const user = userEvent.setup();
     mount(<PluginsPanel />);
     await openSection(user, "Build one");
 
-    expect(await screen.findByText(/Echo will not yet call it/i)).toBeTruthy();
+    expect(await screen.findByText(/without that line Echo never calls the trait/i)).toBeTruthy();
+    // Each capability, with when it runs.
+    for (const capability of ["AudioPlugin", "AsrPlugin", "DictionaryPlugin", "OutputPlugin"]) {
+      expect(screen.getByText(new RegExp(`^${capability} ·`))).toBeTruthy();
+    }
+    expect(screen.queryByText(/will not yet call it/i)).toBeNull();
+  });
+
+  // A plugin engine is only useful if someone can pick it, and it is never
+  // picked for them: offering an engine is not the same as taking dictation over.
+  it("lets an enabled engine plugin be chosen for dictation", async () => {
+    ANSWERS.list_plugins = [
+      {
+        name: "engine",
+        version: "0.1.0",
+        description: "",
+        author: "",
+        enabled: true,
+        permissions: ["asr"],
+      },
+    ];
+    try {
+      const user = userEvent.setup();
+      mount(<PluginsPanel />);
+
+      await user.click(await screen.findByRole("button", { name: "Use for dictation" }));
+      await waitFor(() => expect(settings.get("asr_provider")).toBe("plugin:engine"));
+      expect(await screen.findByText("Transcribing")).toBeTruthy();
+    } finally {
+      ANSWERS.list_plugins = [];
+    }
   });
 
   it("scaffolds into the folder that was picked, under the name that was typed", async () => {
