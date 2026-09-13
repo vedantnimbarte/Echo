@@ -11,10 +11,13 @@
 //! tell it was Echo that changed it.
 
 mod en;
+mod es;
+mod pt;
 
 /// Language code → its parser. Matched on the leading subtag, so "en-GB" and
 /// "pt-BR" find their rules.
-const PARSERS: &[(&str, fn(&str) -> String)] = &[("en", en::apply)];
+const PARSERS: &[(&str, fn(&str) -> String)] =
+    &[("en", en::apply), ("es", es::apply), ("pt", pt::apply)];
 
 /// Language codes number conversion has rules for, so the settings screen can
 /// say which languages this stage applies to.
@@ -60,5 +63,14 @@ mod tests {
         for code in supported_languages() {
             assert!(covers(Some(code)), "{code} is listed but has no parser");
         }
+    }
+
+    /// Each language gets its own parser, including through a region subtag —
+    /// the English rules must not be what reads a Brazilian "vinte e cinco".
+    #[test]
+    fn spanish_and_portuguese_use_their_own_rules() {
+        assert_eq!(apply("veinticinco", Some("es-MX")), "25");
+        assert_eq!(apply("vinte e cinco", Some("pt-BR")), "25");
+        assert_eq!(apply("twenty five", Some("es")), "twenty five");
     }
 }
