@@ -450,10 +450,12 @@ export const commands = {
     invoke<void>("set_fixup_hotkey", { which, shortcut }),
 
   /**
-   * Whether this platform can tell a password field from an ordinary one.
-   * False on Linux, where no protection is actually in force.
+   * Whether this machine can tell a password field from an ordinary one.
+   * "partial" is Linux with session accessibility off, where only GTK apps
+   * answer; "unavailable" means no protection is in force at all.
    */
-  secureFieldDetection: () => invoke<boolean>("secure_field_detection"),
+  secureFieldDetection: () =>
+    invoke<"available" | "partial" | "unavailable">("secure_field_detection"),
 
   /**
    * Language codes that spoken punctuation has rules for. Anything else is

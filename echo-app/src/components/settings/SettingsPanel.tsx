@@ -1042,9 +1042,11 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         <Group
           title={label("output.insert", "Password fields")}
           hint={
-            secureDetection
-              ? "Echo asks the accessibility API whether the focused control is masked. Where it can't tell, it types as normal — refusing whenever the system stays quiet would break dictation in every app that publishes no accessibility tree."
-              : "This system can't answer the question, so the guard never fires here. On Linux it would need AT-SPI over D-Bus, and under Wayland usually not even then. Nothing is protecting you — that's why it says so rather than showing a switch that does nothing."
+            secureDetection === "unavailable"
+              ? "This system can't answer the question, so the guard never fires here. On Linux it needs the AT-SPI accessibility bus, which this session isn't running — common on minimal window managers and some Wayland setups. Nothing is protecting you — that's why it says so rather than showing a switch that does nothing."
+              : secureDetection === "partial"
+                ? "Echo asks AT-SPI whether the focused control is masked, but accessibility is switched off for this session, so only GTK apps answer. Browsers, Electron and Qt apps publish nothing and Echo types into them as normal. Echo won't switch it on for you: it makes every app on the desktop maintain an accessibility tree, which costs memory and CPU. To opt in on GNOME, run gsettings set org.gnome.desktop.interface toolkit-accessibility true, then restart your browser."
+                : "Echo asks the accessibility API whether the focused control is masked. Where it can't tell, it types as normal — refusing whenever the system stays quiet would break dictation in every app that publishes no accessibility tree."
           }
         >
           <Check
@@ -1055,8 +1057,11 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
           >
             Never type into a password field — and never save it to History
           </Check>
-          {!secureDetection && (
+          {secureDetection === "unavailable" && (
             <Problem>Not available on this system: the guard can't detect anything here.</Problem>
+          )}
+          {secureDetection === "partial" && (
+            <Problem>Only GTK apps are covered here: your browser's password fields are not.</Problem>
           )}
         </Group>
       )}

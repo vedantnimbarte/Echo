@@ -148,6 +148,11 @@ windows = { version = "0.58", features = [
 # keyboard in one call. X11 only: Wayland has no equivalent, and the watcher
 # reports itself unavailable there rather than binding a key that does nothing.
 x11 = { version = "2", features = ["xlib"] }
+# AT-SPI, for telling a password field apart (core::field). Already in the tree
+# through notify-rust with these same default features (async-io, blocking
+# API), so naming it adds no crate and no second async runtime. The `atspi`
+# crate would add four crates to make three D-Bus calls and one match rule.
+zbus = "5"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = { version = "0.24", features = ["highsierra"] }

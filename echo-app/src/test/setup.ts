@@ -107,7 +107,7 @@ export const ANSWERS: Record<string, unknown> = {
   silero_available: true,
   recovered_recordings: [],
   get_hotkey: "CommandOrControl+Shift+Space",
-  secure_field_detection: true,
+  secure_field_detection: "available",
   wake_word_ready: false,
   wake_word_active: false,
   wake_word_status: "disabled",

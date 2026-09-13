@@ -130,6 +130,10 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)?;
             init_tracing(&data_dir);
             log_panics();
+            // Before anything the user can click: on Linux the password-field
+            // guard learns focus from events, and misses whatever was focused
+            // before it started listening. Returns at once.
+            core::field::start();
             let db_path = data_dir.join("echo.db");
 
             info!("Opening database at {}", db_path.display());
