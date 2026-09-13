@@ -67,8 +67,8 @@ pub fn apply(text: &str, opts: FormatOptions, language: Option<&str>) -> String 
     }
     // Number words are grammar, not a lookup table: every language builds them
     // differently, and a half-right conversion is worse than none because the
-    // reader cannot tell it was Echo that changed the figure. English only,
-    // until someone writes and checks another.
+    // reader cannot tell it was Echo that changed the figure. Languages without
+    // a parser of their own are left alone.
     if opts.numbers && numbers::covers(language) {
         out = numbers::apply(&out, language);
     }

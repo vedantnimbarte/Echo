@@ -179,27 +179,27 @@ pub fn apply(text: &str) -> String {
     while i < words.len() {
         // A clock time is checked first: "three thirty" is 3:30, not 330.
         if let Some((len, written)) = match_time(&keys, i) {
-            out.push(written);
+            out.push(rewrap(&words[i..i + len], &written));
             i += len;
             continue;
         }
         // Then a year, which is also two numbers that must not be added up.
         if let Some((len, written)) = match_year(&keys, i) {
-            out.push(written);
+            out.push(rewrap(&words[i..i + len], &written));
             i += len;
             continue;
         }
         // Before the cardinal, or "twenty fifth" would match "twenty" and
         // leave "fifth" stranded as a word beside a digit.
         if let Some((len, written)) = match_ordinal(&keys, i) {
-            out.push(written);
+            out.push(rewrap(&words[i..i + len], &written));
             i += len;
             continue;
         }
         // Before the cardinal too, or "twenty five and a half" would be written
         // "25" and strand "and a half" beside it.
         if let Some((len, written)) = match_fraction(&keys, i) {
-            out.push(written);
+            out.push(rewrap(&words[i..i + len], &written));
             i += len;
             continue;
         }
@@ -217,13 +217,13 @@ pub fn apply(text: &str) -> String {
             }
             // A unit behind settles the ambiguity even for one word.
             if let Some((unit_len, written)) = match_unit(&keys, i + len, &value.to_string()) {
-                out.push(written);
+                out.push(rewrap(&words[i..i + len + unit_len], &written));
                 i += len + unit_len;
                 continue;
             }
             // Otherwise only a multi-word number is written as digits.
             if len > 1 {
-                out.push(value.to_string());
+                out.push(rewrap(&words[i..i + len], &value.to_string()));
                 i += len;
                 continue;
             }
@@ -233,6 +233,17 @@ pub fn apply(text: &str) -> String {
     }
 
     out.join(" ")
+}
+
+/// Put the punctuation stuck to the spoken words back around what replaced
+/// them. `key` strips it for matching, so without this "twenty five," came out
+/// "25" and a sentence lost its comma — or its full stop — to a number.
+fn rewrap(spoken: &[&str], written: &str) -> String {
+    let punct = |c: char| c.is_ascii_punctuation();
+    let (first, last) = (spoken[0], spoken[spoken.len() - 1]);
+    let lead = first.len() - first.trim_start_matches(punct).len();
+    let trail = last.trim_end_matches(punct).len();
+    format!("{}{written}{}", &first[..lead], &last[trail..])
 }
 
 /// The written suffix for an ordinal: 1st, 2nd, 3rd, 4th — and 11th, 12th,
@@ -750,6 +761,16 @@ mod tests {
         for said in ["I have won the race", "no one knows", "for once"] {
             assert_eq!(apply(said), said);
         }
+    }
+
+    #[test]
+    fn punctuation_on_the_spoken_words_survives() {
+        assert_eq!(
+            apply("we sold twenty five, then more"),
+            "we sold 25, then more"
+        );
+        assert_eq!(apply("it was up five percent."), "it was up 5%.");
+        assert_eq!(apply("(three thirty pm)"), "(3:30 pm)");
     }
 
     #[test]
