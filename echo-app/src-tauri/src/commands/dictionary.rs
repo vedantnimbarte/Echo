@@ -4,7 +4,10 @@ use tauri::State;
 use crate::{
     error::{EchoError, Result},
     state::AppState,
-    storage::{models::DictionaryEntry, repositories},
+    storage::{
+        models::{DictionaryEntry, Snippet},
+        repositories,
+    },
 };
 
 /// Portable representation of a dictionary entry for import/export (no ids or
@@ -19,6 +22,34 @@ pub struct DictionaryExportEntry {
 
 fn default_true() -> bool {
     true
+}
+
+/// Portable snippet, for the same reason: no id, no timestamp.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnippetExport {
+    pub trigger: String,
+    pub body: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+/// What an export file holds.
+///
+/// Files written before snippets existed are a bare array of entries, and they
+/// still import. New files are an object, which an older Echo refuses to read —
+/// deliberately the better failure: the alternative was writing snippets into
+/// the array as entries, and an older version would have imported "sign off"
+/// as a dictionary rule that pastes a signature into any sentence containing
+/// those words.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum DictionaryFile {
+    Legacy(Vec<DictionaryExportEntry>),
+    Current {
+        entries: Vec<DictionaryExportEntry>,
+        #[serde(default)]
+        snippets: Vec<SnippetExport>,
+    },
 }
 
 /// Rebuild the in-memory engine from the current DB rows. Called after any
@@ -99,12 +130,15 @@ pub async fn toggle_dictionary_entry(
     Ok(())
 }
 
-/// Serialize all entries to a JSON file at the user-chosen path.
+/// Serialize all entries and snippets to a JSON file at the user-chosen path.
 #[tauri::command]
 pub async fn export_dictionary(state: State<'_, AppState>, path: String) -> Result<()> {
-    let raw = {
+    let (raw, snippets) = {
         let conn = state.db.lock().unwrap();
-        repositories::list_dictionary_entries(&conn)?
+        (
+            repositories::list_dictionary_entries(&conn)?,
+            repositories::list_snippets(&conn)?,
+        )
     };
 
     let export: Vec<DictionaryExportEntry> = raw
@@ -115,18 +149,32 @@ pub async fn export_dictionary(state: State<'_, AppState>, path: String) -> Resu
             enabled: e.enabled,
         })
         .collect();
+    let snippets: Vec<SnippetExport> = snippets
+        .into_iter()
+        .map(|s| SnippetExport {
+            trigger: s.trigger,
+            body: s.body,
+            enabled: s.enabled,
+        })
+        .collect();
 
-    let json = serde_json::to_string_pretty(&export)?;
+    let json = serde_json::to_string_pretty(
+        &serde_json::json!({ "entries": export, "snippets": snippets }),
+    )?;
     std::fs::write(&path, json).map_err(|e| EchoError::Config(e.to_string()))?;
     Ok(())
 }
 
 /// Read a JSON file and insert entries whose phrase isn't already present
-/// (case-insensitive). Returns the number of entries added.
+/// (case-insensitive), and snippets whose trigger isn't. Returns the number of
+/// entries and snippets added.
 #[tauri::command]
 pub async fn import_dictionary(state: State<'_, AppState>, path: String) -> Result<usize> {
     let contents = std::fs::read_to_string(&path).map_err(|e| EchoError::Config(e.to_string()))?;
-    let imported: Vec<DictionaryExportEntry> = serde_json::from_str(&contents)?;
+    let (imported, snippets) = match serde_json::from_str(&contents)? {
+        DictionaryFile::Legacy(entries) => (entries, Vec::new()),
+        DictionaryFile::Current { entries, snippets } => (entries, snippets),
+    };
 
     let (added, raw) = {
         let conn = state.db.lock().unwrap();
@@ -150,6 +198,30 @@ pub async fn import_dictionary(state: State<'_, AppState>, path: String) -> Resu
                 created_at: String::new(),
             };
             repositories::insert_dictionary_entry(&conn, &row)?;
+            added += 1;
+        }
+
+        let mut triggers: std::collections::HashSet<String> = repositories::list_snippets(&conn)?
+            .into_iter()
+            .map(|s| s.trigger.to_lowercase())
+            .collect();
+        for s in snippets {
+            // The same two refusals `save_snippet` makes, for a hand-edited file.
+            if !s.trigger.chars().any(char::is_alphanumeric)
+                || s.body.trim().is_empty()
+                || !triggers.insert(s.trigger.to_lowercase())
+            {
+                continue;
+            }
+            repositories::save_snippet(
+                &conn,
+                &Snippet {
+                    id: None,
+                    trigger: s.trigger,
+                    body: s.body,
+                    enabled: s.enabled,
+                },
+            )?;
             added += 1;
         }
         let raw = repositories::list_dictionary_entries(&conn)?;
@@ -230,4 +302,66 @@ pub async fn learn_from_correction(
 
     refresh_engine(&state, raw).await;
     Ok(stored)
+}
+
+// ── Snippets ─────────────────────────────────────────────────────────────────
+//
+// No engine to refresh: the recording pipeline reads the table per utterance.
+// It is a handful of rows, read under a lock that is already being taken for
+// the per-app lookup, and it means an edit applies to the very next sentence.
+
+#[tauri::command]
+pub fn list_snippets(state: State<'_, AppState>) -> Result<Vec<Snippet>> {
+    let conn = state.db.lock().unwrap();
+    repositories::list_snippets(&conn)
+}
+
+/// Create a snippet (`id: None`) or update one. Returns its id.
+#[tauri::command]
+pub fn save_snippet(state: State<'_, AppState>, snippet: Snippet) -> Result<i64> {
+    // A trigger with no words in it can never match, and a snippet that
+    // expands to nothing would silently eat the utterance that triggered it.
+    if !snippet.trigger.chars().any(char::is_alphanumeric) {
+        return Err(EchoError::Config(
+            "A snippet needs a trigger phrase with at least one word".into(),
+        ));
+    }
+    if snippet.body.trim().is_empty() {
+        return Err(EchoError::Config(
+            "A snippet needs some text to insert".into(),
+        ));
+    }
+    let conn = state.db.lock().unwrap();
+    repositories::save_snippet(&conn, &snippet)
+}
+
+#[tauri::command]
+pub fn delete_snippet(state: State<'_, AppState>, id: i64) -> Result<()> {
+    let conn = state.db.lock().unwrap();
+    repositories::delete_snippet(&conn, id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DictionaryFile;
+
+    /// Files exported before snippets existed are a bare array, and people
+    /// keep those around as backups. They must go on importing.
+    #[test]
+    fn both_export_shapes_import() {
+        let legacy = r#"[{"phrase":"k8s","replacement":"Kubernetes"}]"#;
+        assert!(matches!(
+            serde_json::from_str(legacy).unwrap(),
+            DictionaryFile::Legacy(e) if e.len() == 1
+        ));
+
+        let current = r#"{"entries":[],"snippets":[{"trigger":"sign off","body":"Best,\nV"}]}"#;
+        match serde_json::from_str(current).unwrap() {
+            DictionaryFile::Current { snippets, .. } => {
+                assert_eq!(snippets[0].body, "Best,\nV");
+                assert!(snippets[0].enabled, "a missing flag means enabled");
+            }
+            DictionaryFile::Legacy(_) => panic!("read as the legacy shape"),
+        }
+    }
 }

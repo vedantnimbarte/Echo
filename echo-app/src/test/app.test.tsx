@@ -377,6 +377,16 @@ describe("the other panels", () => {
     });
   });
 
+  // Snippets live behind a tab, so the panel test above never renders them.
+  it("opens the snippets section and shows a saved snippet", async () => {
+    const user = userEvent.setup();
+    mount(<DictionaryPanel />);
+    await openSection(user, "Snippets");
+    expect(await screen.findByDisplayValue("sign off")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Add snippet/ })).toBeTruthy();
+    expect(invoked).toContain("list_snippets");
+  });
+
   // The charts are the part that can throw on a shape it did not expect — an
   // empty day list, a provider with no rows — so this asserts they drew, not
   // just that the page produced some text.

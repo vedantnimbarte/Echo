@@ -295,10 +295,13 @@ pub async fn begin_recording(
                     .ok()
                     .flatten();
 
-                let delivery = {
+                let (delivery, snippets) = {
                     let state = app_clone.state::<AppState>();
                     let conn = state.db.lock_live();
-                    resolve_delivery(&conn, focused.as_deref())
+                    (
+                        resolve_delivery(&conn, focused.as_deref()),
+                        crate::storage::repositories::list_snippets(&conn).unwrap_or_default(),
+                    )
                 };
 
                 // The secure-field check comes before *everything* — before
@@ -374,13 +377,27 @@ pub async fn begin_recording(
                 // Carry this sentence into the next utterance's decoder prompt.
                 prompt_ctx.set_previous(&processed);
 
+                // A voice snippet replaces the whole utterance, and it is
+                // decided here: after the dictionary and formatting, so a
+                // trigger matches whichever form of it the user typed, and
+                // before anything else, so the body is never put through
+                // them. The number formatter must not touch the digits in an
+                // address. Nothing below that rewrites text — the LLM pass,
+                // command mode — runs on a snippet either; its body is the
+                // user's own finished text. See `core::snippets` for why the
+                // trigger has to be the whole utterance.
+                let snippet = crate::core::snippets::expand(&snippets, &[&corrected, &processed])
+                    .map(str::to_owned);
+
                 // Record it before command mode rewrites anything: history is a
                 // log of what you said, not of what the model replied.
                 if delivery.record_history && !processed.is_empty() {
                     let state = app_clone.state::<AppState>();
                     let conn = state.db.lock_live();
                     let record = crate::storage::models::TranscriptionRecord {
-                        text: processed.clone(),
+                        // The expansion, not the trigger: re-inserting a row
+                        // from History should put back what landed.
+                        text: snippet.clone().unwrap_or_else(|| processed.clone()),
                         language: segment.language.clone(),
                         provider: provider.clone(),
                         // Zero means the speech edges never fired — a provider
@@ -422,7 +439,9 @@ pub async fn begin_recording(
                 // deterministic stages only drop sounds nobody meant to write,
                 // so what they produce is still what was said; this one can
                 // change words, and History should keep the faithful version.
-                let processed = if auto_edit_llm {
+                let processed = if let Some(body) = snippet.clone() {
+                    body
+                } else if auto_edit_llm {
                     crate::core::command::auto_edit(
                         &command_cfg,
                         command_key.as_deref(),
@@ -435,8 +454,7 @@ pub async fn begin_recording(
 
                 // Command mode intercepts before injection: the text to deliver
                 // becomes the model's reply, not the transcript itself.
-                let instruction = command_cfg
-                    .enabled
+                let instruction = (command_cfg.enabled && snippet.is_none())
                     .then(|| crate::core::command::parse_command(&processed, &command_cfg.prefix))
                     .flatten();
 
@@ -469,14 +487,18 @@ pub async fn begin_recording(
 
                 // Inject into the focused application if enabled.
                 if delivery.auto_inject && !to_inject.is_empty() {
+                    // A multi-line snippet is always pasted, whatever the
+                    // method. Typed, each line break is a Return key, and in
+                    // a chat box or a form that sends the first line of the
+                    // signature and leaves the rest behind; in a terminal it
+                    // runs each line. Paste is the only way the body arrives
+                    // intact. A single-line body follows the usual choice.
+                    let force_paste = snippet.is_some() && to_inject.contains('\n');
+                    let use_paste = force_paste || delivery.use_paste(&to_inject);
                     info!(
                         focused = focused.as_deref().unwrap_or("<unknown>"),
                         chars = to_inject.chars().count(),
-                        method = if delivery.use_paste(&to_inject) {
-                            "paste"
-                        } else {
-                            "keystrokes"
-                        },
+                        method = if use_paste { "paste" } else { "keystrokes" },
                         settle_ms = delivery.settle_ms,
                         "Injecting transcript"
                     );
@@ -490,10 +512,15 @@ pub async fn begin_recording(
                     // is rewritten rather than the whole line being retyped.
                     let typed = std::mem::take(&mut shown);
                     stream_live = stream_partials;
-                    let use_paste = delivery.use_paste(&to_inject);
                     let text = to_inject.clone();
                     let result = tokio::task::spawn_blocking(move || {
-                        if typed.is_empty() {
+                        if typed.is_empty() || force_paste {
+                            // Streamed partials of the trigger are on screen
+                            // as typed text; take them back before pasting
+                            // rather than rewriting them key by key.
+                            if !typed.is_empty() {
+                                crate::core::injection::rewrite(inj.as_ref(), &typed, "")?;
+                            }
                             crate::core::injection::deliver(
                                 inj.as_ref(),
                                 &text,

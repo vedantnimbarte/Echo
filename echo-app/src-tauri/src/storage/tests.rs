@@ -127,10 +127,11 @@ fn a_fresh_database_has_every_table_the_app_uses() {
         "plugins",
         "app_profiles",
         "egress_log",
+        "snippets",
     ] {
         assert!(table_exists(&conn, table), "{table} is missing");
     }
-    assert_eq!(schema_version(&conn), 6);
+    assert_eq!(schema_version(&conn), 7);
 }
 
 /// Every launch runs `migrate`. Applying a migration twice must be harmless,
@@ -143,11 +144,11 @@ fn migrating_an_already_current_database_changes_nothing() {
     db::migrate_for_test(&conn).unwrap();
     db::migrate_for_test(&conn).unwrap();
 
-    assert_eq!(schema_version(&conn), 6);
+    assert_eq!(schema_version(&conn), 7);
     let rows: i64 = conn
         .query_row("SELECT count(*) FROM schema_migrations", [], |r| r.get(0))
         .unwrap();
-    assert_eq!(rows, 6, "one row per version, not one per launch");
+    assert_eq!(rows, 7, "one row per version, not one per launch");
     assert_eq!(
         repo::get_setting(&conn, "keep").unwrap().as_deref(),
         Some("me")
@@ -206,7 +207,7 @@ fn an_old_database_upgrades_without_losing_data() {
 
     db::migrate_for_test(&conn).unwrap();
 
-    assert_eq!(schema_version(&conn), 6);
+    assert_eq!(schema_version(&conn), 7);
     assert!(table_exists(&conn, "app_profiles"));
     assert!(table_exists(&conn, "egress_log"));
     // Migration 3's column has to survive being applied on top of a table

@@ -1,6 +1,8 @@
 use rusqlite::{params, Connection, OptionalExtension};
 
-use super::models::{AppProfile, DictionaryEntry, EgressRecord, Profile, TranscriptionRecord};
+use super::models::{
+    AppProfile, DictionaryEntry, EgressRecord, Profile, Snippet, TranscriptionRecord,
+};
 use crate::error::Result;
 
 // ── Settings ─────────────────────────────────────────────────────────────────
@@ -68,6 +70,50 @@ pub fn set_dictionary_entry_enabled(conn: &Connection, id: i64, enabled: bool) -
         "UPDATE dictionary_entries SET enabled = ?2 WHERE id = ?1",
         params![id, enabled as i64],
     )?;
+    Ok(())
+}
+
+// ── Snippets ─────────────────────────────────────────────────────────────────
+
+/// Every snippet in the order it was created, which is also the order a
+/// duplicate trigger is resolved in: the older one wins.
+pub fn list_snippets(conn: &Connection) -> Result<Vec<Snippet>> {
+    let mut stmt = conn.prepare("SELECT id, trigger, body, enabled FROM snippets ORDER BY id")?;
+    let rows = stmt
+        .query_map([], |r| {
+            Ok(Snippet {
+                id: r.get(0)?,
+                trigger: r.get(1)?,
+                body: r.get(2)?,
+                enabled: r.get::<_, i64>(3)? != 0,
+            })
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// Insert a snippet, or rewrite the one `s.id` names. Returns its id.
+pub fn save_snippet(conn: &Connection, s: &Snippet) -> Result<i64> {
+    match s.id {
+        Some(id) => {
+            conn.execute(
+                "UPDATE snippets SET trigger = ?2, body = ?3, enabled = ?4 WHERE id = ?1",
+                params![id, s.trigger, s.body, s.enabled as i64],
+            )?;
+            Ok(id)
+        }
+        None => {
+            conn.execute(
+                "INSERT INTO snippets (trigger, body, enabled) VALUES (?1, ?2, ?3)",
+                params![s.trigger, s.body, s.enabled as i64],
+            )?;
+            Ok(conn.last_insert_rowid())
+        }
+    }
+}
+
+pub fn delete_snippet(conn: &Connection, id: i64) -> Result<()> {
+    conn.execute("DELETE FROM snippets WHERE id = ?1", params![id])?;
     Ok(())
 }
 

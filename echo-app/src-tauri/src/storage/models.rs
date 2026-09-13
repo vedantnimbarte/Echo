@@ -24,6 +24,18 @@ pub struct DictionaryEntry {
     pub created_at: String,
 }
 
+/// A voice snippet: say `trigger` as a whole utterance, get `body` verbatim.
+/// See [`crate::core::snippets`] for why this is not a dictionary entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Snippet {
+    pub id: Option<i64>,
+    pub trigger: String,
+    /// Delivered exactly as stored — line breaks, numbers and punctuation
+    /// included. Never formatted.
+    pub body: String,
+    pub enabled: bool,
+}
+
 /// Per-app overrides. `None` on an override field means "inherit the global
 /// setting", so a profile can pin one behaviour without freezing the rest.
 #[derive(Debug, Clone, Serialize, Deserialize)]

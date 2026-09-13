@@ -55,6 +55,9 @@ export const ANSWERS: Record<string, unknown> = {
     },
   ],
   list_dictionary: [],
+  list_snippets: [
+    { id: 1, trigger: "sign off", body: "Best,\nVedant", enabled: true },
+  ],
   get_history: [],
   list_plugins: [],
   list_profiles: [],
