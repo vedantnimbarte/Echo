@@ -1,6 +1,7 @@
 import { listen, emit } from "@tauri-apps/api/event";
 import type { RecordingMode } from "../store/recordingStore";
 import type { PillSize } from "../components/pill/Pill";
+import type { SettingsPage } from "../components/settings/SettingsPanel";
 
 export interface TranscriptPartialPayload {
   type: "TranscriptPartial";
@@ -112,4 +113,13 @@ export const echoEvents = {
   onPillSizeChanged: (cb: (size: PillSize) => void) =>
     listen<PillSize>("echo://pill-size-changed", (e) => cb(e.payload)),
   emitPillSizeChanged: (size: PillSize) => emit("echo://pill-size-changed", size),
+
+  // Which page Settings shows is React state inside the settings window, so a
+  // control in the pill that means "go and change this" has to ask for the
+  // page rather than set it. The settings webview is created hidden at launch
+  // and only ever hidden after that, never closed, so it is already listening
+  // whether or not it is on screen.
+  onOpenPage: (cb: (page: SettingsPage) => void) =>
+    listen<SettingsPage>("echo://open-page", (e) => cb(e.payload)),
+  emitOpenPage: (page: SettingsPage) => emit("echo://open-page", page),
 };

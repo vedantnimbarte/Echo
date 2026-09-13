@@ -7,6 +7,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useRecordingStore } from "../../store/recordingStore";
 import { t } from "../../i18n";
 import { commands } from "../../ipc/commands";
+import { echoEvents } from "../../ipc/events";
+import type { SettingsPage } from "../settings/SettingsPanel";
 import { EngineTag, useEngineStatus } from "../common/EngineTag";
 import { Waveform, type WaveMode } from "./Waveform";
 import { RingMeter } from "./RingMeter";
@@ -22,10 +24,19 @@ const DRAG_THRESHOLD = 4;
 
 type View = "idle" | "active" | "transcribing" | "done" | "error";
 
-async function openSettings() {
+/**
+ * Bring Settings forward — on `page` if one is given, otherwise on whatever
+ * page it was left on. The gear passes nothing: "Open settings" is a way back
+ * into the window, not a destination inside it.
+ */
+async function openSettings(page?: SettingsPage) {
   const wins = await getAllWebviewWindows();
   const main = wins.find((w) => w.label === "main");
   if (main) {
+    // The page is asked for before the window comes forward, so the switch is
+    // normally made while Settings is still hidden, rather than in front of
+    // you as a jump from the page it was left on.
+    if (page) await echoEvents.emitOpenPage(page);
     // All three, in this order, for the same reason the tray handler does it
     // (see `tray.rs`): the window can be hidden, or visible-but-minimised, or
     // visible behind something else. `show()` alone left the gear doing
@@ -333,11 +344,17 @@ function PillLarge({
               words, and two things competing there is worse than one thing
               arriving a moment later. Approaching the pill is what asks for
               it — an engine that needs fixing says so without being asked. */}
-          {/* ponytail: opens Settings on whatever page it was left on, not
-              Engine — landing on a page would need a third cross-window event.
-              Worth adding if anyone reports hunting for it. */}
+          {/* Lands on Voice engine, as the title bar's copy of this tag does:
+              every sentence the tag can show ends in "click to change it", "to
+              finish it" or "to add one", and all of those are done on that
+              page. Leaving Settings on whatever page it was last on made the
+              click an errand. */}
           {view === "idle" && (
-            <EngineTag bare revealed={hovered} onOpen={() => void openSettings()} />
+            <EngineTag
+              bare
+              revealed={hovered}
+              onOpen={() => void openSettings("engine")}
+            />
           )}
 
           {view === "active" && partialTranscript && (
