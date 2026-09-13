@@ -620,6 +620,37 @@ mod tests {
         assert_eq!(json, r#"["available","partial","unavailable"]"#);
     }
 
+    /// Against a real desktop: run this, then put keyboard focus in a field
+    /// within 30 seconds. `ECHO_LIVE_EXPECT=plain` for an ordinary one. Every
+    /// change of answer is printed, so a run against the wrong control shows
+    /// what it saw rather than just failing.
+    ///
+    /// ```powershell
+    /// cargo test --lib field::tests::uia_live -- --ignored --nocapture
+    /// ```
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[ignore = "needs a desktop session and a focused field"]
+    fn uia_live() {
+        let expected = match std::env::var("ECHO_LIVE_EXPECT").as_deref() {
+            Ok("plain") => FieldKind::Plain,
+            _ => FieldKind::Secure,
+        };
+        let mut seen = None;
+        for _ in 0..300 {
+            let now = focused_field();
+            if seen != Some(now) {
+                println!("focused field: {now:?}");
+                seen = Some(now);
+            }
+            if now == expected {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        assert_eq!(seen, Some(expected));
+    }
+
     #[cfg(target_os = "linux")]
     mod atspi {
         use super::super::linux_impl::classify;
