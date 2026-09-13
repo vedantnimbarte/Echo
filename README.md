@@ -104,12 +104,29 @@ This is expected, and here is exactly what you'll see:
 If that trade isn't one you want to make, [build from source](CONTRIBUTING.md)
 instead: the result is identical and you compiled it yourself.
 
-### The password-field guard is unverified on real hardware
+### How far the password-field guard has been tested
 
 Echo asks Windows UI Automation, or the macOS Accessibility API, whether the
-focused control is masked, and refuses to type into it. That code compiles on
-both platforms in CI but **has never been exercised against a real password
-box**, so treat it as a seatbelt of unknown strength rather than a guarantee.
+focused control is masked, and refuses to type into it. Treat it as a seatbelt,
+not a guarantee: it only knows what the app tells the accessibility API.
+
+**Windows: checked against real password boxes.** On 2026-09-13, on Windows 11
+Pro 25H2 (build 26200.9445), the detection call was run while each of these
+held keyboard focus. Every masked field answered *password* and every ordinary
+field beside it answered *ordinary*:
+
+- a WinForms `TextBox` with `UseSystemPasswordChar` (.NET Framework 4.8)
+- a WPF `PasswordBox`
+- `<input type="password">` in Edge 153 and Chrome 153, each a fresh browser
+  process that Echo queried before any other test tool did
+- the classic credential prompt Windows PowerShell's `Get-Credential` opens
+
+The newer *Windows Security* credential dialog was not checked: it could not be
+kept in the foreground long enough. Electron apps, UWP/WinUI, Java and Qt were
+not tried. That was the detection call, not a full dictation into each app.
+
+**macOS: still unverified.** The code compiles and unit-tests in CI but has
+never been run against a real password box.
 
 On Linux Echo listens on the AT-SPI accessibility bus for focus changes and
 asks the focused control whether it is a password field. That is weaker in
@@ -129,9 +146,11 @@ ways Settings spells out for your machine:
 What has been run: under WSLg on Ubuntu 24.04, with session accessibility off,
 a GTK 3 `GtkEntry` and a GTK 4 `GtkPasswordEntry` were reported as password
 fields and their unmasked counterparts as ordinary ones, and with no session
-bus the guard reported itself unavailable. That was the detection call, not a
-full dictation into the app. Chromium, Electron, Firefox, Qt, and real GNOME,
-KDE or wlroots desktops are unverified.
+bus the guard reported itself unavailable. A GTK 3 password entry that already
+had focus before Echo's listener started was also recognised, from a one-off
+walk of the active window at startup rather than a focus event. That was the
+detection call, not a full dictation into the app. Chromium, Electron, Firefox,
+Qt, and real GNOME, KDE or wlroots desktops are unverified.
 
 ### Support tiers — what has actually been run
 
@@ -141,7 +160,7 @@ somebody dictating into twenty applications, so here is the honest state:
 
 | Platform | Tier | What that means |
 |---|---|---|
-| **Windows x64** | Tested | Developed and used here. Text injection, the password-field guard, the tray, offline Whisper and the GPU pack have all been exercised by hand. |
+| **Windows x64** | Tested | Developed and used here. Text injection, the tray, offline Whisper and the GPU pack have all been exercised by hand. The password-field guard's detection was checked on Windows 11 25H2 (build 26200) against WinForms, WPF, Edge, Chrome and the `Get-Credential` prompt — see [the guard](#how-far-the-password-field-guard-has-been-tested) for what was and was not covered. |
 | **macOS arm64** | Community | Compiles, unit-tests and self-tests in CI on a macOS runner, but has not been driven by hand. Accessibility and Automation permissions, and the password-field guard, are unverified against real applications. Bug reports welcome and expected. |
 | **macOS x86_64** | Unsupported | No build exists. `ort` ships no prebuilt ONNX Runtime for Intel macOS, so Silero VAD and the wake word cannot link. See [docs/RELEASING.md](docs/RELEASING.md). |
 | **Linux X11** | Community | Needs `xdotool`. Password-field detection goes through AT-SPI: GTK apps only unless session accessibility is on, nothing without an accessibility bus, and unverified in browsers and Qt apps. |
@@ -160,7 +179,7 @@ link here rather than repeating it.
 |---|---|---|
 | **Windows** | **WebView2 runtime** — preinstalled on Windows 11; on Windows 10 grab the *Evergreen* runtime from [Microsoft](https://developer.microsoft.com/microsoft-edge/webview2/). Typing into other apps needs nothing extra. | Microphone |
 | **macOS** *(Apple Silicon only)* | Nothing. | **Microphone** and **Accessibility**. Without Accessibility, Echo can hear you but cannot type. |
-| **Linux (X11)** | **`xdotool`**, for typing into other apps. The AppImage also needs FUSE — `sudo apt install libfuse2` on Debian/Ubuntu; a `.deb` and an `.rpm` are attached to each release too. The password-field guard needs the AT-SPI bus (`at-spi2-core`, standard on GNOME, KDE and most full desktops). | Microphone. For the password-field guard to cover browsers, Electron and Qt apps: session accessibility on (see [the guard](#the-password-field-guard-is-unverified-on-real-hardware)) |
+| **Linux (X11)** | **`xdotool`**, for typing into other apps. The AppImage also needs FUSE — `sudo apt install libfuse2` on Debian/Ubuntu; a `.deb` and an `.rpm` are attached to each release too. The password-field guard needs the AT-SPI bus (`at-spi2-core`, standard on GNOME, KDE and most full desktops). | Microphone. For the password-field guard to cover browsers, Electron and Qt apps: session accessibility on (see [the guard](#how-far-the-password-field-guard-has-been-tested)) |
 | **Linux (Wayland)** | **`ydotool`** *and* a running **`ydotoold`** daemon. Some compositors refuse synthetic input whatever you install. The password-field guard needs `at-spi2-core`, as on X11. | Microphone. Session accessibility, as on X11 |
 
 **Why Apple Silicon only:** the ONNX Runtime behind Silero VAD and the wake word
