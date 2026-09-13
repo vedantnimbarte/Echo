@@ -51,12 +51,12 @@
       "endpoints": [
         "https://github.com/vedantnimbarte/Echo/releases/latest/download/latest.json"
       ],
-      "pubkey": ""
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMxMzVCMEQwOTdGMTJGNjkKUldScEwvR1gwTEExd2Y1Z0hJaGlpWVpXMS8wUXEwVWo1UTFLTG9WS3Rua3drQ1VPQ2UyTU1tODcK"
     }
   },
   "bundle": {
     "active": true,
-    "createUpdaterArtifacts": false,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "category": "Productivity",
     "shortDescription": "Universal voice keyboard",

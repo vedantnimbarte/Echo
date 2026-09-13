@@ -153,9 +153,13 @@ and the global hotkey.
 
 ### Updating
 
-Auto-update is built in but **switched off** until release signing is set up
-(see [docs/RELEASING.md](docs/RELEASING.md)). Until then, re-run the install
-command above to upgrade.
+Echo checks for a new release on launch (switchable under About) and installs
+it once you agree. Updates are signed, and an update that fails verification is
+refused.
+
+**Installed v0.4.0 or earlier?** Those builds shipped without the updater key, so
+they cannot verify an update and never will. Re-run the install command above
+once; every version after that updates itself.
 
 ---
 

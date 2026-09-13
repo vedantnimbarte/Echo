@@ -9,16 +9,23 @@ A second job then checksums every artifact, attaches `SHA256SUMS.txt` (the
 install scripts verify against it), and commits the filled-in packaging
 manifests back to `main`.
 
-## Auto-update is currently OFF
+## Auto-update is ON
 
-`bundle.createUpdaterArtifacts` is **false** and `plugins.updater.pubkey` is
-empty, so releases ship no `latest.json` and installed copies never check for
-updates. Users upgrade by re-running the install script.
+`bundle.createUpdaterArtifacts` is **true** and `plugins.updater.pubkey` holds
+the public key, so every release attaches `.sig` files and a `latest.json`, and
+installed copies check `releases/latest/download/latest.json` on launch.
 
-This is deliberate: with `createUpdaterArtifacts` on and no key, `tauri build`
-fails outright. Turning updates on is the one-time setup below.
+**The two `TAURI_SIGNING_PRIVATE_KEY*` repository secrets must exist before a
+tag is pushed.** With `createUpdaterArtifacts` on and no key, `tauri build`
+fails outright on every platform. Installs of v0.4.0 and earlier have no public
+key and must reinstall once.
 
-## Turning auto-update on
+The private key and its password live outside the repository, at
+`~/.tauri/echo-updater.key` and `~/.tauri/echo-updater.password` on the machine
+that generated them. **Back both up.** Lose them and no installed copy can ever
+be updated again. Every user has to reinstall onto a build with a new key.
+
+## Setting up auto-update from scratch (done once, kept for key rotation)
 
 The updater only installs builds it can cryptographically verify, so it needs a
 signing keypair.
@@ -47,12 +54,7 @@ signing keypair.
 
 4. Flip `bundle.createUpdaterArtifacts` back to `true` in `tauri.conf.json`.
 
-5. Flip `UPDATER_CONFIGURED` to `true` in `echo-app/src/update.ts`. Until then
-   the app never calls the updater at all — with no `latest.json` published the
-   plugin logs an ERROR on every launch, before the frontend's `catch` can
-   swallow it.
-
-Commit the pubkey and the flag together; releases from then on sign updates and
+Commit the pubkey and the flag in one commit; releases from then on sign updates and
 the app checks on launch. Installs made *before* this change won't auto-update
 to it — they have no public key to verify against — so those users reinstall
 once.
