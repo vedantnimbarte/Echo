@@ -25,6 +25,15 @@ fn default_true() -> bool {
 /// mutation so transcription always uses the latest entries (architectural
 /// rule 6).
 pub(crate) async fn refresh_engine(state: &AppState, raw: Vec<DictionaryEntry>) {
+    load_engine(state, raw).await;
+    // Every user edit to the dictionary comes through here, which makes this
+    // the one place to tell sync there is something new to write. Sync itself
+    // calls `load_engine`, so applying another machine's changes does not
+    // trigger a sync of its own.
+    SYNC_WANTED.notify_one();
+}
+
+async fn load_engine(state: &AppState, raw: Vec<DictionaryEntry>) {
     let entries = raw
         .into_iter()
         .map(|e| crate::core::dictionary::DictionaryEntry {
@@ -230,4 +239,159 @@ pub async fn learn_from_correction(
 
     refresh_engine(&state, raw).await;
     Ok(stored)
+}
+
+// ── Sync through a folder ────────────────────────────────────────────────────
+//
+// The merge lives in `core::dictionary::sync`. This is when it runs: once at
+// startup, a few seconds after the dictionary changes, and whenever the file in
+// the folder does.
+
+use crate::core::dictionary::sync;
+
+/// Poked by [`refresh_engine`]. A `Notify` keeps one pending wake-up when nobody
+/// is waiting, so an edit made while a sync is running is not lost.
+static SYNC_WANTED: tokio::sync::Notify = tokio::sync::Notify::const_new();
+
+/// One sync at a time, whichever of the three triggers asked for it.
+static SYNC_RUNNING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Quiet period after an edit before syncing. Adding an entry can be several
+/// quick commands in a row (add, move to a profile, toggle), and each would
+/// otherwise write the file and send it to every other machine.
+const SYNC_DEBOUNCE: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// How often the folder is checked for another machine's writes. A `stat` of
+/// one or two files, so this can be frequent; the syncing service's own delay
+/// is longer than this anyway.
+const SYNC_POLL: std::time::Duration = std::time::Duration::from_secs(30);
+
+const KEY_STATUS: &str = "dictionary_sync_status";
+
+/// What the Sync section shows. Persisted, so "last synced" survives a restart.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DictionarySyncStatus {
+    pub last_synced_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub last_error: Option<String>,
+    /// Conflicted copies merged in on the last sync, by file name.
+    #[serde(default)]
+    pub conflict_copies: Vec<String>,
+}
+
+/// The configured folder, when sync is switched on and has one.
+fn sync_folder(state: &AppState) -> Option<std::path::PathBuf> {
+    let conn = state.db.lock().unwrap();
+    let get = |k: &str| repositories::get_setting(&conn, k).ok().flatten();
+    let enabled = get(sync::KEY_ENABLED).as_deref() == Some("true");
+    let folder = get(sync::KEY_FOLDER).filter(|f| !f.trim().is_empty())?;
+    enabled.then(|| folder.into())
+}
+
+fn load_status(state: &AppState) -> DictionarySyncStatus {
+    let conn = state.db.lock().unwrap();
+    repositories::get_setting(&conn, KEY_STATUS)
+        .ok()
+        .flatten()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default()
+}
+
+/// Run one sync if it is switched on, record how it went, and tell the window.
+async fn run_sync(app: &tauri::AppHandle) -> DictionarySyncStatus {
+    use tauri::{Emitter, Manager};
+
+    let _running = SYNC_RUNNING.lock().await;
+    let state = app.state::<AppState>();
+    let mut status = load_status(&state);
+    let Some(folder) = sync_folder(&state) else {
+        return status;
+    };
+
+    let handle = app.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        sync::sync(&handle.state::<AppState>().db, &folder, chrono::Utc::now())
+    })
+    .await
+    .unwrap_or_else(|e| Err(EchoError::Config(format!("Sync stopped unexpectedly: {e}"))));
+
+    match result {
+        Ok(outcome) => {
+            if outcome.changed_local {
+                let raw = {
+                    let conn = state.db.lock().unwrap();
+                    repositories::list_dictionary_entries(&conn).unwrap_or_default()
+                };
+                load_engine(&state, raw).await;
+            }
+            if !outcome.conflict_copies.is_empty() {
+                tracing::info!(copies = ?outcome.conflict_copies, "Merged conflicted dictionary copies");
+            }
+            status = DictionarySyncStatus {
+                last_synced_at: Some(chrono::Utc::now()),
+                last_error: None,
+                conflict_copies: outcome.conflict_copies,
+            };
+        }
+        Err(e) => {
+            // `last_synced_at` is kept: when it last *worked* is what the user
+            // needs to see next to an error.
+            tracing::error!("Dictionary sync failed: {e}");
+            status.last_error = Some(e.to_string());
+        }
+    }
+
+    if let Ok(json) = serde_json::to_string(&status) {
+        let conn = state.db.lock().unwrap();
+        let _ = repositories::set_setting(&conn, KEY_STATUS, &json);
+    }
+    let _ = app.emit("echo://dictionary-synced", &status);
+    status
+}
+
+/// Start the sync loop: once now, then after edits and when the folder changes.
+pub fn start_sync(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        use tauri::Manager;
+
+        let mut poll = tokio::time::interval(SYNC_POLL);
+        poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        // What the folder looked like after the last sync. `None` until the
+        // first one, so the first tick — which is immediate — syncs at startup.
+        let mut seen = None;
+
+        loop {
+            tokio::select! {
+                _ = poll.tick() => {
+                    let Some(folder) = sync_folder(&app.state::<AppState>()) else {
+                        seen = None;
+                        continue;
+                    };
+                    if seen.as_ref() == Some(&sync::fingerprint(&folder)) {
+                        continue;
+                    }
+                }
+                _ = SYNC_WANTED.notified() => {
+                    // Wait for the edits to stop before writing.
+                    while tokio::time::timeout(SYNC_DEBOUNCE, SYNC_WANTED.notified())
+                        .await
+                        .is_ok()
+                    {}
+                }
+            }
+            run_sync(&app).await;
+            seen = sync_folder(&app.state::<AppState>()).map(|f| sync::fingerprint(&f));
+        }
+    });
+}
+
+/// Sync now, from the button. The window also calls this after the folder or
+/// the switch changes, so the result shows at once rather than on the next poll.
+#[tauri::command]
+pub async fn sync_dictionary_now(app: tauri::AppHandle) -> Result<DictionarySyncStatus> {
+    Ok(run_sync(&app).await)
+}
+
+#[tauri::command]
+pub fn get_dictionary_sync_status(state: State<'_, AppState>) -> DictionarySyncStatus {
+    load_status(&state)
 }

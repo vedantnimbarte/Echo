@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub mod learn;
+pub mod sync;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DictionaryEntry {

@@ -104,6 +104,10 @@ export const echoEvents = {
   // so the tray can only ask the window to do it.
   onCheckForUpdates: (cb: () => void) => listen("echo://check-for-updates", cb),
 
+  // A dictionary sync finished — in the background as often as from the
+  // button — and may have brought in another machine's entries.
+  onDictionarySynced: (cb: () => void) => listen("echo://dictionary-synced", cb),
+
   onEngineChanged: (cb: () => void) => listen("echo://engine-changed", cb),
   emitEngineChanged: () => emit("echo://engine-changed"),
 

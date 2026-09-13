@@ -55,6 +55,7 @@ export const ANSWERS: Record<string, unknown> = {
     },
   ],
   list_dictionary: [],
+  get_dictionary_sync_status: { last_synced_at: null, last_error: null, conflict_copies: [] },
   get_history: [],
   list_plugins: [],
   list_profiles: [],
