@@ -439,6 +439,7 @@ fn an_app_profile_overrides_only_the_fields_it_sets() {
             injection_method: None,
             stream_partials: None,
             formatting: None,
+            style: None,
             profile_id: None,
             enabled: true,
         },
@@ -470,6 +471,7 @@ fn app_matching_is_case_insensitive_and_disabled_profiles_are_ignored() {
             injection_method: None,
             stream_partials: None,
             formatting: None,
+            style: None,
             profile_id: None,
             enabled: true,
         },
@@ -489,6 +491,7 @@ fn app_matching_is_case_insensitive_and_disabled_profiles_are_ignored() {
             injection_method: None,
             stream_partials: None,
             formatting: None,
+            style: None,
             profile_id: None,
             enabled: false,
         },
@@ -499,6 +502,35 @@ fn app_matching_is_case_insensitive_and_disabled_profiles_are_ignored() {
         resolve_delivery(&conn, Some("code.exe")).auto_inject,
         "a disabled profile must not apply"
     );
+}
+
+/// A style survives the round trip through the database, and a blank one is
+/// no style — otherwise clearing the field would still cost a model call.
+#[test]
+fn an_app_profiles_style_reaches_delivery_and_a_blank_one_does_not() {
+    let conn = test_db();
+    let mut slack = AppProfile {
+        id: None,
+        app_match: "slack.exe".into(),
+        label: None,
+        auto_inject: None,
+        injection_method: None,
+        stream_partials: None,
+        formatting: None,
+        style: Some("casual, lowercase is fine".into()),
+        profile_id: None,
+        enabled: true,
+    };
+    repo::upsert_app_profile(&conn, &slack).unwrap();
+    assert_eq!(
+        resolve_delivery(&conn, Some("slack.exe")).style.as_deref(),
+        Some("casual, lowercase is fine")
+    );
+    assert_eq!(resolve_delivery(&conn, Some("code.exe")).style, None);
+
+    slack.style = Some("   ".into());
+    repo::upsert_app_profile(&conn, &slack).unwrap();
+    assert_eq!(resolve_delivery(&conn, Some("slack.exe")).style, None);
 }
 
 // ── Full chain ───────────────────────────────────────────────────────────────
@@ -605,6 +637,7 @@ async fn a_per_app_profile_switches_which_dictionary_entries_apply() {
             injection_method: None,
             stream_partials: None,
             formatting: None,
+            style: None,
             profile_id: Some(profile_id),
             enabled: true,
         },

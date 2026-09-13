@@ -189,5 +189,41 @@ fn migrate(conn: &Connection) -> Result<()> {
         ")?;
     }
 
+    if version < 7 {
+        conn.execute_batch(
+            "
+            -- Voice snippets: a trigger phrase and the block of text it stands
+            -- for. Not rows in dictionary_entries, although the shape is close:
+            -- a snippet matches only a whole utterance, runs after formatting
+            -- and is never fed to the decoder as vocabulary, and every existing
+            -- reader of the dictionary would otherwise need to learn to skip
+            -- them. See core::snippets.
+            CREATE TABLE IF NOT EXISTS snippets (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                trigger    TEXT NOT NULL,
+                body       TEXT NOT NULL,
+                enabled    INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            INSERT INTO schema_migrations (version) VALUES (7);
+        ",
+        )?;
+    }
+
+    if version < 8 {
+        conn.execute_batch(
+            "
+            -- A writing style for this app: a short instruction such as
+            -- \"casual, lowercase is fine\", applied to the finished text by
+            -- the command-mode model. NULL means no style. It only runs while
+            -- the global per-app style switch is also on, which defaults off.
+            ALTER TABLE app_profiles ADD COLUMN style TEXT;
+
+            INSERT INTO schema_migrations (version) VALUES (8);
+        ",
+        )?;
+    }
+
     Ok(())
 }

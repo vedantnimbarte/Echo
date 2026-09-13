@@ -3,12 +3,20 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Trash2, Plus, Download, Upload } from "lucide-react";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { commands } from "../../ipc/commands";
-import { Page, Group } from "../common/Page";
+import { Page, Group, Tabs } from "../common/Page";
 import { Hint } from "../common/Hint";
 import { SyncSection } from "./SyncSection";
+import { Snippets } from "./Snippets";
+
+const TABS = [
+  { id: "entries", label: "Replacements" },
+  { id: "snippets", label: "Snippets" },
+  { id: "sync", label: "Sync" },
+] as const;
 
 export function DictionaryPanel() {
   const qc = useQueryClient();
+  const [section, setSection] = useState<(typeof TABS)[number]["id"]>("entries");
   const [phrase, setPhrase] = useState("");
   const [replacement, setReplacement] = useState("");
 
@@ -85,6 +93,8 @@ export function DictionaryPanel() {
     if (typeof selected === "string") {
       await commands.importDictionary(selected);
       qc.invalidateQueries({ queryKey: ["dictionary"] });
+      // The file carries snippets too.
+      qc.invalidateQueries({ queryKey: ["snippets"] });
     }
   }
 
@@ -108,7 +118,17 @@ export function DictionaryPanel() {
           </button>
         </>
       }
+      tabs={
+        <Tabs
+          label="Dictionary sections"
+          tabs={TABS}
+          current={section}
+          onSelect={setSection}
+        />
+      }
     >
+      {section === "snippets" && <Snippets />}
+      {section === "entries" && (
       <Group>
       <div className="space-y-6">
       {/* Add entry form */}
@@ -286,7 +306,8 @@ export function DictionaryPanel() {
       )}
       </div>
       </Group>
-      <SyncSection />
+      )}
+      {section === "sync" && <SyncSection />}
     </Page>
   );
 }

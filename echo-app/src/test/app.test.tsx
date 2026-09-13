@@ -200,6 +200,37 @@ describe("every settings page", () => {
     expect(screen.queryByText(/stopped before it could transcribe/i)).toBeNull();
   });
 
+  // The style is the one free-text override on a profile, and the switch that
+  // gates it has to say where the text goes.
+  it("shows an app profile's writing style and the switch that gates it", async () => {
+    const profile = {
+      id: 7,
+      app_match: "slack.exe",
+      label: null,
+      auto_inject: null,
+      injection_method: null,
+      stream_partials: null,
+      formatting: null,
+      profile_id: null,
+      enabled: true,
+      style: "casual, lowercase is fine",
+    };
+    ANSWERS.list_app_profiles = [profile];
+    try {
+      settings.set("command_llm_provider", "openai");
+      const user = userEvent.setup();
+      mount(<SettingsPanel page="output" />);
+      await openSection(user, "Apps");
+
+      const field = await screen.findByLabelText("Writing style");
+      expect((field as HTMLInputElement).value).toBe("casual, lowercase is fine");
+      expect(await screen.findByText(/Rewrite text in each app's style/)).toBeTruthy();
+      expect(await screen.findByText(/sent to OpenAI/)).toBeTruthy();
+    } finally {
+      ANSWERS.list_app_profiles = [];
+    }
+  });
+
   it("offers back audio a crash interrupted", async () => {
     ANSWERS.recovered_recordings = ["/data/recovered-1700000000.wav"];
     try {
@@ -398,7 +429,9 @@ describe("dictionary sync", () => {
   // The warning is asserted, not just the section: it is the sentence someone
   // has to read before pointing Echo at a folder other people can open.
   it("mounts on the dictionary page and says the file is unencrypted", async () => {
+    const user = userEvent.setup();
     mount(<DictionaryPanel />);
+    await openSection(user, "Sync");
     expect(await screen.findByRole("heading", { name: /Sync/ })).toBeTruthy();
     expect(await screen.findByText(/not encrypted/i)).toBeTruthy();
     expect(await screen.findByText(/Last synced:\s*never/)).toBeTruthy();
@@ -411,6 +444,7 @@ describe("dictionary sync", () => {
     settings.set("dictionary_sync_enabled", "true");
     const user = userEvent.setup();
     mount(<DictionaryPanel />);
+    await openSection(user, "Sync");
 
     const button = await screen.findByRole("button", { name: /Sync now/ });
     await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
@@ -430,6 +464,16 @@ describe("the other panels", () => {
     await waitFor(() => {
       expect(container.textContent?.length ?? 0).toBeGreaterThan(0);
     });
+  });
+
+  // Snippets live behind a tab, so the panel test above never renders them.
+  it("opens the snippets section and shows a saved snippet", async () => {
+    const user = userEvent.setup();
+    mount(<DictionaryPanel />);
+    await openSection(user, "Snippets");
+    expect(await screen.findByDisplayValue("sign off")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Add snippet/ })).toBeTruthy();
+    expect(invoked).toContain("list_snippets");
   });
 
   // The charts are the part that can throw on a shape it did not expect — an

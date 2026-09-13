@@ -25,6 +25,20 @@ export function AppProfiles() {
     queryFn: commands.listProfiles,
   });
 
+  const { data: styleEnabled } = useQuery({
+    queryKey: ["setting", "app_style_enabled"],
+    queryFn: () => commands.getSetting("app_style_enabled"),
+  });
+  const { data: llmProvider } = useQuery({
+    queryKey: ["setting", "command_llm_provider"],
+    queryFn: () => commands.getSetting("command_llm_provider"),
+  });
+
+  async function saveSetting(key: string, on: boolean) {
+    await commands.setSetting(key, on ? "true" : "false");
+    qc.invalidateQueries({ queryKey: ["setting", key] });
+  }
+
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,6 +83,7 @@ export function AppProfiles() {
         formatting: null,
         profile_id: null,
         enabled: true,
+        style: null,
       })
     );
     setPending(null);
@@ -84,6 +99,31 @@ export function AppProfiles() {
         Override how Echo behaves in specific apps. Anything left on “Global”
         follows the settings above.
       </p>
+
+      {/* The switch sits with the profiles because the styles live on them;
+          the privacy line follows the command-mode backend, which is the one
+          that runs the rewrite. */}
+      <label className="flex items-start gap-2.5">
+        <input
+          type="checkbox"
+          checked={styleEnabled === "true"}
+          onChange={(e) => void saveSetting("app_style_enabled", e.target.checked)}
+          className="mt-0.5 h-3.5 w-3.5 accent-white"
+        />
+        <span className="text-[14px] leading-snug">
+          Rewrite text in each app's style
+          <span className="block text-[12.5px] text-[var(--ink-muted)]">
+            Runs the Command mode model on every sentence dictated into an app
+            with a writing style, which can add up to 3 seconds before the text
+            appears. If the model is slow, fails or replies with anything but a
+            rewrite, the text is typed as you said it. Snippets are never
+            restyled. History keeps the styled text.
+            {llmProvider === "openai"
+              ? " Your dictated text is sent to OpenAI. Ollama keeps it on your machine."
+              : " Uses Ollama on this machine, so the text stays here."}
+          </span>
+        </span>
+      </label>
 
       <div className="flex gap-1.5">
         <input
@@ -227,6 +267,28 @@ export function AppProfiles() {
                     <option value="on">Format</option>
                     <option value="off">Raw</option>
                   </select>
+                </div>
+
+                {/* Saved on blur, not per keystroke: every save is a round
+                    trip that re-renders the list, which would fight the
+                    cursor. Spans the grid so the instruction is readable. */}
+                <div className="col-span-3 order-last">
+                  <ColumnLabel
+                    htmlFor={`${p.id}-style`}
+                    hint="A short instruction for how text should read in this app. Only used while “Rewrite text in each app's style” is on."
+                  >
+                    Writing style
+                  </ColumnLabel>
+                  <input
+                    id={`${p.id}-style`}
+                    className="field text-[13px]"
+                    placeholder="e.g. casual, lowercase is fine"
+                    defaultValue={p.style ?? ""}
+                    onBlur={(e) => {
+                      const next = e.target.value.trim() || null;
+                      if (next !== p.style) update(p, { style: next });
+                    }}
+                  />
                 </div>
 
                 <label className="block">

@@ -19,6 +19,14 @@ export interface DictionaryEntry {
   created_at: string;
 }
 
+/** Say `trigger` as a whole utterance, get `body` pasted verbatim. */
+export interface Snippet {
+  id: number | null;
+  trigger: string;
+  body: string;
+  enabled: boolean;
+}
+
 export interface TranscriptionRecord {
   id: number | null;
   text: string;
@@ -156,6 +164,8 @@ export interface AppProfile {
   formatting: boolean | null;
   profile_id: number | null;
   enabled: boolean;
+  /** How the model restyles text here, e.g. "formal, full sentences". Null for none. */
+  style: string | null;
 }
 
 /** What dictation has added up to. Derived from History, so empty when it is off. */
@@ -253,6 +263,12 @@ export const commands = {
 
   getDictionarySyncStatus: () =>
     invoke<DictionarySyncStatus>("get_dictionary_sync_status"),
+
+  listSnippets: () => invoke<Snippet[]>("list_snippets"),
+
+  saveSnippet: (snippet: Snippet) => invoke<number>("save_snippet", { snippet }),
+
+  deleteSnippet: (id: number) => invoke<void>("delete_snippet", { id }),
 
   getHistory: (limit?: number) =>
     invoke<TranscriptionRecord[]>("get_history", { limit }),
