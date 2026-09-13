@@ -146,6 +146,7 @@ somebody dictating into twenty applications, so here is the honest state:
 | **macOS x86_64** | Unsupported | No build exists. `ort` ships no prebuilt ONNX Runtime for Intel macOS, so Silero VAD and the wake word cannot link. See [docs/RELEASING.md](docs/RELEASING.md). |
 | **Linux X11** | Community | Needs `xdotool`. Password-field detection goes through AT-SPI: GTK apps only unless session accessibility is on, nothing without an accessibility bus, and unverified in browsers and Qt apps. |
 | **Linux Wayland** | Degraded | Needs `ydotool` plus the `ydotoold` daemon, and some compositors refuse synthetic input outright. Per-app profiles do not work: no Wayland protocol reports which window is focused. |
+| **Linux arm64** | Community | Built from the release after v0.4.0, and compiled and unit-tested in CI on an arm64 runner. Same requirements as x86_64 Linux above; nobody has run it by hand yet. |
 
 If you use Echo on a Community-tier platform and it works, saying so is a
 genuinely useful contribution — the gap is verification, not code.
