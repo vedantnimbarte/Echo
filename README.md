@@ -143,7 +143,7 @@ somebody dictating into twenty applications, so here is the honest state:
 |---|---|---|
 | **Windows x64** | Tested | Developed and used here. Text injection, the password-field guard, the tray, offline Whisper and the GPU pack have all been exercised by hand. |
 | **macOS arm64** | Community | Compiles, unit-tests and self-tests in CI on a macOS runner, but has not been driven by hand. Accessibility and Automation permissions, and the password-field guard, are unverified against real applications. Bug reports welcome and expected. |
-| **macOS x86_64** | Unsupported | No build exists. `ort` ships no prebuilt ONNX Runtime for Intel macOS, so Silero VAD and the wake word cannot link. See [docs/RELEASING.md](docs/RELEASING.md). |
+| **macOS x86_64** | Community (untested) | Built from the release after v0.4.0, cross-compiled on an Apple Silicon runner, and unit-tested in CI on an Intel runner. Nobody has run it by hand, and no tag has built it yet. It loads its own copy of ONNX Runtime 1.23.2, which needs macOS 13.4: on 12 to 13.3 Silero VAD falls back to the energy detector and the wake word is unavailable. See [docs/RELEASING.md](docs/RELEASING.md#how-the-intel-macos-build-gets-an-onnx-runtime). |
 | **Linux X11** | Community | Needs `xdotool`. Password-field detection goes through AT-SPI: GTK apps only unless session accessibility is on, nothing without an accessibility bus, and unverified in browsers and Qt apps. |
 | **Linux Wayland** | Degraded | Needs `ydotool` plus the `ydotoold` daemon, and some compositors refuse synthetic input outright. Per-app profiles do not work: no Wayland protocol reports which window is focused. |
 | **Linux arm64** | Community | Built from the release after v0.4.0, and compiled and unit-tested in CI on an arm64 runner. Same requirements as x86_64 Linux above; nobody has run it by hand yet. |
@@ -159,13 +159,13 @@ link here rather than repeating it.
 | OS | Install first | Permissions to grant |
 |---|---|---|
 | **Windows** | **WebView2 runtime** — preinstalled on Windows 11; on Windows 10 grab the *Evergreen* runtime from [Microsoft](https://developer.microsoft.com/microsoft-edge/webview2/). Typing into other apps needs nothing extra. | Microphone |
-| **macOS** *(Apple Silicon only)* | Nothing. | **Microphone** and **Accessibility**. Without Accessibility, Echo can hear you but cannot type. |
+| **macOS** | Nothing. | **Microphone** and **Accessibility**. Without Accessibility, Echo can hear you but cannot type. |
 | **Linux (X11)** | **`xdotool`**, for typing into other apps. The AppImage also needs FUSE — `sudo apt install libfuse2` on Debian/Ubuntu; a `.deb` and an `.rpm` are attached to each release too. The password-field guard needs the AT-SPI bus (`at-spi2-core`, standard on GNOME, KDE and most full desktops). | Microphone. For the password-field guard to cover browsers, Electron and Qt apps: session accessibility on (see [the guard](#the-password-field-guard-is-unverified-on-real-hardware)) |
 | **Linux (Wayland)** | **`ydotool`** *and* a running **`ydotoold`** daemon. Some compositors refuse synthetic input whatever you install. The password-field guard needs `at-spi2-core`, as on X11. | Microphone. Session accessibility, as on X11 |
 
-**Why Apple Silicon only:** the ONNX Runtime behind Silero VAD and the wake word
-publishes no Intel-macOS binaries, so there is no x86_64 build — an Intel Mac
-would have to compile ONNX Runtime from source.
+**Intel Macs** get their own `.dmg` from the release after v0.4.0, and the
+install script picks it by architecture. Silero VAD and the wake word there
+need macOS 13.4 or later; see the support tiers above.
 
 **The tray icon** lands in the Windows notification area (possibly behind the
 overflow arrow, where you can drag it out), the macOS menu bar, or whatever
