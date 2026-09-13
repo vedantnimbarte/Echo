@@ -10,11 +10,14 @@
 //! number converted wrongly is worse than one left as words: the reader cannot
 //! tell it was Echo that changed it.
 
+mod de;
 mod en;
+mod nl;
 
 /// Language code → its parser. Matched on the leading subtag, so "en-GB" and
 /// "pt-BR" find their rules.
-const PARSERS: &[(&str, fn(&str) -> String)] = &[("en", en::apply)];
+const PARSERS: &[(&str, fn(&str) -> String)] =
+    &[("en", en::apply), ("de", de::apply), ("nl", nl::apply)];
 
 /// Language codes number conversion has rules for, so the settings screen can
 /// say which languages this stage applies to.
