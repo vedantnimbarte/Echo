@@ -25,6 +25,13 @@ pub fn number_languages() -> Vec<&'static str> {
     crate::core::format::numbers::supported_languages()
 }
 
+/// Language codes that filler and stutter cleanup has rules for. Same reason
+/// as [`spoken_punctuation_languages`].
+#[tauri::command]
+pub fn cleanup_languages() -> Vec<&'static str> {
+    crate::core::format::cleanup::supported_languages()
+}
+
 /// The dictation languages the settings `<select>` and the tray submenu both
 /// render — one list, so the two cannot drift.
 #[tauri::command]

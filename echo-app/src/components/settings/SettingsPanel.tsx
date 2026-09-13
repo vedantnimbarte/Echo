@@ -297,6 +297,10 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
     queryKey: ["spoken-punctuation-languages"],
     queryFn: commands.spokenPunctuationLanguages,
   });
+  const { data: cleanupLanguages = [] } = useQuery({
+    queryKey: ["cleanup-languages"],
+    queryFn: commands.cleanupLanguages,
+  });
   const { data: numberLanguages = [] } = useQuery({
     queryKey: ["number-languages"],
     queryFn: commands.numberLanguages,
@@ -1083,7 +1087,17 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
             onChange={(v) =>
               setFormatSetting.mutate({ key: "auto_edit", value: v ? "true" : "false" })
             }
-            hint="Only sounds nobody means to write. Words that are sometimes filler — “like”, “actually”, “basically” — are left alone, because no rule can tell when you meant them. English only."
+            hint={
+              <p>
+                Only sounds nobody means to write. Words that are sometimes
+                filler — “like”, “actually”, “basically” — are left alone,
+                because no rule can tell when you meant them. Works in{" "}
+                {cleanupLanguages
+                  .map((c) => languages.find((l) => l.code === c)?.label ?? c)
+                  .join(", ")}
+                . Other languages are left exactly as spoken.
+              </p>
+            }
           >
             Drop “um”, “uh” and stuttered words
           </Check>

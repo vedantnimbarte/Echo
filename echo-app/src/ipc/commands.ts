@@ -467,6 +467,9 @@ export const commands = {
   /** Language codes that number conversion has a parser for. */
   numberLanguages: () => invoke<string[]>("number_languages"),
 
+  /** Language codes that filler and stutter cleanup has rules for. */
+  cleanupLanguages: () => invoke<string[]>("cleanup_languages"),
+
   /**
    * The dictation languages Echo offers. Lives in Rust because the tray menu
    * renders the same list, and two copies drift.

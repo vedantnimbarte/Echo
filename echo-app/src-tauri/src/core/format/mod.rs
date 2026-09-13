@@ -60,7 +60,7 @@ pub fn apply(text: &str, opts: FormatOptions, language: Option<&str>) -> String 
     // and a spoken mark ("hello um comma") would otherwise stop the mark
     // attaching to the word it belongs to.
     if opts.cleanup && cleanup::covers(language) {
-        out = cleanup::apply(&out);
+        out = cleanup::apply(&out, language);
     }
     if opts.spoken_punctuation {
         out = punctuation::apply(&out, language);

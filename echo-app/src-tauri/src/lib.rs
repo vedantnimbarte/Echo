@@ -598,6 +598,7 @@ pub fn run() {
             commands::settings::set_setting,
             commands::settings::spoken_punctuation_languages,
             commands::settings::number_languages,
+            commands::settings::cleanup_languages,
             commands::settings::dictation_languages,
             commands::app::diagnostics,
             commands::app::open_log,
