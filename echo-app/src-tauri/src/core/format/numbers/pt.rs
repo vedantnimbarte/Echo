@@ -29,14 +29,26 @@
 //! uma"), but not after "mil": "mil e uma noites" and "mil e um motivos" are a
 //! title and an idiom for "countless", so "mil e um" stays as spoken.
 //!
-//! **A run of number words converts whole or not at all.** "às oito e trinta e
-//! cinco" is a clock time this module does not read, and converting the part it
-//! can parse would give "às oito e 35". When the grammar stops while number
+//! **Clock times need the preposition that makes them clock times.** "nove e
+//! quinze" is as often two numbers as 9:15, and "três e meia" is three and a
+//! half of something. "às" settles it — "às três e meia", "às nove e quinze" —
+//! and so does "à uma", the singular. After those, an hour from one to twelve
+//! followed by "e" and its minutes ("meia", "um quarto", or a number) is
+//! written "às 3:30", "às 9:15". The preposition is checked with its accent:
+//! "às" folds to "as", which is the article ("as três e meia xícaras"), so a
+//! transcript that lost the accent keeps its words.
+//!
+//! **A run of number words converts whole or not at all.** "às oito trinta e
+//! cinco" is a clock time without its "e", which this module does not read,
+//! and converting the part it can parse would give "às oito 35". When the grammar stops while number
 //! words carry on, the whole run is left as spoken.
 //!
-//! ponytail: clock times ("três e meia", "cinco para as oito", "nove e quinze")
-//! are skipped, since "nove e quinze" is as often two numbers as 9:15.
-//! Decimals are skipped because "vírgula" is already a spoken comma. Ordinals
+//! ponytail: clock times counted back to the hour ("cinco para as oito", "um
+//! quarto para as nove", "às oito menos um quarto") are skipped: "para as oito"
+//! puts the article, not the preposition, in front of the hour, and "dez para
+//! as duas" reads just as well as "ten for the two". So are times without "às"
+//! ("são três e meia", "das três e meia"), hours past twelve ("às catorze e
+//! trinta"), and a time with no "e" ("às oito trinta"). Decimals are skipped because "vírgula" is already a spoken comma. Ordinals
 //! ("vigésimo quinto") are skipped because dates use cardinals. "bilhão" and
 //! "bilião" are skipped because Brazil means 10⁹ and Portugal 10¹², and "mil
 //! milhões" is left as words rather than parsed. "meia" for six when reading
@@ -192,6 +204,14 @@ pub fn apply(text: &str) -> String {
     let mut i = 0;
 
     while i < words.len() {
+        // The clock looks back at the preposition before the hour, so it is
+        // handed everything up to the end of the clause rather than the clause
+        // alone.
+        if let Some((len, written)) = clock(&words[..reach[i]], &keys[..reach[i]], i) {
+            out.push(rewrap(words[i], words[i + len - 1], &written));
+            i += len;
+            continue;
+        }
         let clause = &keys[i..reach[i]];
         if let Some((len, written)) = convert(clause) {
             out.push(rewrap(words[i], words[i + len - 1], &written));
@@ -232,6 +252,45 @@ fn convert(clause: &[String]) -> Option<(usize, String)> {
         return Some((len + unit_len, written));
     }
     (len > 1).then(|| (len, value.to_string()))
+}
+
+/// A clock time whose hour is at `i`, returning how many words it spans and
+/// how it is written. See the module docs for the shapes and why each needs its
+/// preposition.
+fn clock(words: &[&str], keys: &[String], i: usize) -> Option<(usize, String)> {
+    // Unfolded, because the accent is the whole difference between "às" and
+    // the article "as".
+    let before = i.checked_sub(1).map(|p| {
+        words[p]
+            .trim_matches(|c: char| !c.is_alphanumeric())
+            .to_lowercase()
+    });
+    let hour = match (before.as_deref(), number(keys, i)?) {
+        // "uma" alone is "a/an"; only "à uma" is one o'clock.
+        (Some("à"), (1, Kind::Article)) if keys[i] == "uma" => 1,
+        (Some("às"), (hour @ 2..=12, _)) => hour,
+        _ => return None,
+    };
+    if keys.get(i + 1).map(String::as_str) != Some("e") {
+        return None;
+    }
+    let (len, minutes) = match (
+        keys.get(i + 2).map(String::as_str),
+        keys.get(i + 3).map(String::as_str),
+    ) {
+        (Some("meia"), _) => (3, 30),
+        (Some("um"), Some("quarto")) => (4, 15),
+        _ => {
+            let (len, minutes) = below_hundred(keys, i + 2)?;
+            (2 + len, minutes)
+        }
+    };
+    // "e quinze dois" is not a time the grammar reads: leave the run whole, as
+    // everywhere else in this module.
+    if number(keys, i + len).is_some() || !(1..60).contains(&minutes) {
+        return None;
+    }
+    Some((len, format!("{hour}:{minutes:02}")))
 }
 
 /// How many words to pass over unchanged at the start of a clause: the whole
@@ -561,17 +620,47 @@ mod tests {
     /// can would leave a figure half-rewritten.
     #[test]
     fn a_run_the_grammar_cannot_read_is_left_whole() {
-        assert_eq!(
-            apply("às oito e trinta e cinco"),
-            "às oito e trinta e cinco"
-        );
-        assert_eq!(apply("às nove e quinze"), "às nove e quinze");
+        assert_eq!(apply("às oito trinta e cinco"), "às oito trinta e cinco");
         assert_eq!(apply("três e meia"), "três e meia");
         // "mil e dois" is 1002, but not when "mil" follows.
         assert_eq!(apply("entre mil e dois mil"), "entre mil e dois mil");
         assert_eq!(apply("dois mil milhões"), "dois mil milhões");
         // Without its "e" this is not Portuguese, so it is not guessed at.
         assert_eq!(apply("duzentos cinquenta"), "duzentos cinquenta");
+    }
+
+    #[test]
+    fn clock_times_after_their_preposition_use_a_colon() {
+        assert_eq!(apply("às três e meia"), "às 3:30");
+        assert_eq!(apply("às nove e quinze"), "às 9:15");
+        assert_eq!(apply("às duas e um quarto"), "às 2:15");
+        assert_eq!(apply("às oito e trinta e cinco"), "às 8:35");
+        assert_eq!(apply("à uma e meia."), "à 1:30.");
+        assert_eq!(apply("Às doze e dez"), "Às 12:10");
+        assert_eq!(
+            apply("chego às sete e meia da noite"),
+            "chego às 7:30 da noite"
+        );
+    }
+
+    /// Without "às" a time is a quantity or two numbers, and stays words.
+    #[test]
+    fn a_clock_shape_without_its_preposition_stays_words() {
+        for said in [
+            "três e meia xícaras",
+            "nove e quinze",
+            "as três e meia xícaras",
+            "as tres e meia",
+            "são três e meia",
+            "uma e meia",
+            "às três",
+            "às catorze e trinta",
+            "às nove e quinze dois",
+            "às três, e meia",
+            "cinco para as oito",
+        ] {
+            assert_eq!(apply(said), said);
+        }
     }
 
     #[test]

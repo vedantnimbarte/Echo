@@ -34,10 +34,25 @@
 //! attaches ("25%"), the euro sign goes in front with a space ("€ 25"), degrees
 //! attach ("30°"), and measures take a space ("10 km").
 //!
-//! ponytail: clock times are left as words. The idiomatic ones are relative —
-//! "half drie" is 2:30, not 3:30, and "kwart over drie" says nothing about
-//! morning or afternoon — and "drie uur" is as often a duration as a time. Also
-//! left: years said in two parts ("negentien negenennegentig", "twintig
+//! **Clock times** convert only after "om", which is what makes them times:
+//! "om half drie", "om kwart over drie", "om tien voor vier", "om vijf over
+//! half vier". Dutch counts relative to the hour, and "half" to the *next*
+//! one — "half drie" is 2:30, not 3:30 — so "om half drie" is written "om 2:30",
+//! "om tien voor vier" "om 3:50", "om vijf over half vier" "om 3:35". The hour
+//! is one to twelve and so is the written form: "kwart over drie" says nothing
+//! about morning or afternoon, and "15:15" would be a guess.
+//!
+//! ponytail: clock times without "om" stay words ("het is half drie", "tot
+//! kwart over drie"): "half drie" alone is as readable as half of three, and
+//! "tien voor vier" as ten for four. "drie uur" stays too, even after "om",
+//! because it is as often a duration as a time. After "om" the known ceiling is
+//! "om" meaning "in order to": "om tien voor vier mensen te koken" would read
+//! as a time. A unit or another number after the hour blocks that ("om tien
+//! voor vier euro te kopen"), and so does "een" — the article — anywhere but
+//! the end of the phrase ("om vijf over een hek", "om een voor een"); a plain
+//! noun does not, and telling it apart needs a dictionary of nouns.
+//!
+//! Also left: years said in two parts ("negentien negenennegentig", "twintig
 //! zesentwintig"), which Dutch speakers do use; telling them from two numbers
 //! read out needs the same evidence the English year rule guesses at, and a
 //! wrong guess here is invisible. Millions ("drie miljoen") are left too.
@@ -103,7 +118,10 @@ pub fn apply(text: &str) -> String {
     let mut i = 0;
 
     while i < w.words.len() {
-        match match_ordinal(&w, i).or_else(|| match_number(&w, i)) {
+        match match_clock(&w, i)
+            .or_else(|| match_ordinal(&w, i))
+            .or_else(|| match_number(&w, i))
+        {
             Some((len, written)) => {
                 edits.push((i, len, written));
                 i += len;
@@ -142,6 +160,76 @@ fn match_number(w: &Words, i: usize) -> Option<(usize, String)> {
         return None;
     }
     (pieces > 1).then(|| (len, value.to_string()))
+}
+
+/// A clock time after "om", starting at `i`: "half drie", "kwart over drie",
+/// "tien voor vier", "vijf over half vier". See the module docs for why each
+/// needs its "om".
+fn match_clock(w: &Words, i: usize) -> Option<(usize, String)> {
+    let om = i.checked_sub(1)?;
+    if w.key(om) != Some("om") {
+        return None;
+    }
+    // The value of a number word at `p` — fused compounds included, so
+    // "vijfentwintig over drie" reads — unless it is out of `range`.
+    let at = |p: usize, range: std::ops::RangeInclusive<u64>| {
+        w.key(p)
+            .and_then(|k| value(&split(k, MORPHEMES)?))
+            .filter(|v| range.contains(v))
+    };
+
+    // Minutes before or after the hour at the end, counted in the words
+    // leading up to it: "kwart over" is +15, "tien voor" -10, "half" -30.
+    let mut p = i;
+    let mut offset: i64 = 0;
+    let by = match w.key(p)? {
+        "half" => None,
+        "kwart" => Some(15),
+        // Never one: "om een voor een te controleren" is "one by one".
+        _ => Some(at(p, 2..=29)? as i64),
+    };
+    if let Some(by) = by {
+        offset = match w.key(p + 1)? {
+            "over" => by,
+            "voor" => -by,
+            _ => return None,
+        };
+        p += 2;
+    }
+    if w.key(p) == Some("half") {
+        // "kwart over half" is not Dutch; only a count of minutes goes there.
+        if w.key(i) == Some("kwart") {
+            return None;
+        }
+        offset -= 30;
+        p += 1;
+    }
+    let hour = at(p, 1..=12)?;
+    let len = p + 1 - i;
+
+    // One phrase from "om" to the hour: "om half, drie" is not a time.
+    if !(om..p).all(|q| w.joined(q)) {
+        return None;
+    }
+    // "om tien voor vier euro" is a price and "om half drie vijf" is not a
+    // time the grammar reads. An unaccented "een" is the article unless the
+    // phrase ends on it: "om vijf over een hek te klimmen".
+    if w.joined(p) {
+        let next = w.key(p + 1);
+        if w.raw(p) == Some("een")
+            || next == Some("euro")
+            || UNITS.iter().any(|(u, ..)| next == Some(*u))
+            || at(p + 1, 0..=u64::MAX).is_some()
+        {
+            return None;
+        }
+    }
+
+    // Always at least one minute past midnight: the smallest offset is "29
+    // voor half één", 0:01. Hour zero is written as twelve.
+    let total = hour as i64 * 60 + offset;
+    let (h, m) = (total / 60, total % 60);
+    Some((len, format!("{}:{m:02}", if h == 0 { 12 } else { h })))
 }
 
 /// A compound "-ste" ordinal at `i`: "vijfentwintigste" → "25e".
@@ -274,9 +362,50 @@ mod tests {
         assert_eq!(apply("vijf kilo"), "5 kg");
     }
 
+    /// "half" counts to the next hour, not from the last one.
     #[test]
-    fn clock_times_are_left_alone() {
-        for said in ["om half drie", "kwart over drie", "om drie uur"] {
+    fn clock_times_after_om_use_a_colon() {
+        assert_eq!(apply("om half drie"), "om 2:30");
+        assert_eq!(apply("om kwart over drie"), "om 3:15");
+        assert_eq!(apply("om kwart voor drie"), "om 2:45");
+        assert_eq!(apply("om tien voor vier"), "om 3:50");
+        assert_eq!(apply("om vijf over half vier"), "om 3:35");
+        assert_eq!(apply("om tien voor half vier"), "om 3:20");
+        assert_eq!(apply("om half een"), "om 12:30");
+        assert_eq!(apply("om vijf over twaalf"), "om 12:05");
+        assert_eq!(
+            apply("we spreken om half drie af."),
+            "we spreken om 2:30 af."
+        );
+        assert_eq!(apply("Om Kwart Over Drie"), "Om 3:15");
+        assert_eq!(apply("om kwart over één vandaag"), "om 1:15 vandaag");
+        // A price, not a time. The number stage reads the price as it always did.
+        assert_eq!(
+            apply("om tien voor vier euro te kopen"),
+            "om tien voor \u{20ac} 4 te kopen"
+        );
+    }
+
+    #[test]
+    fn a_clock_shape_without_om_stays_words() {
+        for said in [
+            "half drie",
+            "het is half drie",
+            "kwart over drie",
+            "tot tien voor vier",
+            "drie uur",
+            "om drie uur",
+            "om drie",
+            "om half",
+            "om een voor een te controleren",
+            "om vijf over een hek te klimmen",
+            "om half een brood",
+            "om dertig over drie",
+            "om half dertien",
+            "om kwart over half drie",
+            "om half, drie",
+            "om half drie vijf",
+        ] {
             assert_eq!(apply(said), said);
         }
     }

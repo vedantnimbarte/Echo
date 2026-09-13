@@ -31,16 +31,27 @@
 //! una noches" is a title. Modern Spanish never puts "y" anywhere else inside a
 //! number, so anywhere else it is the ordinary word "and".
 //!
+//! **Clock times need the words that make them clock times.** "tres y media"
+//! is as often three and a half cups as 3:30, and "cinco y veinte" is as often
+//! a sum as 5:20. What settles it is the article a time takes: "a las tres y
+//! media", "son las cinco y veinte", "la una menos cuarto". After those, and
+//! only those, an hour from one to twelve followed by "y" or "menos" and its
+//! minutes is written "3:30", "7:45", "5:20". The article stays as spoken — "a
+//! las 3:30" is how the RAE writes it. "menos" counts back from the hour, so
+//! "las ocho menos cuarto" is 7:45 and "la una menos diez" 12:50.
+//!
 //! **A run of number words converts whole or not at all.** "a las ocho treinta
-//! y cinco" is a clock time this module does not read. Converting the part it
+//! y cinco" is a clock time without its "y", which this module does not read. Converting the part it
 //! can parse would give "a las ocho 35" — a figure half-rewritten, which is
 //! worse than leaving the words. So when the grammar stops while number words
 //! carry on, the whole run is left as spoken.
 //!
-//! ponytail: clock times ("las tres y media", "las ocho menos cuarto", "las
-//! cinco y veinte") are skipped: "cinco y veinte" is as often a sum as 5:20,
-//! and the "y media"/"y cuarto" forms need a preposition ("a las") to be sure.
-//! Decimals are skipped because "coma" is already a spoken comma. Ordinals
+//! ponytail: clock times without their article are skipped — "desde las tres y
+//! media", "de tres y media a cinco", "las tres y media" said bare — because
+//! "de las tres" is as often "of the three" and a bare "tres y media" is a
+//! quantity. So are hours past twelve ("las catorce y treinta") and a time
+//! with no "y" ("a las ocho treinta"), which is the same shape as two numbers
+//! read out. Decimals are skipped because "coma" is already a spoken comma. Ordinals
 //! ("vigésimo quinto") are skipped because dates use cardinals in Spanish.
 //! "billón" is skipped because it is 10¹² in Spanish and 10⁹ to anyone
 //! calquing English, and "mil millones" is left as words rather than parsed.
@@ -202,6 +213,13 @@ pub fn apply(text: &str) -> String {
     let mut i = 0;
 
     while i < words.len() {
+        // The clock looks back at the article before the hour, so it is handed
+        // everything up to the end of the clause rather than the clause alone.
+        if let Some((len, written)) = clock(&keys[..reach[i]], i) {
+            out.push(rewrap(words[i], words[i + len - 1], &written));
+            i += len;
+            continue;
+        }
         let clause = &keys[i..reach[i]];
         if let Some((len, written)) = convert(clause) {
             out.push(rewrap(words[i], words[i + len - 1], &written));
@@ -242,6 +260,49 @@ fn convert(clause: &[String]) -> Option<(usize, String)> {
         return Some((len + unit_len, written));
     }
     (len > 1 || kind == Kind::Fused).then(|| (len, value.to_string()))
+}
+
+/// A clock time whose hour is at `i`, returning how many words it spans and
+/// how it is written. See the module docs for the shapes and why each needs its
+/// article.
+fn clock(keys: &[String], i: usize) -> Option<(usize, String)> {
+    let before = |n: usize| i.checked_sub(n).map(|p| keys[p].as_str());
+    let hour = match number(keys, i)? {
+        // "la una" is the only singular hour, and "una" alone is "a/an".
+        (1, Kind::Article) if keys[i] == "una" && before(1) == Some("la") => 1,
+        (hour @ 2..=12, _)
+            if before(1) == Some("las") && matches!(before(2), Some("a" | "son")) =>
+        {
+            hour
+        }
+        _ => return None,
+    };
+    let (len, minutes) = match (
+        keys.get(i + 1).map(String::as_str),
+        keys.get(i + 2).map(String::as_str),
+    ) {
+        (Some("y"), Some("media")) => (3, 30),
+        (Some("y" | "menos"), Some("cuarto")) => (3, 15),
+        (Some("y" | "menos"), _) => {
+            let (len, minutes) = below_hundred(keys, i + 2)?;
+            (2 + len, minutes)
+        }
+        _ => return None,
+    };
+    // "y cinco seis" is not a time the grammar reads: leave the run whole, as
+    // everywhere else in this module.
+    if number(keys, i + len).is_some() {
+        return None;
+    }
+    let (hour, minutes) = match keys[i + 1].as_str() {
+        "y" if (1..60).contains(&minutes) => (hour, minutes),
+        // Nobody says "menos cuarenta"; past half the hour is said forwards.
+        "menos" if (1..=30).contains(&minutes) => {
+            (if hour == 1 { 12 } else { hour - 1 }, 60 - minutes)
+        }
+        _ => return None,
+    };
+    Some((len, format!("{hour}:{minutes:02}")))
 }
 
 /// How many words to pass over unchanged at the start of a clause: the whole
@@ -537,13 +598,47 @@ mod tests {
             apply("a las ocho treinta y cinco"),
             "a las ocho treinta y cinco"
         );
-        assert_eq!(
-            apply("a las ocho y treinta y cinco"),
-            "a las ocho y treinta y cinco"
-        );
         assert_eq!(apply("las tres y media"), "las tres y media");
         assert_eq!(apply("dos mil millones"), "dos mil millones");
         assert_eq!(apply("cien veinte"), "cien veinte");
+    }
+
+    #[test]
+    fn clock_times_after_their_article_use_a_colon() {
+        assert_eq!(apply("a las tres y media"), "a las 3:30");
+        assert_eq!(apply("a las ocho menos cuarto"), "a las 7:45");
+        assert_eq!(apply("a las cinco y veinte"), "a las 5:20");
+        assert_eq!(apply("son las doce y cuarto"), "son las 12:15");
+        assert_eq!(apply("a las ocho y treinta y cinco"), "a las 8:35");
+        assert_eq!(apply("a las nueve menos diez"), "a las 8:50");
+        assert_eq!(apply("es la una y media."), "es la 1:30.");
+        assert_eq!(apply("a la una menos cuarto"), "a la 12:45");
+        assert_eq!(
+            apply("quedamos a las siete y media de la tarde"),
+            "quedamos a las 7:30 de la tarde"
+        );
+        assert_eq!(apply("A LAS TRES Y MEDIA"), "A LAS 3:30");
+    }
+
+    /// Without its article a time is a quantity or a sum, and stays words.
+    #[test]
+    fn a_clock_shape_without_its_article_stays_words() {
+        for said in [
+            "tres y media tazas",
+            "echa tres y media tazas de harina",
+            "cinco y veinte son muchos",
+            "de las tres y media",
+            "la una y la otra",
+            "una y media",
+            "las tres y media",
+            "a las tres",
+            "a las trece y media",
+            "a las tres y cinco seis",
+            "a las ocho menos cuarenta",
+            "a las tres, y media",
+        ] {
+            assert_eq!(apply(said), said);
+        }
     }
 
     #[test]
