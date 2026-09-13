@@ -34,6 +34,19 @@ struct DeepgramResponse {
 #[derive(Debug, Deserialize)]
 struct DgResults {
     channels: Vec<DgChannel>,
+    /// Present only when `utterances=true` was asked for.
+    #[serde(default)]
+    utterances: Vec<DgUtterance>,
+}
+
+/// One utterance from the pre-recorded API. `speaker` is an integer from 0 and
+/// only appears with diarization on.
+#[derive(Debug, Deserialize)]
+struct DgUtterance {
+    #[serde(default)]
+    speaker: Option<u32>,
+    #[serde(default)]
+    transcript: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -70,6 +83,19 @@ fn listen_url(model: &str, language: Option<&str>) -> String {
         None => url.push_str("&detect_language=true"),
     }
     url
+}
+
+/// Query string for a speaker-labelled import.
+///
+/// `diarize_model` rather than `diarize=true`: Deepgram's reference marks the
+/// boolean deprecated in its favour. `utterances=true` is what makes the
+/// response carry ready-made, punctuated turns with a speaker each, instead of
+/// a word list Echo would have to stitch back into sentences itself.
+fn speakers_url(model: &str, language: Option<&str>) -> String {
+    format!(
+        "{}&diarize_model=latest&utterances=true",
+        listen_url(model, language)
+    )
 }
 
 /// Query string for the realtime WebSocket API.
@@ -127,6 +153,25 @@ fn segment_from_response(parsed: DeepgramResponse) -> Result<TranscriptSegment> 
     })
 }
 
+/// Speaker turns out of a diarized response, in spoken order.
+///
+/// An utterance with no speaker means diarization did not run, and pretending
+/// otherwise would label a whole meeting as one person — so that is an error.
+fn turns_from_response(parsed: DeepgramResponse) -> Result<Vec<(String, String)>> {
+    parsed
+        .results
+        .utterances
+        .into_iter()
+        .filter(|u| !u.transcript.trim().is_empty())
+        .map(|u| {
+            let speaker = u.speaker.ok_or_else(|| {
+                EchoError::AsrProvider("deepgram returned utterances without speakers".into())
+            })?;
+            Ok((speaker.to_string(), u.transcript.trim().to_string()))
+        })
+        .collect()
+}
+
 /// Turn one streaming message into a segment, or `None` when there is nothing
 /// worth emitting.
 ///
@@ -149,27 +194,20 @@ fn segment_from_stream(result: DgStreamResult) -> Option<TranscriptSegment> {
     })
 }
 
-#[async_trait]
-impl AsrProvider for DeepgramProvider {
-    fn name(&self) -> &str {
-        "deepgram"
-    }
-
-    async fn transcribe(
+impl DeepgramProvider {
+    /// Send one pre-recorded request and read the answer. The caller builds the
+    /// request so it can choose the body and, for an import, a longer timeout.
+    async fn listen(
         &self,
-        audio: Vec<f32>,
-        language: Option<&str>,
-    ) -> Result<TranscriptSegment> {
-        let wav = pcm_f32_to_wav(&audio, 16_000)?;
+        url: &str,
+        request: reqwest::RequestBuilder,
+        mime: &str,
+    ) -> Result<DeepgramResponse> {
+        crate::core::egress::record(url, "cloud transcription");
 
-        let url = listen_url(&self.model, language);
-        crate::core::egress::record(&url, "cloud transcription");
-
-        let resp = super::http::client()
-            .post(&url)
+        let resp = request
             .header("Authorization", format!("Token {}", self.api_key))
-            .header("Content-Type", "audio/wav")
-            .body(wav)
+            .header("Content-Type", mime)
             .send()
             .await
             .map_err(|e| EchoError::AsrProvider(e.to_string()))?;
@@ -182,12 +220,41 @@ impl AsrProvider for DeepgramProvider {
             )));
         }
 
-        let parsed: DeepgramResponse = resp
-            .json()
+        resp.json()
             .await
-            .map_err(|e| EchoError::AsrProvider(e.to_string()))?;
+            .map_err(|e| EchoError::AsrProvider(e.to_string()))
+    }
+}
 
-        segment_from_response(parsed)
+#[async_trait]
+impl AsrProvider for DeepgramProvider {
+    fn name(&self) -> &str {
+        "deepgram"
+    }
+
+    async fn transcribe(
+        &self,
+        audio: Vec<f32>,
+        language: Option<&str>,
+    ) -> Result<TranscriptSegment> {
+        let wav = pcm_f32_to_wav(&audio, 16_000)?;
+        let url = listen_url(&self.model, language);
+        let request = super::http::client().post(&url).body(wav);
+        segment_from_response(self.listen(&url, request, "audio/wav").await?)
+    }
+
+    async fn transcribe_speakers(
+        &self,
+        audio: Vec<u8>,
+        mime: &str,
+        language: Option<&str>,
+    ) -> Result<Vec<(String, String)>> {
+        let url = speakers_url(&self.model, language);
+        let request = super::http::client()
+            .post(&url)
+            .timeout(super::http::IMPORT_TIMEOUT)
+            .body(audio);
+        turns_from_response(self.listen(&url, request, mime).await?)
     }
 
     /// True streaming over Deepgram's real-time WebSocket. Raw 16 kHz PCM is
@@ -374,6 +441,63 @@ mod tests {
     fn an_empty_response_is_reported_rather_than_returned_as_silence() {
         assert!(parse(r#"{"results":{"channels":[]}}"#).is_err());
         assert!(parse(r#"{"results":{"channels":[{"alternatives":[]}]}}"#).is_err());
+    }
+
+    #[test]
+    fn a_speaker_import_asks_for_diarized_utterances() {
+        let url = speakers_url("nova-3", Some("en"));
+        assert!(url.contains("&diarize_model=latest"), "{url}");
+        assert!(url.contains("&utterances=true"), "{url}");
+        assert!(url.contains("&language=en"), "{url}");
+        assert!(!url.contains(char::is_whitespace), "{url}");
+    }
+
+    /// Shaped like the documented `/v1/listen` response with `diarize_model`
+    /// and `utterances` on: turns live in `results.utterances`, each with an
+    /// integer `speaker` from 0.
+    #[test]
+    fn speaker_turns_are_read_out_of_the_utterances() {
+        let parsed: DeepgramResponse = serde_json::from_str(
+            r#"{
+              "metadata": {"request_id": "a1b2", "duration": 9.5, "channels": 1},
+              "results": {
+                "channels": [{"alternatives": [{
+                  "transcript": "Hello, thanks for joining. Happy to be here.",
+                  "confidence": 0.99,
+                  "words": [
+                    {"word": "hello", "start": 0.08, "end": 0.4, "confidence": 0.99,
+                     "speaker": 0, "speaker_confidence": 0.61}
+                  ]
+                }]}],
+                "utterances": [
+                  {"start": 0.08, "end": 1.9, "confidence": 0.98, "channel": 0,
+                   "transcript": "Hello, thanks for joining.", "speaker": 0,
+                   "id": "u1", "words": []},
+                  {"start": 2.4, "end": 3.6, "confidence": 0.97, "channel": 0,
+                   "transcript": " Happy to be here. ", "speaker": 1,
+                   "id": "u2", "words": []}
+                ]
+              }
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            turns_from_response(parsed).unwrap(),
+            vec![
+                ("0".to_string(), "Hello, thanks for joining.".to_string()),
+                ("1".to_string(), "Happy to be here.".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn utterances_without_speakers_are_an_error_not_one_long_monologue() {
+        let parsed: DeepgramResponse = serde_json::from_str(
+            r#"{"results":{"channels":[{"alternatives":[{"transcript":"hi"}]}],
+                "utterances":[{"transcript":"hi","channel":0}]}}"#,
+        )
+        .unwrap();
+        assert!(turns_from_response(parsed).is_err());
     }
 
     #[test]
