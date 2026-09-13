@@ -130,13 +130,17 @@ mod imp {
     }
 
     /// The full 256-bit "which keys are down" bitmap, in one round trip.
-    fn keymap(display: *mut x11::xlib::Display) -> [i8; 32] {
-        let mut keys = [0i8; 32];
+    ///
+    /// `c_char`, not `i8`: C's `char` is signed on x86_64 but unsigned on
+    /// aarch64 Linux, so a hard-coded `i8` compiled on one and not the other.
+    /// Only the bits are read, and `as u8` gives the same bits either way.
+    fn keymap(display: *mut x11::xlib::Display) -> [std::ffi::c_char; 32] {
+        let mut keys = [0 as std::ffi::c_char; 32];
         unsafe { x11::xlib::XQueryKeymap(display, keys.as_mut_ptr()) };
         keys
     }
 
-    fn is_set(keys: &[i8; 32], code: u8) -> bool {
+    fn is_set(keys: &[std::ffi::c_char; 32], code: u8) -> bool {
         keys[(code / 8) as usize] as u8 & (1 << (code % 8)) != 0
     }
 

@@ -16,7 +16,7 @@ ABI-compatible with the host that declares the same version.
 crate-type = ["cdylib"]
 
 [dependencies]
-echo-sdk = "0.1"
+echo-sdk = "0.2"
 ```
 
 ```rust
@@ -36,7 +36,24 @@ export_plugin!(HelloPlugin);
 ```
 
 `export_plugin!` generates the `echo_plugin_create` entry point the host looks
-up after `dlopen`. Your plugin type must also implement `Default`.
+up after `dlopen`, plus an ABI marker the host checks first, and wraps your
+plugin so a panic in a hook becomes an error instead of an aborted Echo. Your
+plugin type must also implement `Default`.
+
+## Capabilities
+
+To do more than load, implement `AudioPlugin`, `AsrPlugin`, `DictionaryPlugin`
+or `OutputPlugin`, and return `Some(self)` from the matching `as_*` method on
+`Plugin` — that is how the host, which only holds a `dyn Plugin`, finds out.
+Each trait's documentation says exactly when Echo calls it;
+[PLUGINS.md](../../../PLUGINS.md) has the whole pipeline in order.
+
+## Versions
+
+**0.2 changed the `Plugin` vtable** (the `as_*` methods). A library built
+against 0.1 is refused by an Echo speaking 0.2, and must be rebuilt; its code
+needs no changes. `ABI_VERSION` is bumped, with the minor version, whenever a
+trait's shape changes again.
 
 ## Shipping
 

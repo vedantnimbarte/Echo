@@ -57,15 +57,6 @@ function UpdateResult({ outcome }: { outcome: UpdateOutcome }) {
           You are on the latest version.
         </span>
       );
-    // Not a warning: a build that cannot update itself is how Echo ships today,
-    // not something the user did wrong. Say where the newer one lives instead.
-    case "unavailable":
-      return (
-        <Note>
-          This build can't update itself — its releases aren't signed for the
-          updater yet. Reinstall from the releases page to move to a newer version.
-        </Note>
-      );
     case "offline":
       return <Note warn>Couldn't reach the release feed. Check your connection.</Note>;
     case "failed":

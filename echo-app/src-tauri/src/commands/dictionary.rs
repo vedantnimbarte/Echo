@@ -2,9 +2,13 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::{
+    core::lock::LockLive,
     error::{EchoError, Result},
     state::AppState,
-    storage::{models::DictionaryEntry, repositories},
+    storage::{
+        models::{DictionaryEntry, Snippet},
+        repositories,
+    },
 };
 
 /// Portable representation of a dictionary entry for import/export (no ids or
@@ -21,10 +25,58 @@ fn default_true() -> bool {
     true
 }
 
+/// Portable snippet, for the same reason: no id, no timestamp.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnippetExport {
+    pub trigger: String,
+    pub body: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+/// What an export file holds.
+///
+/// Files written before snippets existed are a bare array of entries, and they
+/// still import. New files are an object, which an older Echo refuses to read —
+/// deliberately the better failure: the alternative was writing snippets into
+/// the array as entries, and an older version would have imported "sign off"
+/// as a dictionary rule that pastes a signature into any sentence containing
+/// those words.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum DictionaryFile {
+    Legacy(Vec<DictionaryExportEntry>),
+    Current {
+        entries: Vec<DictionaryExportEntry>,
+        #[serde(default)]
+        snippets: Vec<SnippetExport>,
+    },
+}
+
 /// Rebuild the in-memory engine from the current DB rows. Called after any
 /// mutation so transcription always uses the latest entries (architectural
 /// rule 6).
 pub(crate) async fn refresh_engine(state: &AppState, raw: Vec<DictionaryEntry>) {
+    load_engine(state, raw).await;
+    // Every user edit to the dictionary comes through here, which makes this
+    // the one place to tell sync there is something new to write. Sync itself
+    // calls `load_engine`, so applying another machine's changes does not
+    // trigger a sync of its own.
+    SYNC_WANTED.notify_one();
+}
+
+/// Also where enabled dictionary plugins contribute: their entries are
+/// appended after the user's, so a rule the user wrote for the same phrase
+/// runs first and wins. Asked here rather than per transcript, which keeps
+/// plugin code off the transcript path entirely. They join only the engine,
+/// never the database, so sync never writes a plugin's entries to the shared
+/// file — another machine may not have the plugin.
+async fn load_engine(state: &AppState, raw: Vec<DictionaryEntry>) {
+    let from_plugins = {
+        // Snapshot, then release the loader before any plugin code runs.
+        let plugins = state.plugins.lock_live().plugins();
+        crate::core::plugins::dispatch::dictionary_entries(&plugins)
+    };
     let entries = raw
         .into_iter()
         .map(|e| crate::core::dictionary::DictionaryEntry {
@@ -34,6 +86,7 @@ pub(crate) async fn refresh_engine(state: &AppState, raw: Vec<DictionaryEntry>) 
             enabled: e.enabled,
             profile_id: e.profile_id,
         })
+        .chain(from_plugins)
         .collect();
     state.dictionary.write().await.update_entries(entries);
 }
@@ -99,12 +152,15 @@ pub async fn toggle_dictionary_entry(
     Ok(())
 }
 
-/// Serialize all entries to a JSON file at the user-chosen path.
+/// Serialize all entries and snippets to a JSON file at the user-chosen path.
 #[tauri::command]
 pub async fn export_dictionary(state: State<'_, AppState>, path: String) -> Result<()> {
-    let raw = {
+    let (raw, snippets) = {
         let conn = state.db.lock().unwrap();
-        repositories::list_dictionary_entries(&conn)?
+        (
+            repositories::list_dictionary_entries(&conn)?,
+            repositories::list_snippets(&conn)?,
+        )
     };
 
     let export: Vec<DictionaryExportEntry> = raw
@@ -115,18 +171,32 @@ pub async fn export_dictionary(state: State<'_, AppState>, path: String) -> Resu
             enabled: e.enabled,
         })
         .collect();
+    let snippets: Vec<SnippetExport> = snippets
+        .into_iter()
+        .map(|s| SnippetExport {
+            trigger: s.trigger,
+            body: s.body,
+            enabled: s.enabled,
+        })
+        .collect();
 
-    let json = serde_json::to_string_pretty(&export)?;
+    let json = serde_json::to_string_pretty(
+        &serde_json::json!({ "entries": export, "snippets": snippets }),
+    )?;
     std::fs::write(&path, json).map_err(|e| EchoError::Config(e.to_string()))?;
     Ok(())
 }
 
 /// Read a JSON file and insert entries whose phrase isn't already present
-/// (case-insensitive). Returns the number of entries added.
+/// (case-insensitive), and snippets whose trigger isn't. Returns the number of
+/// entries and snippets added.
 #[tauri::command]
 pub async fn import_dictionary(state: State<'_, AppState>, path: String) -> Result<usize> {
     let contents = std::fs::read_to_string(&path).map_err(|e| EchoError::Config(e.to_string()))?;
-    let imported: Vec<DictionaryExportEntry> = serde_json::from_str(&contents)?;
+    let (imported, snippets) = match serde_json::from_str(&contents)? {
+        DictionaryFile::Legacy(entries) => (entries, Vec::new()),
+        DictionaryFile::Current { entries, snippets } => (entries, snippets),
+    };
 
     let (added, raw) = {
         let conn = state.db.lock().unwrap();
@@ -150,6 +220,30 @@ pub async fn import_dictionary(state: State<'_, AppState>, path: String) -> Resu
                 created_at: String::new(),
             };
             repositories::insert_dictionary_entry(&conn, &row)?;
+            added += 1;
+        }
+
+        let mut triggers: std::collections::HashSet<String> = repositories::list_snippets(&conn)?
+            .into_iter()
+            .map(|s| s.trigger.to_lowercase())
+            .collect();
+        for s in snippets {
+            // The same two refusals `save_snippet` makes, for a hand-edited file.
+            if !s.trigger.chars().any(char::is_alphanumeric)
+                || s.body.trim().is_empty()
+                || !triggers.insert(s.trigger.to_lowercase())
+            {
+                continue;
+            }
+            repositories::save_snippet(
+                &conn,
+                &Snippet {
+                    id: None,
+                    trigger: s.trigger,
+                    body: s.body,
+                    enabled: s.enabled,
+                },
+            )?;
             added += 1;
         }
         let raw = repositories::list_dictionary_entries(&conn)?;
@@ -230,4 +324,221 @@ pub async fn learn_from_correction(
 
     refresh_engine(&state, raw).await;
     Ok(stored)
+}
+
+// ── Sync through a folder ────────────────────────────────────────────────────
+//
+// The merge lives in `core::dictionary::sync`. This is when it runs: once at
+// startup, a few seconds after the dictionary changes, and whenever the file in
+// the folder does.
+
+use crate::core::dictionary::sync;
+
+/// Poked by [`refresh_engine`]. A `Notify` keeps one pending wake-up when nobody
+/// is waiting, so an edit made while a sync is running is not lost.
+static SYNC_WANTED: tokio::sync::Notify = tokio::sync::Notify::const_new();
+
+/// One sync at a time, whichever of the three triggers asked for it.
+static SYNC_RUNNING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Quiet period after an edit before syncing. Adding an entry can be several
+/// quick commands in a row (add, move to a profile, toggle), and each would
+/// otherwise write the file and send it to every other machine.
+const SYNC_DEBOUNCE: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// How often the folder is checked for another machine's writes. A `stat` of
+/// one or two files, so this can be frequent; the syncing service's own delay
+/// is longer than this anyway.
+const SYNC_POLL: std::time::Duration = std::time::Duration::from_secs(30);
+
+const KEY_STATUS: &str = "dictionary_sync_status";
+
+/// What the Sync section shows. Persisted, so "last synced" survives a restart.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DictionarySyncStatus {
+    pub last_synced_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub last_error: Option<String>,
+    /// Conflicted copies merged in on the last sync, by file name.
+    #[serde(default)]
+    pub conflict_copies: Vec<String>,
+}
+
+/// The configured folder, when sync is switched on and has one.
+fn sync_folder(state: &AppState) -> Option<std::path::PathBuf> {
+    let conn = state.db.lock().unwrap();
+    let get = |k: &str| repositories::get_setting(&conn, k).ok().flatten();
+    let enabled = get(sync::KEY_ENABLED).as_deref() == Some("true");
+    let folder = get(sync::KEY_FOLDER).filter(|f| !f.trim().is_empty())?;
+    enabled.then(|| folder.into())
+}
+
+fn load_status(state: &AppState) -> DictionarySyncStatus {
+    let conn = state.db.lock().unwrap();
+    repositories::get_setting(&conn, KEY_STATUS)
+        .ok()
+        .flatten()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default()
+}
+
+/// Run one sync if it is switched on, record how it went, and tell the window.
+async fn run_sync(app: &tauri::AppHandle) -> DictionarySyncStatus {
+    use tauri::{Emitter, Manager};
+
+    let _running = SYNC_RUNNING.lock().await;
+    let state = app.state::<AppState>();
+    let mut status = load_status(&state);
+    let Some(folder) = sync_folder(&state) else {
+        return status;
+    };
+
+    let handle = app.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        sync::sync(&handle.state::<AppState>().db, &folder, chrono::Utc::now())
+    })
+    .await
+    .unwrap_or_else(|e| Err(EchoError::Config(format!("Sync stopped unexpectedly: {e}"))));
+
+    match result {
+        Ok(outcome) => {
+            if outcome.changed_local {
+                let raw = {
+                    let conn = state.db.lock().unwrap();
+                    repositories::list_dictionary_entries(&conn).unwrap_or_default()
+                };
+                load_engine(&state, raw).await;
+            }
+            if !outcome.conflict_copies.is_empty() {
+                tracing::info!(copies = ?outcome.conflict_copies, "Merged conflicted dictionary copies");
+            }
+            status = DictionarySyncStatus {
+                last_synced_at: Some(chrono::Utc::now()),
+                last_error: None,
+                conflict_copies: outcome.conflict_copies,
+            };
+        }
+        Err(e) => {
+            // `last_synced_at` is kept: when it last *worked* is what the user
+            // needs to see next to an error.
+            tracing::error!("Dictionary sync failed: {e}");
+            status.last_error = Some(e.to_string());
+        }
+    }
+
+    if let Ok(json) = serde_json::to_string(&status) {
+        let conn = state.db.lock().unwrap();
+        let _ = repositories::set_setting(&conn, KEY_STATUS, &json);
+    }
+    let _ = app.emit("echo://dictionary-synced", &status);
+    status
+}
+
+/// Start the sync loop: once now, then after edits and when the folder changes.
+pub fn start_sync(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        use tauri::Manager;
+
+        let mut poll = tokio::time::interval(SYNC_POLL);
+        poll.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        // What the folder looked like after the last sync. `None` until the
+        // first one, so the first tick — which is immediate — syncs at startup.
+        let mut seen = None;
+
+        loop {
+            tokio::select! {
+                _ = poll.tick() => {
+                    let Some(folder) = sync_folder(&app.state::<AppState>()) else {
+                        seen = None;
+                        continue;
+                    };
+                    if seen.as_ref() == Some(&sync::fingerprint(&folder)) {
+                        continue;
+                    }
+                }
+                _ = SYNC_WANTED.notified() => {
+                    // Wait for the edits to stop before writing.
+                    while tokio::time::timeout(SYNC_DEBOUNCE, SYNC_WANTED.notified())
+                        .await
+                        .is_ok()
+                    {}
+                }
+            }
+            run_sync(&app).await;
+            seen = sync_folder(&app.state::<AppState>()).map(|f| sync::fingerprint(&f));
+        }
+    });
+}
+
+/// Sync now, from the button. The window also calls this after the folder or
+/// the switch changes, so the result shows at once rather than on the next poll.
+#[tauri::command]
+pub async fn sync_dictionary_now(app: tauri::AppHandle) -> Result<DictionarySyncStatus> {
+    Ok(run_sync(&app).await)
+}
+
+#[tauri::command]
+pub fn get_dictionary_sync_status(state: State<'_, AppState>) -> DictionarySyncStatus {
+    load_status(&state)
+}
+
+// ── Snippets ─────────────────────────────────────────────────────────────────
+//
+// No engine to refresh: the recording pipeline reads the table per utterance.
+// It is a handful of rows, read under a lock that is already being taken for
+// the per-app lookup, and it means an edit applies to the very next sentence.
+
+#[tauri::command]
+pub fn list_snippets(state: State<'_, AppState>) -> Result<Vec<Snippet>> {
+    let conn = state.db.lock().unwrap();
+    repositories::list_snippets(&conn)
+}
+
+/// Create a snippet (`id: None`) or update one. Returns its id.
+#[tauri::command]
+pub fn save_snippet(state: State<'_, AppState>, snippet: Snippet) -> Result<i64> {
+    // A trigger with no words in it can never match, and a snippet that
+    // expands to nothing would silently eat the utterance that triggered it.
+    if !snippet.trigger.chars().any(char::is_alphanumeric) {
+        return Err(EchoError::Config(
+            "A snippet needs a trigger phrase with at least one word".into(),
+        ));
+    }
+    if snippet.body.trim().is_empty() {
+        return Err(EchoError::Config(
+            "A snippet needs some text to insert".into(),
+        ));
+    }
+    let conn = state.db.lock().unwrap();
+    repositories::save_snippet(&conn, &snippet)
+}
+
+#[tauri::command]
+pub fn delete_snippet(state: State<'_, AppState>, id: i64) -> Result<()> {
+    let conn = state.db.lock().unwrap();
+    repositories::delete_snippet(&conn, id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DictionaryFile;
+
+    /// Files exported before snippets existed are a bare array, and people
+    /// keep those around as backups. They must go on importing.
+    #[test]
+    fn both_export_shapes_import() {
+        let legacy = r#"[{"phrase":"k8s","replacement":"Kubernetes"}]"#;
+        assert!(matches!(
+            serde_json::from_str(legacy).unwrap(),
+            DictionaryFile::Legacy(e) if e.len() == 1
+        ));
+
+        let current = r#"{"entries":[],"snippets":[{"trigger":"sign off","body":"Best,\nV"}]}"#;
+        match serde_json::from_str(current).unwrap() {
+            DictionaryFile::Current { snippets, .. } => {
+                assert_eq!(snippets[0].body, "Best,\nV");
+                assert!(snippets[0].enabled, "a missing flag means enabled");
+            }
+            DictionaryFile::Legacy(_) => panic!("read as the legacy shape"),
+        }
+    }
 }

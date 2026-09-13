@@ -130,6 +130,10 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)?;
             init_tracing(&data_dir);
             log_panics();
+            // Before anything the user can click: on Linux the password-field
+            // guard learns focus from events, and misses whatever was focused
+            // before it started listening. Returns at once.
+            core::field::start();
             let db_path = data_dir.join("echo.db");
 
             info!("Opening database at {}", db_path.display());
@@ -388,6 +392,15 @@ pub fn run() {
 
             app.manage(app_state);
 
+            // The dictionary engine and the ASR engines were built before any
+            // plugin loaded, so enabled plugins' entries and engines join now.
+            {
+                let handle = app.handle().clone();
+                tauri::async_runtime::block_on(async move {
+                    commands::plugins::sync_capabilities(&handle.state::<AppState>()).await;
+                });
+            }
+
             // Bind the global hotkey now that state is available. Which
             // mechanism gets used depends on the shortcut itself.
             let handle = app.handle().clone();
@@ -425,6 +438,10 @@ pub fn run() {
 
             // Arm the wake-word listener if the user enabled it last session.
             commands::wake::rearm(app.handle());
+
+            // Dictionary sync through a shared folder. Does nothing until the
+            // user picks a folder and switches it on.
+            commands::dictionary::start_sync(app.handle().clone());
 
             // `--selftest` runs here rather than in main(): the point is to
             // exercise a real startup, and everything worth checking — the
@@ -536,6 +553,11 @@ pub fn run() {
             commands::dictionary::export_dictionary,
             commands::dictionary::import_dictionary,
             commands::dictionary::learn_from_correction,
+            commands::dictionary::sync_dictionary_now,
+            commands::dictionary::get_dictionary_sync_status,
+            commands::dictionary::list_snippets,
+            commands::dictionary::save_snippet,
+            commands::dictionary::delete_snippet,
             commands::history::get_history,
             commands::history::clear_history,
             commands::history::get_dictation_stats,
@@ -593,6 +615,8 @@ pub fn run() {
             commands::settings::get_setting,
             commands::settings::set_setting,
             commands::settings::spoken_punctuation_languages,
+            commands::settings::number_languages,
+            commands::settings::cleanup_languages,
             commands::settings::dictation_languages,
             commands::app::diagnostics,
             commands::app::open_log,
@@ -610,10 +634,11 @@ pub fn run() {
             // outlives Echo, keeps the model in RAM, and accumulates one copy
             // per launch.
             //
-            // ponytail: this covers an orderly exit, which is the one we
-            // control. A crash or a force-kill still orphans the child; a Job
-            // Object on Windows and a process group elsewhere would close that
-            // gap if it ever proves to matter.
+            // This covers an orderly exit. A crash or a force-kill runs none of
+            // it; that case is handled where the server is spawned, by the OS
+            // (see `whisper_server::spawn_contained`). This stays regardless:
+            // macOS has no such mechanism, and there a clean exit is the only
+            // thing that stops the server before Echo's next launch sweeps it.
             if matches!(event, tauri::RunEvent::Exit) {
                 if let Some(state) = app.try_state::<AppState>() {
                     tauri::async_runtime::block_on(state.whisper_server.shutdown());

@@ -19,6 +19,14 @@ export interface DictionaryEntry {
   created_at: string;
 }
 
+/** Say `trigger` as a whole utterance, get `body` pasted verbatim. */
+export interface Snippet {
+  id: number | null;
+  trigger: string;
+  body: string;
+  enabled: boolean;
+}
+
 export interface TranscriptionRecord {
   id: number | null;
   text: string;
@@ -45,6 +53,8 @@ export interface CloudProvider {
   models: string[];
   needs_endpoint: boolean;
   needs_region: boolean;
+  /** Can say who spoke when transcribing an imported file. */
+  speaker_labels: boolean;
   docs_url: string;
   /** Latency, limits, and other things people otherwise learn the hard way. */
   note: string;
@@ -120,6 +130,15 @@ export interface PluginManifest {
   entry: string;
 }
 
+/** How the last dictionary sync through a shared folder went. */
+export interface DictionarySyncStatus {
+  /** RFC 3339. When a sync last succeeded; kept when a later one fails. */
+  last_synced_at: string | null;
+  last_error: string | null;
+  /** Conflicted copies the sync service made, merged in on the last sync. */
+  conflict_copies: string[];
+}
+
 /** A dictionary profile: a named group of entries. */
 export interface Profile {
   id: number | null;
@@ -145,6 +164,8 @@ export interface AppProfile {
   formatting: boolean | null;
   profile_id: number | null;
   enabled: boolean;
+  /** How the model restyles text here, e.g. "formal, full sentences". Null for none. */
+  style: string | null;
 }
 
 /** What dictation has added up to. Derived from History, so empty when it is off. */
@@ -236,6 +257,18 @@ export const commands = {
 
   importDictionary: (path: string) =>
     invoke<number>("import_dictionary", { path }),
+
+  /** Sync with the folder now, if sync is on. Resolves to how it went. */
+  syncDictionaryNow: () => invoke<DictionarySyncStatus>("sync_dictionary_now"),
+
+  getDictionarySyncStatus: () =>
+    invoke<DictionarySyncStatus>("get_dictionary_sync_status"),
+
+  listSnippets: () => invoke<Snippet[]>("list_snippets"),
+
+  saveSnippet: (snippet: Snippet) => invoke<number>("save_snippet", { snippet }),
+
+  deleteSnippet: (id: number) => invoke<void>("delete_snippet", { id }),
 
   getHistory: (limit?: number) =>
     invoke<TranscriptionRecord[]>("get_history", { limit }),
@@ -418,8 +451,9 @@ export const commands = {
       { original, edited },
     ),
 
-  transcribeFile: (path: string, language?: string) =>
-    invoke<string>("transcribe_file", { path, language }),
+  /** `speakers` uploads the file to the active cloud engine for labels. */
+  transcribeFile: (path: string, language?: string, speakers?: boolean) =>
+    invoke<string>("transcribe_file", { path, language, speakers }),
 
   supportedImportFormats: () => invoke<string[]>("supported_import_formats"),
 
@@ -450,10 +484,12 @@ export const commands = {
     invoke<void>("set_fixup_hotkey", { which, shortcut }),
 
   /**
-   * Whether this platform can tell a password field from an ordinary one.
-   * False on Linux, where no protection is actually in force.
+   * Whether this machine can tell a password field from an ordinary one.
+   * "partial" is Linux with session accessibility off, where only GTK apps
+   * answer; "unavailable" means no protection is in force at all.
    */
-  secureFieldDetection: () => invoke<boolean>("secure_field_detection"),
+  secureFieldDetection: () =>
+    invoke<"available" | "partial" | "unavailable">("secure_field_detection"),
 
   /**
    * Language codes that spoken punctuation has rules for. Anything else is
@@ -461,6 +497,12 @@ export const commands = {
    */
   spokenPunctuationLanguages: () =>
     invoke<string[]>("spoken_punctuation_languages"),
+
+  /** Language codes that number conversion has a parser for. */
+  numberLanguages: () => invoke<string[]>("number_languages"),
+
+  /** Language codes that filler and stutter cleanup has rules for. */
+  cleanupLanguages: () => invoke<string[]>("cleanup_languages"),
 
   /**
    * The dictation languages Echo offers. Lives in Rust because the tray menu

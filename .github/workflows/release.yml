@@ -27,13 +27,25 @@ jobs:
             args: "--target aarch64-apple-darwin"
           - platform: ubuntu-latest
             args: ""
+          # Native arm64 runner rather than cross-compiling: webkit2gtk and
+          # ALSA need arm64 system libraries to link against, and whisper-cli
+          # is built from source by the staging step, which wants a native
+          # toolchain. `ort` does publish aarch64-unknown-linux-gnu binaries.
+          - platform: ubuntu-24.04-arm
+            args: ""
 
     runs-on: ${{ matrix.platform }}
+    # `manifests` needs every build to succeed, so one failed platform leaves
+    # all of them without SHA256SUMS.txt — which is what the v0.3.0 macOS
+    # failure did. arm64 Linux has not yet produced a release, so until it has,
+    # it is not allowed to take the other three down with it. Drop this once a
+    # tag has built it cleanly.
+    continue-on-error: ${{ matrix.platform == 'ubuntu-24.04-arm' }}
     steps:
       - uses: actions/checkout@v5
 
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -220,10 +232,13 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- packaging; then
+          # links.ts is written by the same script. It used to be left out of
+          # this list, so the site's download buttons stayed on v0.1.0 file
+          # names through every release since.
+          if git diff --quiet -- packaging website/src/lib/links.ts; then
             echo "manifests unchanged"
             exit 0
           fi
-          git add packaging
+          git add packaging website/src/lib/links.ts
           git commit -m "chore(packaging): manifests for ${{ github.ref_name }}"
           git push

@@ -55,6 +55,10 @@ export const ANSWERS: Record<string, unknown> = {
     },
   ],
   list_dictionary: [],
+  get_dictionary_sync_status: { last_synced_at: null, last_error: null, conflict_copies: [] },
+  list_snippets: [
+    { id: 1, trigger: "sign off", body: "Best,\nVedant", enabled: true },
+  ],
   get_history: [],
   list_plugins: [],
   list_profiles: [],
@@ -96,6 +100,8 @@ export const ANSWERS: Record<string, unknown> = {
     ],
   },
   spoken_punctuation_languages: ["en", "es", "fr", "de", "it", "pt", "nl"],
+  number_languages: ["en", "de", "es", "fr", "it", "nl", "pt"],
+  cleanup_languages: ["en", "de", "es", "fr", "it", "nl", "pt"],
   diagnostics: "Echo 0.3.0\nOS: windows (x86_64)\nEngine: local\n",
   // Shortened, but `auto` first and real codes, because the language `<select>`
   // ticks against these and the punctuation hint looks labels up in them.
@@ -107,7 +113,7 @@ export const ANSWERS: Record<string, unknown> = {
   silero_available: true,
   recovered_recordings: [],
   get_hotkey: "CommandOrControl+Shift+Space",
-  secure_field_detection: true,
+  secure_field_detection: "available",
   wake_word_ready: false,
   wake_word_active: false,
   wake_word_status: "disabled",

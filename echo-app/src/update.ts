@@ -3,21 +3,6 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { getVersion } from "@tauri-apps/api/app";
 import { ask, message } from "@tauri-apps/plugin-dialog";
 
-/**
- * Whether releases are signed and publish a `latest.json` for the updater.
- *
- * Off until release signing is set up — see docs/RELEASING.md, which lists
- * flipping this alongside generating the keypair and re-enabling
- * `bundle.createUpdaterArtifacts`.
- *
- * This is not belt-and-braces for the try/catch below. The updater plugin logs
- * its own ERROR when the endpoint 404s, *before* our catch can swallow it — so
- * with no `latest.json` published, every single launch made a pointless network
- * request and printed a scary line to the log. Not calling it is the only way
- * to stay quiet.
- */
-const UPDATER_CONFIGURED = false;
-
 /** Settings key for the launch-time check. Absent means on. */
 export const CHECK_ON_START = "check_updates_on_start";
 
@@ -27,7 +12,6 @@ export const CHECK_ON_START = "check_updates_on_start";
  * this process.
  */
 export type UpdateOutcome =
-  | { kind: "unavailable" }
   | { kind: "offline" }
   | { kind: "current"; version: string }
   | { kind: "declined"; version: string }
@@ -37,22 +21,14 @@ export type UpdateOutcome =
  * Check GitHub Releases for a newer signed build and, if the user agrees,
  * download + install it and relaunch.
  *
- * `silent` suppresses only the *uneventful* answers — no update, no feed, no
- * updater in this build. A found update always asks, and a failed install
- * always says so, however it was started: those are not things to swallow.
+ * `silent` suppresses only the *uneventful* answers — no update, or no feed. A
+ * found update always asks, and a failed install always says so, however it
+ * was started: those are not things to swallow.
  */
 export async function checkForUpdate({ silent = false } = {}): Promise<UpdateOutcome> {
   const say = async (text: string, kind: "info" | "error" = "info") => {
     if (!silent) await message(text, { title: "Update", kind });
   };
-
-  if (!UPDATER_CONFIGURED) {
-    await say(
-      "This build can't update itself — its releases aren't signed for the " +
-        "updater yet. Reinstall from the Echo releases page to move to a newer version."
-    );
-    return { kind: "unavailable" };
-  }
 
   let update;
   try {

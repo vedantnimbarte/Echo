@@ -60,17 +60,17 @@ pub fn apply(text: &str, opts: FormatOptions, language: Option<&str>) -> String 
     // and a spoken mark ("hello um comma") would otherwise stop the mark
     // attaching to the word it belongs to.
     if opts.cleanup && cleanup::covers(language) {
-        out = cleanup::apply(&out);
+        out = cleanup::apply(&out, language);
     }
     if opts.spoken_punctuation {
         out = punctuation::apply(&out, language);
     }
     // Number words are grammar, not a lookup table: every language builds them
     // differently, and a half-right conversion is worse than none because the
-    // reader cannot tell it was Echo that changed the figure. English only,
-    // until someone writes and checks another.
+    // reader cannot tell it was Echo that changed the figure. Languages without
+    // a parser of their own are left alone.
     if opts.numbers && numbers::covers(language) {
-        out = numbers::apply(&out);
+        out = numbers::apply(&out, language);
     }
     if opts.tidy {
         out = tidy::apply(&out, language);

@@ -11,6 +11,12 @@
 //! signature matches is served by the existing process; one that differs
 //! restarts it. Without that, changing a setting would either be ignored or
 //! would tear the server down on every single request.
+//!
+//! The server must also never outlive Echo. It holds the model in RAM, which is
+//! gigabytes for the larger ones, and a copy orphaned by every crash adds up
+//! fast now that crash recovery makes relaunching after one routine. An orderly
+//! exit is handled by [`WhisperServer::shutdown`]; the rest is
+//! [`spawn_contained`].
 
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -92,6 +98,13 @@ impl Default for WhisperServer {
 
 impl WhisperServer {
     pub fn new() -> Self {
+        // Once per process, before this process has started a server of its
+        // own, so anything the sweep finds is a leftover and never ours.
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
+        {
+            static SWEEP: std::sync::Once = std::sync::Once::new();
+            SWEEP.call_once(pidfile::sweep);
+        }
         Self {
             running: Mutex::new(None),
             http: reqwest::Client::new(),
@@ -224,8 +237,9 @@ async fn start(sig: &Signature) -> Result<Running> {
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
-        // The server must not outlive the app. Without this, a crash or a
-        // force-quit leaves an orphan holding the model in RAM and the port.
+        // Covers the struct being dropped while we are still running: a
+        // restart that errors half-way, a cancelled future. Destructors do not
+        // run when the process dies, which is what `spawn_contained` is for.
         .kill_on_drop(true);
 
     #[cfg(target_os = "windows")]
@@ -234,7 +248,7 @@ async fn start(sig: &Signature) -> Result<Running> {
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let mut child = cmd.spawn().map_err(|e| {
+    let mut child = spawn_contained(cmd).await.map_err(|e| {
         EchoError::AsrProvider(format!(
             "failed to launch whisper-server at {}: {e}",
             sig.binary.display()
@@ -290,6 +304,298 @@ async fn start(sig: &Signature) -> Result<Running> {
                 .unwrap_or_else(|| "no output".into());
             Err(EchoError::AsrProvider(format!("{e}: {detail}")))
         }
+    }
+}
+
+/// Spawn `cmd` so that the child dies with this process however this process
+/// ends — a crash or a `taskkill /F` included, where no destructor and no
+/// `RunEvent::Exit` ever runs.
+///
+/// Each OS gets its own mechanism, because there is no portable one:
+///
+/// - **Windows:** the child joins a Job Object flagged `KILL_ON_JOB_CLOSE`. We
+///   hold the only handle to the job and never close it, so the kernel closes
+///   it when this process ends for any reason, and closing the last handle
+///   kills everything in the job.
+/// - **Linux:** `PR_SET_PDEATHSIG` has the kernel SIGKILL the child when its
+///   parent dies. See [`linux::spawn`] for the thread caveat.
+/// - **macOS:** nothing in the kernel fires in the child without the child's
+///   cooperation, and whisper-server does not cooperate — it never reads
+///   stdin, so a closing pipe tells it nothing. The server is recorded in a
+///   pidfile instead, and the next launch kills it ([`pidfile::sweep`]).
+///
+/// ponytail: on macOS an orphan therefore lives until Echo next starts, not
+/// until Echo dies. Closing that gap needs a watchdog process of our own
+/// (kqueue `NOTE_EXIT` on Echo, then kill the server): a second binary to sign
+/// and ship, for a crash the user then does not relaunch from.
+async fn spawn_contained(cmd: Command) -> std::io::Result<Child> {
+    #[cfg(target_os = "linux")]
+    let child = linux::spawn(cmd).await?;
+    #[cfg(not(target_os = "linux"))]
+    let child = {
+        let mut cmd = cmd;
+        cmd.spawn()?
+    };
+
+    #[cfg(target_os = "windows")]
+    windows_job::assign(&child);
+
+    // Recorded on Linux too, where the kernel already has it covered: it costs
+    // nothing, and it is what lets Linux CI exercise the macOS path at all.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    if let Some(pid) = child.id() {
+        pidfile::record(pid);
+    }
+
+    Ok(child)
+}
+
+#[cfg(target_os = "windows")]
+mod windows_job {
+    use std::ffi::c_void;
+    use std::sync::OnceLock;
+
+    use tokio::process::Child;
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+        SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+    };
+
+    /// Put `child` in the process-wide kill-on-close job.
+    ///
+    /// Failure is logged and otherwise ignored: a server a crash might orphan
+    /// is still far better than no server.
+    ///
+    /// The child runs outside the job for the instant between `spawn` returning
+    /// and this call. Starting it suspended would close that window, but std
+    /// does not hand back the thread handle needed to resume it, and a crash in
+    /// those few microseconds is not worth reimplementing `spawn` for.
+    pub fn assign(child: &Child) {
+        let (Some(job), Some(process)) = (job(), child.raw_handle()) else {
+            return;
+        };
+        // SAFETY: both handles are live — the job is never closed, and `child`
+        // owns the process handle for as long as we borrow it here.
+        if let Err(e) =
+            unsafe { AssignProcessToJobObject(HANDLE(job as *mut c_void), HANDLE(process)) }
+        {
+            tracing::warn!("whisper-server not tied to Echo's lifetime: {e}");
+        }
+    }
+
+    /// The job, created on first use and deliberately never closed: its handle
+    /// closing *is* the kill switch, so it has to live exactly as long as this
+    /// process. Kept as an address because `HANDLE` is not `Sync`.
+    ///
+    /// The handle is not inheritable (no `SECURITY_ATTRIBUTES`), and that
+    /// matters: a child holding its own copy would keep the job open after we
+    /// die, and nothing would be killed.
+    fn job() -> Option<usize> {
+        static JOB: OnceLock<Option<usize>> = OnceLock::new();
+        *JOB.get_or_init(|| {
+            // SAFETY: plain Win32 calls with a correctly sized, initialized
+            // struct; the handle is checked by the `Result`.
+            let created = unsafe {
+                CreateJobObjectW(None, PCWSTR::null()).and_then(|job| {
+                    let mut info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+                    info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+                    SetInformationJobObject(
+                        job,
+                        JobObjectExtendedLimitInformation,
+                        &info as *const _ as *const c_void,
+                        std::mem::size_of_val(&info) as u32,
+                    )
+                    .map(|()| job)
+                })
+            };
+            match created {
+                Ok(job) => Some(job.0 as usize),
+                Err(e) => {
+                    tracing::warn!("could not create a job object for whisper-server: {e}");
+                    None
+                }
+            }
+        })
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod linux {
+    use std::io;
+    use std::sync::{mpsc, OnceLock};
+
+    use tokio::process::{Child, Command};
+    use tokio::runtime::Handle;
+    use tokio::sync::oneshot;
+
+    type Request = (Command, Handle, oneshot::Sender<io::Result<Child>>);
+
+    /// Spawn with `PR_SET_PDEATHSIG = SIGKILL`, from a thread that never exits.
+    ///
+    /// The caveat: to the kernel, "parent" means the *thread* that forked, not
+    /// the process. Spawned from a tokio blocking-pool thread, which exits
+    /// after ten idle seconds, the server would be SIGKILLed mid-session for no
+    /// visible reason and silently reloaded on the next utterance. Every caller
+    /// today happens to be on a runtime worker or the main thread, both of
+    /// which live as long as the process, but nothing enforces that. So the
+    /// fork happens on one dedicated thread that never returns. The runtime
+    /// handle travels with each request so the child's pipes still register
+    /// with the caller's reactor.
+    pub async fn spawn(mut cmd: Command) -> io::Result<Child> {
+        let parent = std::process::id();
+        // SAFETY: runs between fork and exec, so it may only make
+        // async-signal-safe calls and must not allocate. `prctl`, `getppid`
+        // and an `io::Error` built from an errno are all of that.
+        unsafe {
+            cmd.pre_exec(move || {
+                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) == -1 {
+                    return Err(io::Error::last_os_error());
+                }
+                // Had Echo died between the fork and the line above, the
+                // signal was armed too late to ever fire, and our parent is no
+                // longer the process that forked us. Refuse to start an orphan.
+                if libc::getppid() as u32 != parent {
+                    return Err(io::Error::from_raw_os_error(libc::ESRCH));
+                }
+                Ok(())
+            });
+        }
+
+        static SPAWNER: OnceLock<mpsc::Sender<Request>> = OnceLock::new();
+        let spawner = SPAWNER.get_or_init(|| {
+            let (tx, rx) = mpsc::channel::<Request>();
+            std::thread::Builder::new()
+                .name("whisper-spawn".into())
+                .spawn(move || {
+                    for (mut cmd, runtime, reply) in rx {
+                        let _entered = runtime.enter();
+                        let _ = reply.send(cmd.spawn());
+                    }
+                })
+                .expect("could not start the whisper-server spawn thread");
+            tx
+        });
+
+        let gone = || io::Error::other("whisper-server spawn thread is gone");
+        let (reply, result) = oneshot::channel();
+        spawner
+            .send((cmd, Handle::current(), reply))
+            .map_err(|_| gone())?;
+        result.await.map_err(|_| gone())?
+    }
+}
+
+/// A record of the running server, so the next launch can kill one a crash
+/// left behind. The only mechanism on macOS; see [`spawn_contained`].
+///
+/// One file per Echo process, named by its pid, holding the server's pid and
+/// executable. A file is only acted on once the Echo that wrote it is gone —
+/// `echo --transcribe` running beside the app must not kill the app's server —
+/// and a pid is only killed while it still runs that same executable, so a pid
+/// the OS has since handed to something else is left alone.
+///
+/// This cannot catch servers orphaned by builds from before the file existed.
+/// Those live until they are killed or the machine restarts.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+mod pidfile {
+    use std::os::unix::fs::MetadataExt;
+    use std::path::PathBuf;
+
+    const PREFIX: &str = "echo-whisper-server-";
+
+    /// On macOS `temp_dir` is per-user. On Linux it is a shared `/tmp`, which
+    /// is why [`sweep`] skips files anyone else owns and only ever kills
+    /// something named whisper-server: a planted file must not be able to aim
+    /// Echo at an arbitrary process of ours.
+    fn path_for(owner: u32) -> PathBuf {
+        std::env::temp_dir().join(format!("{PREFIX}{owner}.pid"))
+    }
+
+    pub fn record(pid: u32) {
+        let Some(exe) = exe_of(pid) else { return };
+        let path = path_for(std::process::id());
+        if let Err(e) = std::fs::write(&path, format!("{pid}\n{}", exe.display())) {
+            tracing::warn!("could not record whisper-server in {}: {e}", path.display());
+        }
+    }
+
+    pub fn sweep() {
+        let Ok(entries) = std::fs::read_dir(std::env::temp_dir()) else {
+            return;
+        };
+        let me = std::process::id();
+        // SAFETY: `getuid` has no preconditions and cannot fail.
+        let uid = unsafe { libc::getuid() };
+
+        for entry in entries.flatten() {
+            let Some(owner) = entry.file_name().to_str().and_then(|name| {
+                name.strip_prefix(PREFIX)?
+                    .strip_suffix(".pid")?
+                    .parse::<u32>()
+                    .ok()
+            }) else {
+                continue;
+            };
+            if entry.metadata().map_or(true, |m| m.uid() != uid) {
+                continue;
+            }
+            // Our own pid on a file means an earlier Echo had it: this runs
+            // before we have started anything.
+            if owner != me && alive(owner) {
+                continue;
+            }
+
+            let path = entry.path();
+            let recorded = std::fs::read_to_string(&path).ok().and_then(|s| {
+                let (pid, exe) = s.split_once('\n')?;
+                // Never 0 or negative: `kill` reads those as "our whole process
+                // group" and "every process we may signal".
+                let pid = pid.parse::<i32>().ok().filter(|&p| p > 0)?;
+                Some((pid, exe.to_owned()))
+            });
+            if let Some((pid, exe)) = recorded {
+                let same = exe_of(pid as u32).is_some_and(|p| {
+                    p.display().to_string() == exe
+                        && p.file_name().is_some_and(|n| n == "whisper-server")
+                });
+                if same {
+                    // SAFETY: a positive pid just confirmed to be our server.
+                    unsafe { libc::kill(pid, libc::SIGKILL) };
+                    tracing::info!(pid, "killed a whisper-server left behind by an earlier run");
+                }
+            }
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+
+    /// Fails safe: a pid we are not allowed to signal is somebody's live process.
+    fn alive(pid: u32) -> bool {
+        let Ok(pid) = i32::try_from(pid) else {
+            return false;
+        };
+        // SAFETY: signal 0 only checks existence and permission.
+        let exists = unsafe { libc::kill(pid, 0) == 0 };
+        exists || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+    }
+
+    /// The executable a live process is running. `None` for a zombie, which is
+    /// what a server the kernel already killed looks like until it is reaped.
+    #[cfg(target_os = "linux")]
+    pub fn exe_of(pid: u32) -> Option<PathBuf> {
+        std::fs::read_link(format!("/proc/{pid}/exe")).ok()
+    }
+
+    #[cfg(target_os = "macos")]
+    pub fn exe_of(pid: u32) -> Option<PathBuf> {
+        use std::os::unix::ffi::OsStrExt;
+        let mut buf = vec![0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+        // SAFETY: the buffer is exactly as large as we say.
+        let len =
+            unsafe { libc::proc_pidpath(pid as i32, buf.as_mut_ptr().cast(), buf.len() as u32) };
+        (len > 0).then(|| PathBuf::from(std::ffi::OsStr::from_bytes(&buf[..len as usize])))
     }
 }
 
@@ -370,6 +676,136 @@ mod tests {
         let mut other_binary = sig(4, true);
         other_binary.binary = PathBuf::from("cuda12/whisper-server");
         assert_ne!(sig(4, true), other_binary);
+    }
+
+    /// A long-running child that is harmless to orphan if the test fails: it
+    /// exits on its own after ten minutes.
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    fn long_running() -> Command {
+        #[cfg(target_os = "windows")]
+        let mut cmd = Command::new("ping");
+        #[cfg(target_os = "windows")]
+        cmd.args(["-n", "600", "127.0.0.1"]);
+        #[cfg(target_os = "linux")]
+        let mut cmd = Command::new("sleep");
+        #[cfg(target_os = "linux")]
+        cmd.arg("600");
+        cmd.stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        cmd
+    }
+
+    #[cfg(target_os = "windows")]
+    fn process_alive(pid: u32) -> bool {
+        use windows::Win32::Foundation::{CloseHandle, STILL_ACTIVE};
+        use windows::Win32::System::Threading::{
+            GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+        };
+        // SAFETY: the handle is checked by the `Result` and closed below.
+        unsafe {
+            let Ok(process) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) else {
+                return false;
+            };
+            let mut code = 0u32;
+            let running =
+                GetExitCodeProcess(process, &mut code).is_ok() && code == STILL_ACTIVE.0 as u32;
+            let _ = CloseHandle(process);
+            running
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn process_alive(pid: u32) -> bool {
+        pidfile::exe_of(pid).is_some()
+    }
+
+    /// The reason `spawn_contained` exists: kill the parent the way a crash or
+    /// `taskkill /F` does — no destructors, no exit event — and the child has
+    /// to go with it.
+    ///
+    /// The parent must be a separate process, so the test re-runs its own
+    /// binary with only itself selected, and in that copy the env var casts it
+    /// as Echo.
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    #[tokio::test]
+    async fn a_force_killed_parent_takes_its_child_along() {
+        use std::io::{BufRead, Write};
+
+        const PARENT_ROLE: &str = "ECHO_TEST_CONTAINED_PARENT";
+        const NAME: &str =
+            "core::asr::whisper_server::tests::a_force_killed_parent_takes_its_child_along";
+
+        if std::env::var_os(PARENT_ROLE).is_some() {
+            let child = spawn_contained(long_running()).await.unwrap();
+            println!("child={}", child.id().unwrap());
+            std::io::stdout().flush().unwrap();
+            tokio::time::sleep(Duration::from_secs(600)).await;
+            return;
+        }
+
+        let mut parent = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([NAME, "--exact", "--nocapture", "--test-threads=1"])
+            .env(PARENT_ROLE, "1")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+
+        let stdout = std::io::BufReader::new(parent.stdout.take().unwrap());
+        let child_pid: u32 = stdout
+            .lines()
+            .map_while(|line| line.ok())
+            .find_map(|line| {
+                let rest = line.split("child=").nth(1)?;
+                let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+                digits.parse().ok()
+            })
+            .expect("the parent never reported its child");
+        assert!(
+            process_alive(child_pid),
+            "the child should run before the kill"
+        );
+
+        // TerminateProcess on Windows, SIGKILL on Linux: nothing in the parent
+        // gets to run.
+        parent.kill().unwrap();
+        parent.wait().unwrap();
+
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while process_alive(child_pid) {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "child {child_pid} outlived its force-killed parent"
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    /// What the next launch does with a server a crash left behind. The copy of
+    /// `sleep` is named whisper-server because nothing else is ever killed.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[tokio::test]
+    async fn the_startup_sweep_kills_a_leftover_server() {
+        let dir = std::env::temp_dir().join(format!("echo-sweep-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let fake = dir.join("whisper-server");
+        std::fs::copy("/bin/sleep", &fake).unwrap();
+
+        let mut cmd = Command::new(&fake);
+        cmd.arg("600").stdin(Stdio::null()).stdout(Stdio::null());
+        let mut child = spawn_contained(cmd).await.unwrap();
+
+        // The file carries our own pid, which the sweep reads as an earlier
+        // Echo that happened to have it — a crashed one, as far as it knows.
+        pidfile::sweep();
+
+        let status = tokio::time::timeout(Duration::from_secs(10), child.wait())
+            .await
+            .expect("the sweep left the server running")
+            .unwrap();
+        assert!(!status.success());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -49,7 +49,8 @@ cloud. Enable entries individually, import and export as JSON.
 application, so a terminal can take the words exactly as spoken.
 
 **Never types into a password field.** Windows and macOS ask the accessibility
-API. Linux cannot, and Settings says so rather than pretending.
+API; Linux asks AT-SPI, which answers for fewer apps. Settings says how much of
+your desktop is actually covered rather than pretending.
 
 **You can see what left.** A log of every outbound request Echo made, telemetry
 that is local-only and opt-in, and API keys held in the OS keychain.
@@ -103,14 +104,53 @@ This is expected, and here is exactly what you'll see:
 If that trade isn't one you want to make, [build from source](CONTRIBUTING.md)
 instead: the result is identical and you compiled it yourself.
 
-### The password-field guard is unverified on real hardware
+### How far the password-field guard has been tested
 
 Echo asks Windows UI Automation, or the macOS Accessibility API, whether the
-focused control is masked, and refuses to type into it. That code compiles on
-both platforms in CI but **has never been exercised against a real password
-box**, so treat it as a seatbelt of unknown strength rather than a guarantee.
-On Linux it does nothing at all: the question needs AT-SPI over D-Bus, and
-under Wayland usually not even that answers. Settings says so plainly.
+focused control is masked, and refuses to type into it. Treat it as a seatbelt,
+not a guarantee: it only knows what the app tells the accessibility API.
+
+**Windows: checked against real password boxes.** On 2026-09-13, on Windows 11
+Pro 25H2 (build 26200.9445), the detection call was run while each of these
+held keyboard focus. Every masked field answered *password* and every ordinary
+field beside it answered *ordinary*:
+
+- a WinForms `TextBox` with `UseSystemPasswordChar` (.NET Framework 4.8)
+- a WPF `PasswordBox`
+- `<input type="password">` in Edge 153 and Chrome 153, each a fresh browser
+  process that Echo queried before any other test tool did
+- the classic credential prompt Windows PowerShell's `Get-Credential` opens
+
+The newer *Windows Security* credential dialog was not checked: it could not be
+kept in the foreground long enough. Electron apps, UWP/WinUI, Java and Qt were
+not tried. That was the detection call, not a full dictation into each app.
+
+**macOS: still unverified.** The code compiles and unit-tests in CI but has
+never been run against a real password box.
+
+On Linux Echo listens on the AT-SPI accessibility bus for focus changes and
+asks the focused control whether it is a password field. That is weaker in
+ways Settings spells out for your machine:
+
+- **No accessibility bus, no guard.** Minimal window managers and some Wayland
+  sessions never start one; Echo then types everywhere, as before.
+- **Accessibility off, GTK only.** Chromium, Electron, Firefox and Qt publish
+  nothing unless the session's accessibility switch is on. Echo reads that
+  switch but never flips it — it is desktop-wide, persists across logins, and
+  costs every app memory and CPU. On GNOME you can opt in with
+  `gsettings set org.gnome.desktop.interface toolkit-accessibility true` and
+  then restart the browser.
+- **Apps with no accessibility tree** (most terminals, games) send no focus
+  events and are typed into as normal.
+
+What has been run: under WSLg on Ubuntu 24.04, with session accessibility off,
+a GTK 3 `GtkEntry` and a GTK 4 `GtkPasswordEntry` were reported as password
+fields and their unmasked counterparts as ordinary ones, and with no session
+bus the guard reported itself unavailable. A GTK 3 password entry that already
+had focus before Echo's listener started was also recognised, from a one-off
+walk of the active window at startup rather than a focus event. That was the
+detection call, not a full dictation into the app. Chromium, Electron, Firefox,
+Qt, and real GNOME, KDE or wlroots desktops are unverified.
 
 ### Support tiers — what has actually been run
 
@@ -120,11 +160,12 @@ somebody dictating into twenty applications, so here is the honest state:
 
 | Platform | Tier | What that means |
 |---|---|---|
-| **Windows x64** | Tested | Developed and used here. Text injection, the password-field guard, the tray, offline Whisper and the GPU pack have all been exercised by hand. |
+| **Windows x64** | Tested | Developed and used here. Text injection, the tray, offline Whisper and the GPU pack have all been exercised by hand. The password-field guard's detection was checked on Windows 11 25H2 (build 26200) against WinForms, WPF, Edge, Chrome and the `Get-Credential` prompt — see [the guard](#how-far-the-password-field-guard-has-been-tested) for what was and was not covered. |
 | **macOS arm64** | Community | Compiles, unit-tests and self-tests in CI on a macOS runner, but has not been driven by hand. Accessibility and Automation permissions, and the password-field guard, are unverified against real applications. Bug reports welcome and expected. |
 | **macOS x86_64** | Unsupported | No build exists. `ort` ships no prebuilt ONNX Runtime for Intel macOS, so Silero VAD and the wake word cannot link. See [docs/RELEASING.md](docs/RELEASING.md). |
-| **Linux X11** | Community | Needs `xdotool`. No password-field detection on any Linux — the question needs AT-SPI over D-Bus. |
+| **Linux X11** | Community | Needs `xdotool`. Password-field detection goes through AT-SPI: GTK apps only unless session accessibility is on, nothing without an accessibility bus, and unverified in browsers and Qt apps. |
 | **Linux Wayland** | Degraded | Needs `ydotool` plus the `ydotoold` daemon, and some compositors refuse synthetic input outright. Per-app profiles do not work: no Wayland protocol reports which window is focused. |
+| **Linux arm64** | Community | Built from the release after v0.4.0, and compiled and unit-tested in CI on an arm64 runner. Same requirements as x86_64 Linux above; nobody has run it by hand yet. |
 
 If you use Echo on a Community-tier platform and it works, saying so is a
 genuinely useful contribution — the gap is verification, not code.
@@ -138,8 +179,8 @@ link here rather than repeating it.
 |---|---|---|
 | **Windows** | **WebView2 runtime** — preinstalled on Windows 11; on Windows 10 grab the *Evergreen* runtime from [Microsoft](https://developer.microsoft.com/microsoft-edge/webview2/). Typing into other apps needs nothing extra. | Microphone |
 | **macOS** *(Apple Silicon only)* | Nothing. | **Microphone** and **Accessibility**. Without Accessibility, Echo can hear you but cannot type. |
-| **Linux (X11)** | **`xdotool`**, for typing into other apps. The AppImage also needs FUSE — `sudo apt install libfuse2` on Debian/Ubuntu; a `.deb` and an `.rpm` are attached to each release too. | Microphone |
-| **Linux (Wayland)** | **`ydotool`** *and* a running **`ydotoold`** daemon. Some compositors refuse synthetic input whatever you install. | Microphone |
+| **Linux (X11)** | **`xdotool`**, for typing into other apps. The AppImage also needs FUSE — `sudo apt install libfuse2` on Debian/Ubuntu; a `.deb` and an `.rpm` are attached to each release too. The password-field guard needs the AT-SPI bus (`at-spi2-core`, standard on GNOME, KDE and most full desktops). | Microphone. For the password-field guard to cover browsers, Electron and Qt apps: session accessibility on (see [the guard](#how-far-the-password-field-guard-has-been-tested)) |
+| **Linux (Wayland)** | **`ydotool`** *and* a running **`ydotoold`** daemon. Some compositors refuse synthetic input whatever you install. The password-field guard needs `at-spi2-core`, as on X11. | Microphone. Session accessibility, as on X11 |
 
 **Why Apple Silicon only:** the ONNX Runtime behind Silero VAD and the wake word
 publishes no Intel-macOS binaries, so there is no x86_64 build — an Intel Mac
@@ -153,9 +194,13 @@ and the global hotkey.
 
 ### Updating
 
-Auto-update is built in but **switched off** until release signing is set up
-(see [docs/RELEASING.md](docs/RELEASING.md)). Until then, re-run the install
-command above to upgrade.
+Echo checks for a new release on launch (switchable under About) and installs
+it once you agree. Updates are signed, and an update that fails verification is
+refused.
+
+**Installed v0.4.0 or earlier?** Those builds shipped without the updater key, so
+they cannot verify an update and never will. Re-run the install command above
+once; every version after that updates itself.
 
 ---
 

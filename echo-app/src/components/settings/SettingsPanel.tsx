@@ -297,6 +297,14 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
     queryKey: ["spoken-punctuation-languages"],
     queryFn: commands.spokenPunctuationLanguages,
   });
+  const { data: cleanupLanguages = [] } = useQuery({
+    queryKey: ["cleanup-languages"],
+    queryFn: commands.cleanupLanguages,
+  });
+  const { data: numberLanguages = [] } = useQuery({
+    queryKey: ["number-languages"],
+    queryFn: commands.numberLanguages,
+  });
   const { data: clipboardSettle } = useQuery({
     queryKey: ["setting", "clipboard_settle_ms"],
     queryFn: () => commands.getSetting("clipboard_settle_ms"),
@@ -576,7 +584,7 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
       {on("settings.general", ["language", "interface", "translation", "locale", "english", "español", "deutsch", "français"]) && (
         <Group
           title={label("settings.general", "Interface language")}
-          hint="This is the language Echo's own buttons and labels use. It has no effect on which language it transcribes — that is set under Engine."
+          hint="This is the language Echo's own buttons and labels use. It has no effect on which language it transcribes — that is set under Voice engine."
         >
           {/* No Field label: the group is already called Interface language,
               and repeating it above the select said the same word twice. */}
@@ -928,10 +936,10 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
 
       {/* ---- Engine · Tools ---------------------------------------------- */}
 
-      {on("engine.tools", ["import", "file", "audio file", "recording", "mp3", "wav", "transcribe file", "voice memo"]) && (
+      {on("engine.tools", ["import", "file", "audio file", "recording", "mp3", "wav", "transcribe file", "voice memo", "speakers", "diarization", "meeting", "interview"]) && (
         <Group
           title={label("engine.tools", "Transcribe a file")}
-          hint="Uses the offline engine and the model selected above, so nothing is uploaded."
+          hint="Uses the offline engine and the model selected above, so nothing is uploaded — unless you ask for speaker labels, which need a cloud engine."
         >
           <AudioImport />
         </Group>
@@ -1042,9 +1050,11 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
         <Group
           title={label("output.insert", "Password fields")}
           hint={
-            secureDetection
-              ? "Echo asks the accessibility API whether the focused control is masked. Where it can't tell, it types as normal — refusing whenever the system stays quiet would break dictation in every app that publishes no accessibility tree."
-              : "This system can't answer the question, so the guard never fires here. On Linux it would need AT-SPI over D-Bus, and under Wayland usually not even then. Nothing is protecting you — that's why it says so rather than showing a switch that does nothing."
+            secureDetection === "unavailable"
+              ? "This system can't answer the question, so the guard never fires here. On Linux it needs the AT-SPI accessibility bus, which this session isn't running — common on minimal window managers and some Wayland setups. Nothing is protecting you — that's why it says so rather than showing a switch that does nothing."
+              : secureDetection === "partial"
+                ? "Echo asks AT-SPI whether the focused control is masked, but accessibility is switched off for this session, so only GTK apps answer. Browsers, Electron and Qt apps publish nothing and Echo types into them as normal. Echo won't switch it on for you: it makes every app on the desktop maintain an accessibility tree, which costs memory and CPU. To opt in on GNOME, run gsettings set org.gnome.desktop.interface toolkit-accessibility true, then restart your browser."
+                : "Echo asks the accessibility API whether the focused control is masked. Where it can't tell, it types as normal — refusing whenever the system stays quiet would break dictation in every app that publishes no accessibility tree."
           }
         >
           <Check
@@ -1055,8 +1065,11 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
           >
             Never type into a password field — and never save it to History
           </Check>
-          {!secureDetection && (
+          {secureDetection === "unavailable" && (
             <Problem>Not available on this system: the guard can't detect anything here.</Problem>
+          )}
+          {secureDetection === "partial" && (
+            <Problem>Only GTK apps are covered here: your browser's password fields are not.</Problem>
           )}
         </Group>
       )}
@@ -1074,7 +1087,17 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
             onChange={(v) =>
               setFormatSetting.mutate({ key: "auto_edit", value: v ? "true" : "false" })
             }
-            hint="Only sounds nobody means to write. Words that are sometimes filler — “like”, “actually”, “basically” — are left alone, because no rule can tell when you meant them. English only."
+            hint={
+              <p>
+                Only sounds nobody means to write. Words that are sometimes
+                filler — “like”, “actually”, “basically” — are left alone,
+                because no rule can tell when you meant them. Works in{" "}
+                {cleanupLanguages
+                  .map((c) => languages.find((l) => l.code === c)?.label ?? c)
+                  .join(", ")}
+                . Other languages are left exactly as spoken.
+              </p>
+            }
           >
             Drop “um”, “uh” and stuttered words
           </Check>
@@ -1084,7 +1107,7 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
             onChange={(v) =>
               setFormatSetting.mutate({ key: "auto_edit_llm", value: v ? "true" : "false" })
             }
-            hint="“Send it Tuesday, no, Wednesday” becomes “Send it Wednesday”. Uses the Command mode model on every utterance, so it costs latency — and it is the one setting here that changes the words you said. Off by default for that reason. Your History keeps what you actually said either way."
+            hint="“Send it Tuesday, no, Wednesday” becomes “Send it Wednesday”. Uses the Command mode model on every utterance, so it costs latency — and it is the one setting here that changes the words you said. Off by default for that reason. Your History keeps what you actually said either way, unless a per-app writing style rewrote it."
           >
             Also let the model fix self-corrections
           </Check>
@@ -1125,7 +1148,16 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
             onChange={(v) =>
               setFormatSetting.mutate({ key: "format_numbers", value: v ? "true" : "false" })
             }
-            hint="English only: number words are grammar, not a word list."
+            hint={
+              <p>
+                Works in{" "}
+                {numberLanguages
+                  .map((c) => languages.find((l) => l.code === c)?.label ?? c)
+                  .join(", ")}
+                . Number words are grammar, not a word list, so other languages
+                are left exactly as spoken.
+              </p>
+            }
           >
             Write numbers, times and units as digits — “twenty five” → 25
           </Check>
@@ -1257,7 +1289,7 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
       {on("privacy", ["learn", "auto-learn", "corrections", "dictionary", "teach"]) && (
         <Group
           title={label("privacy", "Learning")}
-          hint="When you fix a word in History, Echo can add that correction to your dictionary so the mistake stops happening. Only confident, small corrections are kept, and every one shows up in the Dictionary where you can remove it."
+          hint="When you fix a word in History, Echo can add that correction to your dictionary so the mistake stops happening. Only confident, small corrections are kept, and every one shows up in Custom dictionary, where you can remove it."
         >
           <Check
             checked={autoLearn !== "false"}

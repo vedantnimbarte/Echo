@@ -1,7 +1,7 @@
 # Releasing Echo
 
 Tagging a commit with `v*` (e.g. `v0.1.0`) triggers
-`.github/workflows/release.yml`, which builds Windows / macOS (universal) / Linux
+`.github/workflows/release.yml`, which builds Windows / macOS arm64 / Linux (x86_64 and arm64)
 installers, stages the offline `whisper-cli` into each bundle, and creates a
 **draft** GitHub Release with the artifacts.
 
@@ -9,16 +9,23 @@ A second job then checksums every artifact, attaches `SHA256SUMS.txt` (the
 install scripts verify against it), and commits the filled-in packaging
 manifests back to `main`.
 
-## Auto-update is currently OFF
+## Auto-update is ON
 
-`bundle.createUpdaterArtifacts` is **false** and `plugins.updater.pubkey` is
-empty, so releases ship no `latest.json` and installed copies never check for
-updates. Users upgrade by re-running the install script.
+`bundle.createUpdaterArtifacts` is **true** and `plugins.updater.pubkey` holds
+the public key, so every release attaches `.sig` files and a `latest.json`, and
+installed copies check `releases/latest/download/latest.json` on launch.
 
-This is deliberate: with `createUpdaterArtifacts` on and no key, `tauri build`
-fails outright. Turning updates on is the one-time setup below.
+**The two `TAURI_SIGNING_PRIVATE_KEY*` repository secrets must exist before a
+tag is pushed.** With `createUpdaterArtifacts` on and no key, `tauri build`
+fails outright on every platform. Installs of v0.4.0 and earlier have no public
+key and must reinstall once.
 
-## Turning auto-update on
+The private key and its password live outside the repository, at
+`~/.tauri/echo-updater.key` and `~/.tauri/echo-updater.password` on the machine
+that generated them. **Back both up.** Lose them and no installed copy can ever
+be updated again. Every user has to reinstall onto a build with a new key.
+
+## Setting up auto-update from scratch (done once, kept for key rotation)
 
 The updater only installs builds it can cryptographically verify, so it needs a
 signing keypair.
@@ -47,12 +54,7 @@ signing keypair.
 
 4. Flip `bundle.createUpdaterArtifacts` back to `true` in `tauri.conf.json`.
 
-5. Flip `UPDATER_CONFIGURED` to `true` in `echo-app/src/update.ts`. Until then
-   the app never calls the updater at all — with no `latest.json` published the
-   plugin logs an ERROR on every launch, before the frontend's `catch` can
-   swallow it.
-
-Commit the pubkey and the flag together; releases from then on sign updates and
+Commit the pubkey and the flag in one commit; releases from then on sign updates and
 the app checks on launch. Installs made *before* this change won't auto-update
 to it — they have no public key to verify against — so those users reinstall
 once.
@@ -107,8 +109,8 @@ ECHO_VERSION=v0.1.0 sh scripts/install.sh
 ```
 
 A failure here usually means an asset name changed — the scripts match on
-`.dmg` / `.AppImage` / `-setup.exe`, and `packaging/homebrew/echo.rb` builds its
-URL from `Echo_#{version}_universal.dmg`.
+`.dmg` / `_amd64.AppImage` / `_aarch64.AppImage` / `-setup.exe`, and `packaging/homebrew/echo.rb` builds its
+URL from `Echo_#{version}_aarch64.dmg`.
 
 ## Platform coverage
 
@@ -118,7 +120,7 @@ URL from `Echo_#{version}_universal.dmg`.
 | Linux x86_64 | ✅ | `.AppImage`, `.deb`, `.rpm` |
 | macOS arm64 | ✅ | `.dmg` |
 | macOS x86_64 | ❌ | `ort` ships no prebuilt ONNX Runtime for `x86_64-apple-darwin` (see `ort-sys`'s `build/download/dist.txt`, which lists `aarch64-apple-darwin` alone). A universal build fails at link time. Restoring Intel support means compiling ONNX Runtime from source and linking `ort` against it. |
-| Linux aarch64 | ❌ | Not built yet; `ort` does support the target. |
+| Linux aarch64 | ✅ | `.AppImage`, `.deb`, `.rpm`, built on a native `ubuntu-24.04-arm` runner. Compiled and unit-tested in CI; not driven by hand. |
 
 ## Code signing (OS-level, separate from updater signing)
 

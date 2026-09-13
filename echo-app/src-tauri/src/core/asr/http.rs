@@ -78,17 +78,30 @@ pub const POLL_DEADLINE: Duration = Duration::from_secs(120);
 /// clock, long enough not to spend a request per frame.
 pub const POLL_INTERVAL: Duration = Duration::from_millis(400);
 
-/// Poll `check` until it yields a value, or give up at [`POLL_DEADLINE`].
+/// The ceiling on one request, or one polled job, when importing a recording.
+///
+/// [`REQUEST_TIMEOUT`] and [`POLL_DEADLINE`] are sized for an utterance, and a
+/// meeting recording is not one: uploading an hour of audio alone can outlast
+/// thirty seconds, and a queued job for it legitimately takes minutes. Nobody
+/// is waiting mid-sentence on an import, so the only job of this number is to
+/// turn a request that will never answer into an error eventually.
+pub const IMPORT_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+
+/// Poll `check` until it yields a value, or give up after `limit`.
 ///
 /// `check` returns `Ok(None)` for "still working" and `Ok(Some(_))` once there
 /// is an answer; an `Err` aborts immediately, because a job that failed will
 /// not un-fail by being asked again.
-pub async fn poll_until<T, F, Fut>(what: &str, mut check: F) -> crate::error::Result<T>
+pub async fn poll_until<T, F, Fut>(
+    what: &str,
+    limit: Duration,
+    mut check: F,
+) -> crate::error::Result<T>
 where
     F: FnMut() -> Fut,
     Fut: std::future::Future<Output = crate::error::Result<Option<T>>>,
 {
-    let deadline = tokio::time::Instant::now() + POLL_DEADLINE;
+    let deadline = tokio::time::Instant::now() + limit;
     loop {
         if let Some(value) = check().await? {
             return Ok(value);
@@ -96,7 +109,7 @@ where
         if tokio::time::Instant::now() >= deadline {
             return Err(crate::error::EchoError::AsrProvider(format!(
                 "{what} did not finish within {}s",
-                POLL_DEADLINE.as_secs()
+                limit.as_secs()
             )));
         }
         tokio::time::sleep(POLL_INTERVAL).await;
@@ -123,7 +136,7 @@ mod tests {
     #[tokio::test]
     async fn polling_returns_the_first_real_answer() {
         let mut calls = 0;
-        let got: i32 = poll_until("job", || {
+        let got: i32 = poll_until("job", POLL_DEADLINE, || {
             calls += 1;
             let n = calls;
             async move { Ok(if n >= 3 { Some(n) } else { None }) }
@@ -136,7 +149,7 @@ mod tests {
     #[tokio::test]
     async fn a_failed_job_stops_immediately_instead_of_being_re_asked() {
         let mut calls = 0;
-        let err = poll_until::<i32, _, _>("job", || {
+        let err = poll_until::<i32, _, _>("job", POLL_DEADLINE, || {
             calls += 1;
             async move { Err(crate::error::EchoError::AsrProvider("bad audio".into())) }
         })

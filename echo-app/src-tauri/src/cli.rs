@@ -41,6 +41,13 @@ fn language() -> Option<String> {
     args.get(i + 1).filter(|a| !a.starts_with("--")).cloned()
 }
 
+/// Whether `--speakers` was given: label who spoke, via the active cloud
+/// engine. Off by default, because it uploads the file — see
+/// [`crate::commands::import`].
+fn speakers() -> bool {
+    std::env::args().any(|a| a == "--speakers")
+}
+
 /// Transcribe the file named on the command line, print it, and exit.
 ///
 /// Never returns: the process exists to answer one question.
@@ -53,9 +60,10 @@ pub fn run(app: &AppHandle) -> ! {
 
     let handle = app.clone();
     let language = language();
+    let speakers = speakers();
     let result = tauri::async_runtime::block_on(async move {
         let state = handle.state::<crate::state::AppState>();
-        crate::commands::import::transcribe_path(&state, &path, language.as_deref()).await
+        crate::commands::import::transcribe_path(&state, &path, language.as_deref(), speakers).await
     });
 
     match result {

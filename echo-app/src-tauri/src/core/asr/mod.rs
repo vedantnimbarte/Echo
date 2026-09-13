@@ -82,6 +82,36 @@ pub trait AsrProvider: Send + Sync {
     /// Additive with a default so an existing plugin keeps compiling: the
     /// contract is "an unimplemented provider behaves as it always did".
     fn set_partials_wanted(&self, _wanted: bool) {}
+
+    /// Transcribe a whole recording and say who spoke each part.
+    ///
+    /// Takes the file's own bytes and MIME type rather than 16 kHz PCM: every
+    /// provider that diarizes also decodes mp3, ogg and flac itself, so there
+    /// is nothing gained by decoding a twenty-minute file locally only to
+    /// upload a wav several times its size.
+    ///
+    /// Returns turns in spoken order as `(speaker, text)`. The speaker is the
+    /// provider's own id — `0`, `"A"`, `"S1"`, `"speaker_0"` — and naming them
+    /// "Speaker 1, 2, …" is left to [`crate::commands::import`], so the ids
+    /// never have to agree with each other. Consecutive turns may share a
+    /// speaker; merging them is the caller's job too.
+    ///
+    /// Only for importing a file. Live dictation never asks for this: typing
+    /// "Speaker 1:" into someone's email mid-sentence helps nobody.
+    ///
+    /// Additive with a default for the same reason as `set_partials_wanted`:
+    /// a provider that cannot do it keeps compiling and says so plainly.
+    async fn transcribe_speakers(
+        &self,
+        _audio: Vec<u8>,
+        _mime: &str,
+        _language: Option<&str>,
+    ) -> crate::error::Result<Vec<(String, String)>> {
+        Err(crate::error::EchoError::Config(format!(
+            "{} does not label speakers.",
+            self.name()
+        )))
+    }
 }
 
 /// The buffered streaming loop: accumulate speech, transcribe one utterance at

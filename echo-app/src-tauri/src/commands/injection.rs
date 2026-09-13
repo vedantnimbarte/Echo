@@ -18,13 +18,18 @@ pub fn check_accessibility_permission() -> bool {
     }
 }
 
-/// Whether this platform can tell a password field from an ordinary one.
+/// Whether this machine can tell a password field from an ordinary one, and
+/// for which apps.
 ///
-/// Surfaced next to the guard's toggle: on Linux the answer is no, and a user
-/// who believes otherwise is worse off than one who knows.
+/// Surfaced next to the guard's toggle: on Linux the answer depends on the
+/// session, and a user who believes they are protected when they are not is
+/// worse off than one who knows. Asking costs a D-Bus round trip there, so it
+/// runs off the async runtime.
 #[tauri::command]
-pub fn secure_field_detection() -> bool {
-    crate::core::field::detection_available()
+pub async fn secure_field_detection() -> crate::core::field::Detection {
+    tokio::task::spawn_blocking(crate::core::field::detection)
+        .await
+        .unwrap_or(crate::core::field::Detection::Unavailable)
 }
 
 /// Type `text` into the focused application. Used by the History panel to

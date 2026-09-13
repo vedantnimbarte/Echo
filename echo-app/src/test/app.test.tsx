@@ -9,9 +9,10 @@
 //! restatement of the markup and has to be rewritten every time the copy changes.
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { listen } from "@tauri-apps/api/event";
 
 import { settings, invoked, ANSWERS } from "./setup";
 import App from "../App";
@@ -56,6 +57,26 @@ describe("the app shell", () => {
     for (const page of ["Settings", "Voice engine", "Output", "Privacy", "About"]) {
       expect((await screen.findAllByText(page)).length).toBeGreaterThan(0);
     }
+  });
+
+  // The pill is a separate webview, so its engine tag cannot set this window's
+  // page — it asks, and this is the half that has to answer. The ask is only
+  // wired in Pill.tsx; what is pinned here is that asking lands somewhere.
+  it("goes to the page another window asks for", async () => {
+    vi.mocked(listen).mockClear();
+    mount(<App />);
+    const engine = await screen.findByRole("button", { name: "Voice engine" });
+    expect(engine.getAttribute("aria-current")).toBeNull();
+
+    const calls = vi.mocked(listen).mock.calls.filter(([name]) => name === "echo://open-page");
+    expect(calls.length).toBeGreaterThan(0);
+    await act(async () => {
+      for (const [, handler] of calls) {
+        (handler as (e: unknown) => void)({ payload: "engine" });
+      }
+    });
+
+    expect(engine.getAttribute("aria-current")).toBe("page");
   });
 
   it("shows onboarding to someone who has not finished it", async () => {
@@ -177,6 +198,37 @@ describe("every settings page", () => {
     await openSection(user, "Tools");
     expect(await screen.findByText(/Choose an audio file/i)).toBeTruthy();
     expect(screen.queryByText(/stopped before it could transcribe/i)).toBeNull();
+  });
+
+  // The style is the one free-text override on a profile, and the switch that
+  // gates it has to say where the text goes.
+  it("shows an app profile's writing style and the switch that gates it", async () => {
+    const profile = {
+      id: 7,
+      app_match: "slack.exe",
+      label: null,
+      auto_inject: null,
+      injection_method: null,
+      stream_partials: null,
+      formatting: null,
+      profile_id: null,
+      enabled: true,
+      style: "casual, lowercase is fine",
+    };
+    ANSWERS.list_app_profiles = [profile];
+    try {
+      settings.set("command_llm_provider", "openai");
+      const user = userEvent.setup();
+      mount(<SettingsPanel page="output" />);
+      await openSection(user, "Apps");
+
+      const field = await screen.findByLabelText("Writing style");
+      expect((field as HTMLInputElement).value).toBe("casual, lowercase is fine");
+      expect(await screen.findByText(/Rewrite text in each app's style/)).toBeTruthy();
+      expect(await screen.findByText(/sent to OpenAI/)).toBeTruthy();
+    } finally {
+      ANSWERS.list_app_profiles = [];
+    }
   });
 
   it("offers back audio a crash interrupted", async () => {
@@ -301,14 +353,44 @@ describe("the plugins panel", () => {
     expect(await screen.findByText(/Five steps/i)).toBeTruthy();
   });
 
-  // The panel used to promise transcription engines and output targets, which
-  // the host does not dispatch to. The guide says so, and this pins the saying.
-  it("says which parts of the plugin API actually run", async () => {
+  // The guide once had to warn that capabilities were never called. They are
+  // now, and an author needs to know the one line that switches one on.
+  it("tells an author how a capability gets called", async () => {
     const user = userEvent.setup();
     mount(<PluginsPanel />);
     await openSection(user, "Build one");
 
-    expect(await screen.findByText(/Echo will not yet call it/i)).toBeTruthy();
+    expect(await screen.findByText(/without that line Echo never calls the trait/i)).toBeTruthy();
+    // Each capability, with when it runs.
+    for (const capability of ["AudioPlugin", "AsrPlugin", "DictionaryPlugin", "OutputPlugin"]) {
+      expect(screen.getByText(new RegExp(`^${capability} ·`))).toBeTruthy();
+    }
+    expect(screen.queryByText(/will not yet call it/i)).toBeNull();
+  });
+
+  // A plugin engine is only useful if someone can pick it, and it is never
+  // picked for them: offering an engine is not the same as taking dictation over.
+  it("lets an enabled engine plugin be chosen for dictation", async () => {
+    ANSWERS.list_plugins = [
+      {
+        name: "engine",
+        version: "0.1.0",
+        description: "",
+        author: "",
+        enabled: true,
+        permissions: ["asr"],
+      },
+    ];
+    try {
+      const user = userEvent.setup();
+      mount(<PluginsPanel />);
+
+      await user.click(await screen.findByRole("button", { name: "Use for dictation" }));
+      await waitFor(() => expect(settings.get("asr_provider")).toBe("plugin:engine"));
+      expect(await screen.findByText("Transcribing")).toBeTruthy();
+    } finally {
+      ANSWERS.list_plugins = [];
+    }
   });
 
   it("scaffolds into the folder that was picked, under the name that was typed", async () => {
@@ -343,6 +425,34 @@ describe("the plugins panel", () => {
   });
 });
 
+describe("dictionary sync", () => {
+  // The warning is asserted, not just the section: it is the sentence someone
+  // has to read before pointing Echo at a folder other people can open.
+  it("mounts on the dictionary page and says the file is unencrypted", async () => {
+    const user = userEvent.setup();
+    mount(<DictionaryPanel />);
+    await openSection(user, "Sync");
+    expect(await screen.findByRole("heading", { name: /Sync/ })).toBeTruthy();
+    expect(await screen.findByText(/not encrypted/i)).toBeTruthy();
+    expect(await screen.findByText(/Last synced:\s*never/)).toBeTruthy();
+    const button = await screen.findByRole("button", { name: /Sync now/ });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("syncs from the button once a folder is chosen and sync is on", async () => {
+    settings.set("dictionary_sync_folder", "/home/you/Dropbox");
+    settings.set("dictionary_sync_enabled", "true");
+    const user = userEvent.setup();
+    mount(<DictionaryPanel />);
+    await openSection(user, "Sync");
+
+    const button = await screen.findByRole("button", { name: /Sync now/ });
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    await user.click(button);
+    await waitFor(() => expect(invoked).toContain("sync_dictionary_now"));
+  });
+});
+
 describe("the other panels", () => {
   it.each([
     ["dictionary", <DictionaryPanel key="d" />],
@@ -354,6 +464,16 @@ describe("the other panels", () => {
     await waitFor(() => {
       expect(container.textContent?.length ?? 0).toBeGreaterThan(0);
     });
+  });
+
+  // Snippets live behind a tab, so the panel test above never renders them.
+  it("opens the snippets section and shows a saved snippet", async () => {
+    const user = userEvent.setup();
+    mount(<DictionaryPanel />);
+    await openSection(user, "Snippets");
+    expect(await screen.findByDisplayValue("sign off")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Add snippet/ })).toBeTruthy();
+    expect(invoked).toContain("list_snippets");
   });
 
   // The charts are the part that can throw on a shape it did not expect — an

@@ -104,7 +104,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-echo-sdk = "0.1"
+echo-sdk = "0.2"
 # Working inside a clone of the Echo repository instead? Depend on the crate
 # directly and you are guaranteed the version the host was built against:
 # echo-sdk = {{ path = "../echo-app/src-tauri/echo-sdk" }}
@@ -115,15 +115,42 @@ echo-sdk = "0.1"
         r#"//! {name} — an Echo plugin.
 //!
 //! Echo calls `on_load` once when the plugin is enabled and `on_unload` when it
-//! is disabled or Echo quits. This one writes a line into its own data
-//! directory so there is something to look at after the first install.
+//! is disabled or Echo quits. In between, because this plugin returns itself
+//! from `as_output`, Echo tells it about every transcript it delivers.
+//!
+//! What it does with them is deliberately dull: it notes how long each one was
+//! and which app it went to, in a log in its data directory. The words
+//! themselves are not written down — an example you install to see what a
+//! plugin can do should not quietly start keeping a copy of your dictation.
+//! `transcript.text` is right there when yours has a reason to.
 
 use std::io::Write;
+use std::path::PathBuf;
+use std::sync::OnceLock;
 
-use echo_sdk::{{export_plugin, Plugin, PluginContext, PluginError, PluginResult}};
+use echo_sdk::{{
+    export_plugin, OutputPlugin, Plugin, PluginContext, PluginError, PluginResult, Transcript,
+}};
 
 #[derive(Default)]
-struct {ty};
+struct {ty} {{
+    /// Where the log lives, learned in `on_load`. Every hook takes `&self`
+    /// because Echo calls them from more than one thread, so anything a plugin
+    /// learns after it is created goes in a cell like this one.
+    log: OnceLock<PathBuf>,
+}}
+
+impl {ty} {{
+    fn append(&self, line: &str) -> PluginResult<()> {{
+        let path = self.log.get().ok_or("not loaded yet")?;
+        let mut log = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .map_err(|e| PluginError::new(e.to_string()))?;
+        writeln!(log, "{{line}}").map_err(|e| PluginError::new(e.to_string()))
+    }}
+}}
 
 impl Plugin for {ty} {{
     fn name(&self) -> &str {{
@@ -136,27 +163,38 @@ impl Plugin for {ty} {{
 
     fn on_load(&self, ctx: &PluginContext) -> PluginResult<()> {{
         // `ctx.data_dir` is the directory Echo hands you to keep files in.
-        // Everything here returns a PluginError rather than panicking: a panic
-        // crosses the library boundary into Echo and takes the app with it.
+        // Everything here returns a PluginError rather than panicking. Echo
+        // survives a panic — `export_plugin!` catches it before it leaves the
+        // library — but an error can say what went wrong.
         std::fs::create_dir_all(&ctx.data_dir).map_err(|e| PluginError::new(e.to_string()))?;
-
-        let mut log = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(ctx.data_dir.join("{name}.log"))
-            .map_err(|e| PluginError::new(e.to_string()))?;
-
-        writeln!(log, "{name} loaded").map_err(|e| PluginError::new(e.to_string()))?;
-        Ok(())
+        let _ = self.log.set(ctx.data_dir.join("{name}.log"));
+        self.append("{name} loaded")
     }}
 
     fn on_unload(&self) -> PluginResult<()> {{
         Ok(())
     }}
+
+    // The line that makes this an output plugin. Leave it out and Echo never
+    // calls `on_transcript`, however carefully it is written.
+    fn as_output(&self) -> Option<&dyn OutputPlugin> {{
+        Some(self)
+    }}
 }}
 
-// Emits `echo_plugin_create`, the one symbol Echo looks up after opening the
-// library. Write it by hand and you own the unsafe; this macro does not.
+impl OutputPlugin for {ty} {{
+    // Called after the text has been typed, on a thread of its own, so nothing
+    // in here can slow dictation down or lose what was said.
+    fn on_transcript(&self, transcript: &Transcript) -> PluginResult<()> {{
+        let app = transcript.app.as_deref().unwrap_or("an unknown app");
+        let chars = transcript.text.chars().count();
+        self.append(&format!("delivered {{chars}} characters to {{app}}"))
+    }}
+}}
+
+// Emits `echo_plugin_create` and `echo_plugin_abi_version`, the symbols Echo
+// looks up after opening the library. Write them by hand and you own the
+// unsafe, and the panic handling; this macro does both.
 export_plugin!({ty});
 "#
     );
@@ -165,9 +203,9 @@ export_plugin!({ty});
         r#"{{
   "name": "{name}",
   "version": "0.1.0",
-  "description": "An Echo plugin",
+  "description": "Notes the length of each transcript Echo delivers",
   "author": "",
-  "permissions": [],
+  "permissions": ["output"],
   "entry": "{entry}"
 }}
 "#
@@ -177,6 +215,13 @@ export_plugin!({ty});
         r#"# {name}
 
 An [Echo](https://github.com/vedantnimbarte/Echo) plugin.
+
+## What it does
+
+An output plugin: after each transcript is typed, it appends a line to
+`{name}.log` in its data directory saying how many characters went to which
+app. Swap `on_transcript` for your own, or return `Some(self)` from
+`as_audio`, `as_dictionary` or `as_asr` and implement that trait instead.
 
 ## Build
 
@@ -339,7 +384,9 @@ mod tests {
 
         assert_eq!(manifest.name, "hello-echo");
         assert_eq!(manifest.entry, artifact_name("hello-echo"));
-        assert!(manifest.permissions.is_empty());
+        // The template implements output, and the manifest is what the user is
+        // shown before installing — the two must not disagree.
+        assert_eq!(manifest.permissions, [echo_sdk::PluginPermission::Output]);
     }
 
     #[test]
@@ -395,6 +442,11 @@ mod tests {
         let manifest: crate::core::plugins::PluginManifest = serde_json::from_str(&json).unwrap();
 
         assert_eq!(manifest.name, "hello-echo");
+        assert_eq!(
+            manifest.permissions,
+            [echo_sdk::PluginPermission::Output],
+            "the example implements output and must say so"
+        );
         assert!(
             ["hello_echo.dll", "libhello_echo.dylib", "libhello_echo.so"]
                 .contains(&manifest.entry.as_str()),

@@ -1,8 +1,8 @@
 {
   "name": "hello-echo",
   "version": "0.1.0",
-  "description": "An Echo plugin",
+  "description": "Notes the length of each transcript Echo delivers",
   "author": "",
-  "permissions": [],
+  "permissions": ["output"],
   "entry": "hello_echo.dll"
 }

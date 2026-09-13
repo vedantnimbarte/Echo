@@ -83,7 +83,7 @@ const GROUPS: Group[] = [
       },
       {
         label: "replacement pipeline",
-        title: "Dictionary",
+        title: "Custom dictionary",
         body: "Names, jargon, and code symbols corrected before the transcript is ever shown. Fix one by hand in History and you can promote that correction into the dictionary permanently.",
       },
     ],
