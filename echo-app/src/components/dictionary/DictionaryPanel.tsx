@@ -163,7 +163,7 @@ export function DictionaryPanel() {
           <Hint label="About profiles">
             Entries with no profile always apply. Put an entry in a profile and
             it only applies while an app using that profile is focused — set
-            that up under Settings → Per-app profiles.
+            that up under Output → Apps.
           </Hint>
         </div>
         <div className="flex gap-1.5">

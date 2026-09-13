@@ -461,7 +461,7 @@ function WakeStep() {
         <Hint label="About skipping the wake word">
           Leaving this off keeps the microphone closed until you press your
           shortcut — the shortcut alone is a complete setup. You can turn a wake
-          word on at any time under Dictation.
+          word on at any time in Settings, under Dictation.
         </Hint>
       </div>
     </div>

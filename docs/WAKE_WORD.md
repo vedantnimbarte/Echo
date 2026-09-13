@@ -2,8 +2,8 @@
 
 Echo can listen for a spoken phrase and start dictating without you touching
 the keyboard. It is **off by default** — the microphone stays closed until you
-press your shortcut, unless you turn this on in Settings → Wake word (or in the
-last step of onboarding).
+press your shortcut, unless you turn this on in Settings → Dictation → Wake word
+(or in the last step of onboarding).
 
 ## How it works
 
@@ -58,7 +58,8 @@ openWakeWord trains from synthetic speech, so you do **not** record yourself.
    in Colab (it wants a GPU; CPU training is slow but works).
 2. Set the target phrase to `hey echo` and run the notebook through to the end.
 3. Download the resulting `.onnx` classifier.
-4. In Echo: Settings → Wake word → **Import custom**, and pick that file.
+4. In Echo: Settings → Dictation → Wake word → **Import custom**, and pick that
+   file.
 
 The import copies it to `<app data>/wake/custom.onnx` and selects it. The shared
 feature models are fetched first if you have not downloaded any phrase yet.
@@ -82,8 +83,8 @@ deliberately.
 
 ## Command mode
 
-Wake word pairs with command mode (Settings → Command mode), which is also off
-by default. With it on, a transcript that opens with your trigger word is sent
+Wake word pairs with command mode (Voice engine → Tools → Command mode), which
+is also off by default. With it on, a transcript that opens with your trigger word is sent
 to an LLM instead of being typed:
 
 - **With text selected** in the focused app, the instruction is applied to that
