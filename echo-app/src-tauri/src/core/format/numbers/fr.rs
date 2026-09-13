@@ -37,10 +37,23 @@
 //! front of "%", and a line break between a number and its unit is the one
 //! thing every style guide forbids.
 //!
+//! **Ordinals convert only as compounds**, as in English: "vingt-cinquième" is
+//! "25e", "trente et unième" "31e", "deux cent vingt-cinquième" "225e" — the
+//! short form the Imprimerie nationale gives, and never "25ème". A lone
+//! "premier", "deuxième", "second" or "vingtième" stays a word: "le premier
+//! venu" and "en second lieu" are prose, the same reason a lone cardinal stays.
+//! Dates need nothing more, because French dates use cardinals ("le vingt-cinq
+//! juin" → "le 25 juin") except the first, and "le premier juin" is written in
+//! letters as often as "1er". The ordinal's last piece must be below a hundred:
+//! "deux centièmes" (2/100) sounds exactly like "deux centième", so hundredths
+//! and thousandths stay words. Plurals ("trois vingt-cinquièmes") are
+//! fractions, and so is a singular after "un"/"une" ("un vingt-cinquième de la
+//! population"), so both stay too.
+//!
 //! ponytail: left as words, each for a reason that costs little: "million"
 //! and "milliard" (French writes "2 millions", which is what leaving them
-//! gives once the multiplier is converted), ordinals ("vingt-cinquième", "le
-//! premier"), decimals said with "virgule" (the punctuation stage owns that
+//! gives once the multiplier is converted), lone ordinals and the fractions
+//! above, "1er" for "premier", decimals said with "virgule" (the punctuation stage owns that
 //! word), negatives ("moins cinq degrés"), and clock times other than "N
 //! heure(s) M", "et demie" and "et quart" ("midi", "moins le quart").
 
@@ -84,13 +97,17 @@ fn apply_line(line: &str) -> String {
 
     while i < words.len() {
         // A time first: "trois heures vingt" is 3 h 20, not 3 and a stray 20.
-        let found = match_time(&words, &keys, i).or_else(|| {
-            let (len, value, pieces) = cardinal_at(&words, &keys, i)?;
-            // A unit behind settles the ambiguity even for one word.
-            match_unit(&words, &keys, i, len, value)
-                // Otherwise only a number spoken in several pieces is digits.
-                .or_else(|| (pieces > 1).then(|| (len, grouped(value))))
-        });
+        // An ordinal before a cardinal, which would otherwise convert the
+        // "deux cent" of "deux cent vingt-cinquième" and strand the rest.
+        let found = match_time(&words, &keys, i)
+            .or_else(|| match_ordinal(&words, &keys, i))
+            .or_else(|| {
+                let (len, value, pieces) = cardinal_at(&words, &keys, i)?;
+                // A unit behind settles the ambiguity even for one word.
+                match_unit(&words, &keys, i, len, value)
+                    // Otherwise only a number spoken in several pieces is digits.
+                    .or_else(|| (pieces > 1).then(|| (len, grouped(value))))
+            });
         match found {
             Some((len, written)) => {
                 // The decoder's own punctuation around the span survives it.
@@ -313,6 +330,75 @@ fn match_time(words: &[&str], keys: &[String], i: usize) -> Option<(usize, Strin
     joined(&words[i..i + len]).then(|| (len, format!("{hour}\u{a0}h\u{a0}{minute:02}")))
 }
 
+/// A compound ordinal starting at word `i`: "vingt-cinquième" → "25e",
+/// "trente et unième" → "31e". See the module docs for what stays a word.
+fn match_ordinal(words: &[&str], keys: &[String], i: usize) -> Option<(usize, String)> {
+    // "un vingt-cinquième" is a fraction as often as "a 25th".
+    if i > 0 && matches!(keys[i - 1].as_str(), "un" | "une") {
+        return None;
+    }
+    let mut pieces: Vec<&str> = Vec::new();
+    for n in i..keys.len() {
+        if n > i && !lead(words[n]).is_empty() {
+            return None;
+        }
+        let parts: Vec<&str> = keys[n].split('-').collect();
+        let (last, init) = parts.split_last()?;
+        if init.iter().all(|p| is_piece(p)) {
+            if let Some(cardinal) = ordinal_piece(last) {
+                pieces.extend(init);
+                pieces.push(cardinal);
+                // More than one piece, or it is the lone ordinal that stays.
+                return (pieces.len() > 1)
+                    .then(|| parse(&pieces))
+                    .flatten()
+                    .map(|value| (n + 1 - i, format!("{value}e")));
+            }
+        }
+        if !parts.iter().all(|p| is_piece(p)) || !trail(words[n]).is_empty() {
+            return None;
+        }
+        pieces.extend(parts);
+    }
+    None
+}
+
+/// The cardinal piece an ordinal piece is built on — "cinquième" → "cinq",
+/// "trentième" → "trente" — for anything below a hundred. Singular only: the
+/// plural is a fraction. Whisper drops the accent often enough to accept
+/// "ieme".
+fn ordinal_piece(piece: &str) -> Option<&str> {
+    const DROPS_E: &[&str] = &[
+        "quatre",
+        "onze",
+        "douze",
+        "treize",
+        "quatorze",
+        "quinze",
+        "seize",
+        "trente",
+        "quarante",
+        "cinquante",
+        "soixante",
+        "septante",
+        "huitante",
+        "octante",
+        "nonante",
+    ];
+    let stem = piece
+        .strip_suffix("ième")
+        .or_else(|| piece.strip_suffix("ieme"))?;
+    match stem {
+        "cinqu" => Some("cinq"),
+        "neuv" => Some("neuf"),
+        _ if value(stem).is_some() => Some(stem),
+        _ => DROPS_E
+            .iter()
+            .find(|c| c.strip_suffix('e') == Some(stem))
+            .copied(),
+    }
+}
+
 /// A unit following the `len`-word number at `i`, returning the words spanned
 /// by both and the written form.
 fn match_unit(
@@ -515,6 +601,41 @@ mod tests {
     }
 
     #[test]
+    fn compound_ordinals_become_digits() {
+        assert_eq!(apply("vingt-cinquième"), "25e");
+        assert_eq!(apply("trente et unième"), "31e");
+        assert_eq!(apply("trente-et-unième"), "31e");
+        assert_eq!(apply("soixante-dix-septième"), "77e");
+        assert_eq!(apply("quatre-vingt-dixième"), "90e");
+        assert_eq!(apply("quatre-vingt-neuvième"), "89e");
+        assert_eq!(apply("cent unième"), "101e");
+        assert_eq!(apply("deux cent vingt-cinquième"), "225e");
+        assert_eq!(apply("vingt-quatrième"), "24e");
+        assert_eq!(apply("vingt cinquieme"), "25e");
+        assert_eq!(apply("la vingt-cinquième fois."), "la 25e fois.");
+    }
+
+    #[test]
+    fn lone_ordinals_and_fractions_stay_words() {
+        for said in [
+            "le premier venu",
+            "en second lieu",
+            "le deuxième jour",
+            "le vingtième siècle",
+            "le centième",
+            "unième",
+            "deux centièmes de seconde",
+            "deux centième",
+            "trois vingt-cinquièmes",
+            "un vingt-cinquième de la population",
+            "vingt, cinquième",
+            "vingt et deuxième",
+        ] {
+            assert_eq!(apply(said), said);
+        }
+    }
+
+    #[test]
     fn punctuation_around_a_number_is_kept_and_splits_it() {
         assert_eq!(apply("j'en ai vingt-cinq."), "j'en ai 25.");
         assert_eq!(apply("(vingt cinq)"), "(25)");
@@ -561,5 +682,17 @@ mod tests {
             crate::core::format::apply("rendez-vous à quinze heures trente point", all, Some("fr")),
             "Rendez-vous à 15\u{a0}h\u{a0}30."
         );
+        let fr = |said| crate::core::format::apply(said, all, Some("fr"));
+        assert_eq!(
+            fr("euh c'est le vingt-cinquième anniversaire point"),
+            "C'est le 25e anniversaire."
+        );
+        assert_eq!(
+            fr("au vingt et unième siècle virgule le vingt-cinq juin"),
+            "Au 21e siècle, le 25 juin"
+        );
+        // Dates are cardinals, and the first of the month stays a word.
+        assert_eq!(fr("le premier juin"), "Le premier juin");
+        assert_eq!(fr("le deuxième jour"), "Le deuxième jour");
     }
 }
