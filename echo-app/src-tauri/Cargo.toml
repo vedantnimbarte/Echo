@@ -141,7 +141,19 @@ windows = { version = "0.58", features = [
     "Win32_System_Com",
     # Resident-memory reporting for `--benchmark` (core::procinfo).
     "Win32_System_ProcessStatus",
+    # A Job Object ties the resident whisper-server's lifetime to ours
+    # (core::asr::whisper_server). `CreateJobObjectW` takes a
+    # SECURITY_ATTRIBUTES, which is why Security comes along with it.
+    "Win32_System_JobObjects",
+    "Win32_Security",
 ] }
+
+[target.'cfg(unix)'.dependencies]
+# `prctl(PR_SET_PDEATHSIG)` on Linux and `proc_pidpath` on macOS, both so a
+# crashed Echo does not leave whisper-server holding the model in RAM
+# (core::asr::whisper_server). Already in the tree through tokio and half the
+# dependency graph, so naming it adds no crate.
+libc = "0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Bare-modifier hotkeys need raw key state, and XQueryKeymap reports the whole

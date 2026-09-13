@@ -615,10 +615,11 @@ pub fn run() {
             // outlives Echo, keeps the model in RAM, and accumulates one copy
             // per launch.
             //
-            // ponytail: this covers an orderly exit, which is the one we
-            // control. A crash or a force-kill still orphans the child; a Job
-            // Object on Windows and a process group elsewhere would close that
-            // gap if it ever proves to matter.
+            // This covers an orderly exit. A crash or a force-kill runs none of
+            // it; that case is handled where the server is spawned, by the OS
+            // (see `whisper_server::spawn_contained`). This stays regardless:
+            // macOS has no such mechanism, and there a clean exit is the only
+            // thing that stops the server before Echo's next launch sweeps it.
             if matches!(event, tauri::RunEvent::Exit) {
                 if let Some(state) = app.try_state::<AppState>() {
                     tauri::async_runtime::block_on(state.whisper_server.shutdown());
