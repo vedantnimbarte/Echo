@@ -13,18 +13,22 @@
 mod de;
 mod en;
 mod es;
+mod fr;
+mod it;
 mod nl;
 mod pt;
 
-/// Language code → its parser. Matched on the leading subtag, so "en-GB" and
-/// "pt-BR" find their rules.
 /// A language's whole number grammar: transcript in, transcript out.
 type Parser = fn(&str) -> String;
 
+/// Language code → its parser. Matched on the leading subtag, so "en-GB" and
+/// "pt-BR" find their rules.
 const PARSERS: &[(&str, Parser)] = &[
     ("en", en::apply),
     ("de", de::apply),
     ("es", es::apply),
+    ("fr", fr::apply),
+    ("it", it::apply),
     ("nl", nl::apply),
     ("pt", pt::apply),
 ];
