@@ -12,12 +12,22 @@
 
 mod de;
 mod en;
+mod es;
 mod nl;
+mod pt;
 
 /// Language code → its parser. Matched on the leading subtag, so "en-GB" and
 /// "pt-BR" find their rules.
-const PARSERS: &[(&str, fn(&str) -> String)] =
-    &[("en", en::apply), ("de", de::apply), ("nl", nl::apply)];
+/// A language's whole number grammar: transcript in, transcript out.
+type Parser = fn(&str) -> String;
+
+const PARSERS: &[(&str, Parser)] = &[
+    ("en", en::apply),
+    ("de", de::apply),
+    ("es", es::apply),
+    ("nl", nl::apply),
+    ("pt", pt::apply),
+];
 
 /// Language codes number conversion has rules for, so the settings screen can
 /// say which languages this stage applies to.
@@ -25,7 +35,7 @@ pub fn supported_languages() -> Vec<&'static str> {
     PARSERS.iter().map(|(code, _)| *code).collect()
 }
 
-fn parser_for(language: Option<&str>) -> Option<fn(&str) -> String> {
+fn parser_for(language: Option<&str>) -> Option<Parser> {
     let raw = language.unwrap_or("en").to_lowercase();
     let code = raw.split(['-', '_']).next().unwrap_or("en");
     PARSERS.iter().find(|(c, _)| *c == code).map(|(_, f)| *f)
@@ -63,5 +73,14 @@ mod tests {
         for code in supported_languages() {
             assert!(covers(Some(code)), "{code} is listed but has no parser");
         }
+    }
+
+    /// Each language gets its own parser, including through a region subtag —
+    /// the English rules must not be what reads a Brazilian "vinte e cinco".
+    #[test]
+    fn spanish_and_portuguese_use_their_own_rules() {
+        assert_eq!(apply("veinticinco", Some("es-MX")), "25");
+        assert_eq!(apply("vinte e cinco", Some("pt-BR")), "25");
+        assert_eq!(apply("twenty five", Some("es")), "twenty five");
     }
 }
