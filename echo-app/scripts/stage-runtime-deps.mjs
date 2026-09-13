@@ -5,17 +5,22 @@
 //
 //   node scripts/stage-runtime-deps.mjs
 //
-// Only whisper-cli needs staging. The ONNX Runtime that backs Silero VAD is
+// whisper-cli is staged everywhere. The ONNX Runtime that backs Silero VAD is
 // statically linked into the executable by `ort`, so there is nothing to ship
-// for it.
+// for it — except on Intel macOS, which has no static build to link and loads
+// `libonnxruntime.dylib` from this same directory at runtime instead (see the
+// `ort` note in src-tauri/Cargo.toml). Cross-compiling for Intel from an arm64
+// Mac, set ECHO_TARGET=x86_64-apple-darwin so the right runtime is staged; the
+// release workflow does. `--onnxruntime-only` skips whisper-cli.
 //
 // Windows uses whisper.cpp's prebuilt CLI (downloaded). macOS/Linux have no
 // prebuilt asset, so we build whisper-cli from source here (needs git + cmake +
 // a C/C++ compiler on the machine — CI has these). Keep WHISPER_TAG /
 // WHISPER_WIN_ASSET in sync with core/asr/binary_manager.rs.
 
+import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
-import { mkdir, readdir, rename, cp, rm, chmod } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, cp, rm, chmod } from "node:fs/promises";
 import { pipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 import { execFileSync } from "node:child_process";
@@ -64,7 +69,9 @@ async function copyFlat(src, dst) {
 //                            user CPUs. Ship a safe baseline.
 //   GGML_OPENMP=OFF        → drop the libgomp runtime dependency (whisper.cpp
 //                            still threads via its own pool).
-// On macOS we compile a universal (arm64 + x86_64) slice so Intel Macs work.
+// On macOS we compile a universal (arm64 + x86_64) binary, so the one build
+// serves both the arm64 and the Intel .dmg — tauri copies resources/bin as-is,
+// whatever `--target` the app itself was compiled for.
 async function buildWhisperUnix() {
   const src = path.join(os.tmpdir(), "whisper-src");
   const build = path.join(src, "build");
@@ -150,5 +157,50 @@ async function stageWhisper() {
   console.log(`✓ whisper-cli staged into ${BIN_DIR}`);
 }
 
-await stageWhisper();
+// Microsoft's last Intel macOS build. 1.24.1 onward publish `osx-arm64` only,
+// and `ort` is pinned to API 23 on this target to match (src-tauri/Cargo.toml).
+// The digest is the one GitHub records for the release asset
+// (`gh release view v1.23.2 --repo microsoft/onnxruntime --json assets`); the
+// file goes into an installer, so a changed download must stop the build.
+const ORT_X64_VERSION = "1.23.2";
+const ORT_X64_ASSET = `onnxruntime-osx-x86_64-${ORT_X64_VERSION}.tgz`;
+const ORT_X64_SHA256 = "d10359e16347b57d9959f7e80a225a5b4a66ed7d7e007274a15cae86836485a6";
+const ORT_DYLIB = "libonnxruntime.dylib";
+
+async function stageOnnxRuntimeIntel() {
+  const url = `https://github.com/microsoft/onnxruntime/releases/download/v${ORT_X64_VERSION}/${ORT_X64_ASSET}`;
+  const tgz = path.join(os.tmpdir(), ORT_X64_ASSET);
+  await download(url, tgz);
+  const actual = createHash("sha256").update(await readFile(tgz)).digest("hex");
+  if (actual !== ORT_X64_SHA256) {
+    throw new Error(`${ORT_X64_ASSET}: sha256 ${actual}, expected ${ORT_X64_SHA256}`);
+  }
+
+  const tmp = path.join(os.tmpdir(), "onnxruntime-extract");
+  await rm(tmp, { recursive: true, force: true });
+  await mkdir(tmp, { recursive: true });
+  // The archive's libonnxruntime.dylib is a symlink to the versioned file, so
+  // extract only the real file and stage it under the unversioned name that
+  // `load_onnx_runtime` asks for. The rest of the archive is headers and cmake
+  // files the app never touches. (The member name really does start "./".)
+  const member = `onnxruntime-osx-x86_64-${ORT_X64_VERSION}/lib/libonnxruntime.${ORT_X64_VERSION}.dylib`;
+  execFileSync("tar", ["-xzf", tgz, "-C", tmp, `./${member}`], { stdio: "inherit" });
+  await cp(path.join(tmp, member), path.join(BIN_DIR, ORT_DYLIB));
+  console.log(`✓ ONNX Runtime ${ORT_X64_VERSION} (x86_64) staged into ${BIN_DIR}`);
+}
+
+// Which Mac the app is being built for, not which Mac this is: CI builds the
+// Intel .dmg on an arm64 runner.
+const intelMac = process.env.ECHO_TARGET
+  ? process.env.ECHO_TARGET === "x86_64-apple-darwin"
+  : process.platform === "darwin" && process.arch === "x64";
+
+// --onnxruntime-only: CI's Intel test job wants the dylib, not a several-minute
+// whisper.cpp compile it never runs.
+if (!process.argv.includes("--onnxruntime-only")) await stageWhisper();
+else await mkdir(BIN_DIR, { recursive: true });
+if (intelMac) await stageOnnxRuntimeIntel();
+// A dylib left from an earlier Intel staging must not ride along into an
+// arm64 or Linux bundle, where nothing loads it.
+else await rm(path.join(BIN_DIR, ORT_DYLIB), { force: true });
 console.log("Done. Now run `tauri build`.");

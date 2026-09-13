@@ -257,8 +257,8 @@ pub fn run() {
             let wake_models = Arc::new(core::wake::WakeModelManager::new(wake_dir));
 
             // Load the Silero VAD model; energy VAD is the fallback on failure.
-            // (ONNX Runtime is statically linked into the binary, so there is
-            // nothing to bundle or locate for this.)
+            // (ONNX Runtime is statically linked into the binary everywhere but
+            // Intel macOS, where `load` finds the bundled dylib itself.)
             let silero = match core::vad::SileroModel::load() {
                 Ok(m) => Some(Arc::new(m)),
                 Err(e) => {

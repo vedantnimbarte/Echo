@@ -1,7 +1,7 @@
 # Releasing Echo
 
 Tagging a commit with `v*` (e.g. `v0.1.0`) triggers
-`.github/workflows/release.yml`, which builds Windows / macOS arm64 / Linux (x86_64 and arm64)
+`.github/workflows/release.yml`, which builds Windows / macOS (arm64 and x86_64) / Linux (x86_64 and arm64)
 installers, stages the offline `whisper-cli` into each bundle, and creates a
 **draft** GitHub Release with the artifacts.
 
@@ -81,8 +81,9 @@ git push origin v0.1.0
 
 What happens next:
 
-1. **`build`** — three runners produce installers and attach them to a *draft*
-   release.
+1. **`build`** — five matrix jobs produce installers and attach them to a *draft*
+   release. arm64 Linux and Intel macOS are allowed to fail without stopping
+   the next step; check that their assets are actually there.
 2. **`manifests`** — downloads those assets, writes `SHA256SUMS.txt` and uploads
    it, fills in the winget/Homebrew/snap manifests, and commits them to `main`.
 3. **You** — review the draft, then publish:
@@ -109,8 +110,9 @@ ECHO_VERSION=v0.1.0 sh scripts/install.sh
 ```
 
 A failure here usually means an asset name changed — the scripts match on
-`.dmg` / `.AppImage` / `-setup.exe`, and `packaging/homebrew/echo.rb` builds its
-URL from `Echo_#{version}_universal.dmg`.
+`_aarch64.dmg` / `_x64.dmg` / `_amd64.AppImage` / `_aarch64.AppImage` /
+`-setup.exe`, and `packaging/homebrew/echo.rb` builds its URL from
+`Echo_#{version}_#{arch}.dmg` (`aarch64` or `x64`).
 
 ## Platform coverage
 
@@ -119,8 +121,51 @@ URL from `Echo_#{version}_universal.dmg`.
 | Windows x64 | ✅ | NSIS `.exe` + `.msi` |
 | Linux x86_64 | ✅ | `.AppImage`, `.deb`, `.rpm` |
 | macOS arm64 | ✅ | `.dmg` |
-| macOS x86_64 | ❌ | `ort` ships no prebuilt ONNX Runtime for `x86_64-apple-darwin` (see `ort-sys`'s `build/download/dist.txt`, which lists `aarch64-apple-darwin` alone). A universal build fails at link time. Restoring Intel support means compiling ONNX Runtime from source and linking `ort` against it. |
+| macOS x86_64 | ✅ (unproven) | `_x64.dmg`, cross-compiled on the arm64 runner. Not yet built by a tag, and `continue-on-error` until one has. See below. |
 | Linux aarch64 | ✅ | `.AppImage`, `.deb`, `.rpm`, built on a native `ubuntu-24.04-arm` runner. Compiled and unit-tested in CI; not driven by hand. |
+
+### How the Intel macOS build gets an ONNX Runtime
+
+Every other target statically links the ONNX Runtime `ort` downloads at build
+time. `ort`'s prebuilt list (`ort-sys` 2.0.0-rc.12, `build/download/dist.txt`)
+has no `x86_64-apple-darwin` entry, so a universal build used to fail at link
+time. Three ways around that were weighed:
+
+- **`load-dynamic` against Microsoft's own build — chosen.** Microsoft's last
+  Intel macOS release asset is
+  [`onnxruntime-osx-x86_64-1.23.2.tgz`](https://github.com/microsoft/onnxruntime/releases/download/v1.23.2/onnxruntime-osx-x86_64-1.23.2.tgz)
+  (sha256 `d10359e1…485a6`); v1.24.1, v1.24.2 and every release since publish
+  `osx-arm64` only, and there is no v1.24.0 release at all. `ort` rc.12 asks for
+  API 24 by default and refuses an older runtime under `load-dynamic`, so the
+  Intel target pins `api-23`. It links nothing, and the dylib is staged into
+  `resources/bin` beside whisper-cli.
+- **Compiling ONNX Runtime 1.24 from source** for x86_64. Its CMake build is an
+  estimated 45-90 minutes of C++ on a 4-core GitHub macOS runner (not measured
+  here), cacheable after the first run, but it would need
+  maintaining through every `ort` bump, for no feature Echo uses.
+- **Dropping Silero VAD and the wake word on Intel.** Works, but the user would
+  lose the wake word outright and get the energy VAD, which mistakes keyboard
+  and fan noise for speech.
+
+What this costs, and what to watch:
+
+- **macOS 13.4 or later for Silero and the wake word.** The 1.23.2 dylib's
+  minimum OS is 13.4, while Echo supports 12. On 12 to 13.3 the dylib fails to
+  load, Silero falls back to the energy VAD, and the wake word reports itself
+  unavailable; dictation still works.
+- **Frozen at 1.23.2.** No newer Intel build will come from Microsoft. If an
+  `ort` upgrade drops API 23, the Intel target has to stay on the older `ort`
+  or move to a source build.
+- **Signing.** Once an Apple certificate exists, the hardened runtime's library
+  validation will refuse a dylib signed by another team. Check whether Tauri's
+  bundler re-signs it in `Contents/Resources/bin` (unverified); if not, re-sign
+  it in the release or add `com.apple.security.cs.disable-library-validation` to
+  `entitlements.plist`. Unsigned builds, today's, are unaffected.
+- **Runners.** The release cross-compiles from the arm64 `macos-latest`, so it
+  does not depend on an Intel runner. CI's `macos-intel` job does: it runs the
+  tests natively on `macos-15-intel`, GitHub's last x86_64 image, which retires
+  in August 2027 ([changelog](https://github.blog/changelog/2025-09-19-github-actions-macos-13-runner-image-is-closing-down/),
+  [runner-images#13045](https://github.com/actions/runner-images/issues/13045)).
 
 ## Code signing (OS-level, separate from updater signing)
 

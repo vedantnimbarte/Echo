@@ -95,11 +95,6 @@ tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 # Pure-Rust deflate, no native build deps.
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
-# Silero VAD inference. `ort` downloads a prebuilt ONNX Runtime at build time
-# and STATICALLY links it (`rustc-link-lib=static=onnxruntime`), so the runtime
-# is baked into the executable — nothing to ship alongside it. `ndarray` builds
-# the input tensors.
-ort = { version = "2.0.0-rc.10", features = ["download-binaries", "ndarray"] }
 ndarray = "0.16"
 
 # WAV encoding for cloud ASR uploads.
@@ -169,4 +164,40 @@ zbus = "5"
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = { version = "0.24", features = ["highsierra"] }
 core-foundation = "0.10"
+
+# ONNX Runtime, behind Silero VAD and the wake word. Declared twice, because
+# Intel macOS cannot get it the way every other target does.
+#
+# Everywhere else, `ort` downloads a prebuilt ONNX Runtime at build time and
+# STATICALLY links it (`rustc-link-lib=static=onnxruntime`), so the runtime is
+# baked into the executable and there is nothing to ship alongside it.
+#
+# `x86_64-apple-darwin` has no such prebuilt: ort-sys's
+# `build/download/dist.txt` lists `aarch64-apple-darwin` alone, and Microsoft
+# stopped publishing `onnxruntime-osx-x86_64-*.tgz` after 1.23.2 (1.24.1,
+# 1.24.2 and everything since ship `osx-arm64` only). So the Intel build uses
+# `load-dynamic`: it links nothing, and dlopens the official 1.23.2 Intel
+# dylib that `scripts/stage-runtime-deps.mjs` stages into the bundle (see
+# `core::vad::silero::load_onnx_runtime`). The alternative, compiling ONNX
+# Runtime from source, is an hour-scale C++ build on a runner kind GitHub is
+# retiring in August 2027.
+#
+# `api-23` is what makes 1.23.2 usable at all. `ort`'s defaults request API 24,
+# and `load-dynamic` refuses a runtime older than the API it was built for.
+# `ort` 2.0.0-rc.12 gates nothing of its Rust API on `api-24`, so this costs
+# Echo no call it makes. The static targets keep the
+# defaults (API 24 against the 1.24.2 they download) — resolver 2 ignores the
+# features of a target table that does not match, so neither declaration
+# leaks into the other's build.
+[target.'cfg(not(all(target_os = "macos", target_arch = "x86_64")))'.dependencies]
+ort = { version = "2.0.0-rc.10", features = ["download-binaries", "ndarray"] }
+
+[target.'cfg(all(target_os = "macos", target_arch = "x86_64"))'.dependencies]
+ort = { version = "2.0.0-rc.10", default-features = false, features = [
+    "std",
+    "ndarray",
+    "tracing",
+    "load-dynamic",
+    "api-23",
+] }
 

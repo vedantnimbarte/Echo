@@ -9,7 +9,11 @@
 //!
 //! (The ONNX Runtime that backs Silero VAD needs no such handling: `ort`
 //! statically links it into the executable, so there is no shared library to
-//! ship — see the `ort` dependency note in `Cargo.toml`.)
+//! ship — see the `ort` dependency note in `Cargo.toml`. Intel macOS is the
+//! exception: its `libonnxruntime.dylib` is staged into this same `bin`
+//! directory and loaded by `core::vad::load_onnx_runtime`, which locates it
+//! relative to the executable rather than through an `AppHandle`, which
+//! `SileroModel::load` and the unit tests do not have.)
 //!
 //! See `docs/BUNDLING.md` for how the resource dir gets populated at package
 //! time.

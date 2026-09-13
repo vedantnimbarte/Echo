@@ -23,6 +23,9 @@ const asset = (name: string) =>
  */
 export const DOWNLOADS = {
   macos: asset(`Echo_${VERSION}_aarch64.dmg`),
+  // First published by the release after v0.4.0; this 404s until VERSION
+  // reaches that release.
+  macosIntel: asset(`Echo_${VERSION}_x64.dmg`),
   windows: asset(`Echo_${VERSION}_x64-setup.exe`),
   windowsMsi: asset(`Echo_${VERSION}_x64_en-US.msi`),
   linuxAppImage: asset(`Echo_${VERSION}_amd64.AppImage`),
