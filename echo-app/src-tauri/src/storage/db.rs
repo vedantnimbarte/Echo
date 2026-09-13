@@ -211,5 +211,19 @@ fn migrate(conn: &Connection) -> Result<()> {
         )?;
     }
 
+    if version < 8 {
+        conn.execute_batch(
+            "
+            -- A writing style for this app: a short instruction such as
+            -- \"casual, lowercase is fine\", applied to the finished text by
+            -- the command-mode model. NULL means no style. It only runs while
+            -- the global per-app style switch is also on, which defaults off.
+            ALTER TABLE app_profiles ADD COLUMN style TEXT;
+
+            INSERT INTO schema_migrations (version) VALUES (8);
+        ",
+        )?;
+    }
+
     Ok(())
 }

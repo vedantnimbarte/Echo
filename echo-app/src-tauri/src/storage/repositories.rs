@@ -269,13 +269,14 @@ fn row_to_app_profile(r: &rusqlite::Row) -> rusqlite::Result<AppProfile> {
         formatting: r.get::<_, Option<i64>>(6)?.map(|v| v != 0),
         profile_id: r.get(7)?,
         enabled: r.get::<_, i64>(8)? != 0,
+        style: r.get(9)?,
     })
 }
 
 pub fn list_app_profiles(conn: &Connection) -> Result<Vec<AppProfile>> {
     let mut stmt = conn.prepare(
         "SELECT id, app_match, label, auto_inject, injection_method, stream_partials,
-                formatting, profile_id, enabled
+                formatting, profile_id, enabled, style
          FROM app_profiles ORDER BY app_match",
     )?;
     let rows = stmt
@@ -289,7 +290,7 @@ pub fn list_app_profiles(conn: &Connection) -> Result<Vec<AppProfile>> {
 pub fn find_app_profile(conn: &Connection, app_match: &str) -> Result<Option<AppProfile>> {
     let mut stmt = conn.prepare(
         "SELECT id, app_match, label, auto_inject, injection_method, stream_partials,
-                formatting, profile_id, enabled
+                formatting, profile_id, enabled, style
          FROM app_profiles WHERE app_match = ?1 AND enabled = 1",
     )?;
     let row = stmt
@@ -309,8 +310,8 @@ pub fn upsert_app_profile(conn: &Connection, p: &AppProfile) -> Result<i64> {
     let id = conn.query_row(
         "INSERT INTO app_profiles
             (app_match, label, auto_inject, injection_method, stream_partials,
-             formatting, profile_id, enabled)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             formatting, profile_id, enabled, style)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
          ON CONFLICT(app_match) DO UPDATE SET
             label = excluded.label,
             auto_inject = excluded.auto_inject,
@@ -318,7 +319,8 @@ pub fn upsert_app_profile(conn: &Connection, p: &AppProfile) -> Result<i64> {
             stream_partials = excluded.stream_partials,
             formatting = excluded.formatting,
             profile_id = excluded.profile_id,
-            enabled = excluded.enabled
+            enabled = excluded.enabled,
+            style = excluded.style
          RETURNING id",
         params![
             p.app_match.to_lowercase(),
@@ -329,6 +331,7 @@ pub fn upsert_app_profile(conn: &Connection, p: &AppProfile) -> Result<i64> {
             p.formatting.map(|v| v as i64),
             p.profile_id,
             p.enabled as i64,
+            p.style,
         ],
         |r| r.get(0),
     )?;

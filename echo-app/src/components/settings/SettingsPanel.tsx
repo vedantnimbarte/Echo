@@ -1093,7 +1093,7 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
             onChange={(v) =>
               setFormatSetting.mutate({ key: "auto_edit_llm", value: v ? "true" : "false" })
             }
-            hint="“Send it Tuesday, no, Wednesday” becomes “Send it Wednesday”. Uses the Command mode model on every utterance, so it costs latency — and it is the one setting here that changes the words you said. Off by default for that reason. Your History keeps what you actually said either way."
+            hint="“Send it Tuesday, no, Wednesday” becomes “Send it Wednesday”. Uses the Command mode model on every utterance, so it costs latency — and it is the one setting here that changes the words you said. Off by default for that reason. Your History keeps what you actually said either way, unless a per-app writing style rewrote it."
           >
             Also let the model fix self-corrections
           </Check>

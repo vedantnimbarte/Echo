@@ -200,6 +200,37 @@ describe("every settings page", () => {
     expect(screen.queryByText(/stopped before it could transcribe/i)).toBeNull();
   });
 
+  // The style is the one free-text override on a profile, and the switch that
+  // gates it has to say where the text goes.
+  it("shows an app profile's writing style and the switch that gates it", async () => {
+    const profile = {
+      id: 7,
+      app_match: "slack.exe",
+      label: null,
+      auto_inject: null,
+      injection_method: null,
+      stream_partials: null,
+      formatting: null,
+      profile_id: null,
+      enabled: true,
+      style: "casual, lowercase is fine",
+    };
+    ANSWERS.list_app_profiles = [profile];
+    try {
+      settings.set("command_llm_provider", "openai");
+      const user = userEvent.setup();
+      mount(<SettingsPanel page="output" />);
+      await openSection(user, "Apps");
+
+      const field = await screen.findByLabelText("Writing style");
+      expect((field as HTMLInputElement).value).toBe("casual, lowercase is fine");
+      expect(await screen.findByText(/Rewrite text in each app's style/)).toBeTruthy();
+      expect(await screen.findByText(/sent to OpenAI/)).toBeTruthy();
+    } finally {
+      ANSWERS.list_app_profiles = [];
+    }
+  });
+
   it("offers back audio a crash interrupted", async () => {
     ANSWERS.recovered_recordings = ["/data/recovered-1700000000.wav"];
     try {

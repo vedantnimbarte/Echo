@@ -55,6 +55,12 @@ pub struct AppProfile {
     /// Dictionary profile to apply while this app is focused.
     pub profile_id: Option<i64>,
     pub enabled: bool,
+    /// How the model should restyle text for this app ("formal, full
+    /// sentences"). `None` or blank means no rewrite; a style also needs the
+    /// global `app_style_enabled` switch. Defaulted so a caller that predates
+    /// the field still deserializes.
+    #[serde(default)]
+    pub style: Option<String>,
 }
 
 /// One outbound request Echo made.

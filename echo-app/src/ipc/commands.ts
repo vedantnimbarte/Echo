@@ -153,6 +153,8 @@ export interface AppProfile {
   formatting: boolean | null;
   profile_id: number | null;
   enabled: boolean;
+  /** How the model restyles text here, e.g. "formal, full sentences". Null for none. */
+  style: string | null;
 }
 
 /** What dictation has added up to. Derived from History, so empty when it is off. */

@@ -217,6 +217,14 @@ pub async fn begin_recording(
         // briefly. Streaming would type "make this more formal" into it and
         // then take it back — and if the model call fails, not take it back.
         && !command_config(state).enabled
+        // A styled app would watch its sentence typed as spoken and then
+        // retyped in the style, which is the flicker live text exists to avoid.
+        && !(start_delivery.style.is_some() && {
+            let conn = state.db.lock_live();
+            crate::storage::repositories::get_setting(&conn, "app_style_enabled")
+                .unwrap_or(None)
+                .is_some_and(|v| v == "true")
+        })
         // A masked field must not receive partials either — those are the same
         // characters, just delivered in more pieces.
         && !(secure_guard
@@ -267,7 +275,17 @@ pub async fn begin_recording(
             .map(|v| v == "true")
             .unwrap_or(false)
     };
-    let command_key = if (command_cfg.enabled || auto_edit_llm) && command_cfg.provider == "openai"
+    // Per-app styles: off unless switched on here *and* the focused app's
+    // profile has a style. Same reasoning as the cleanup pass above — this
+    // rewrites your words, and costs a model call on every utterance.
+    let style_enabled = {
+        let conn = state.db.lock_live();
+        crate::storage::repositories::get_setting(&conn, "app_style_enabled")
+            .unwrap_or(None)
+            .is_some_and(|v| v == "true")
+    };
+    let command_key = if (command_cfg.enabled || auto_edit_llm || style_enabled)
+        && command_cfg.provider == "openai"
     {
         crate::storage::keychain::get_api_key("openai").unwrap_or(None)
     } else {
@@ -377,55 +395,23 @@ pub async fn begin_recording(
                 // Carry this sentence into the next utterance's decoder prompt.
                 prompt_ctx.set_previous(&processed);
 
+                // From here the order is: snippet → LLM cleanup → command mode
+                // or per-app style → History → injection.
+                //
                 // A voice snippet replaces the whole utterance, and it is
-                // decided here: after the dictionary and formatting, so a
+                // decided first: after the dictionary and formatting, so a
                 // trigger matches whichever form of it the user typed, and
-                // before anything else, so the body is never put through
-                // them. The number formatter must not touch the digits in an
-                // address. Nothing below that rewrites text — the LLM pass,
-                // command mode — runs on a snippet either; its body is the
-                // user's own finished text. See `core::snippets` for why the
-                // trigger has to be the whole utterance.
+                // before any model sees the text, so the body is never put
+                // through anything. The number formatter must not touch the
+                // digits in an address, and a style must not "improve" a
+                // signature. A match consumes the whole utterance (see
+                // `core::snippets` for why), so there is no partial span left
+                // for a later stage to rewrite around — skipping them is the
+                // protection. It also means a style never gets the chance to
+                // reword a trigger into something that no longer matches.
                 let snippet = crate::core::snippets::expand(&snippets, &[&corrected, &processed])
                     .map(str::to_owned);
 
-                // Record it before command mode rewrites anything: history is a
-                // log of what you said, not of what the model replied.
-                if delivery.record_history && !processed.is_empty() {
-                    let state = app_clone.state::<AppState>();
-                    let conn = state.db.lock_live();
-                    let record = crate::storage::models::TranscriptionRecord {
-                        // The expansion, not the trigger: re-inserting a row
-                        // from History should put back what landed.
-                        text: snippet.clone().unwrap_or_else(|| processed.clone()),
-                        language: segment.language.clone(),
-                        provider: provider.clone(),
-                        // Zero means the speech edges never fired — a provider
-                        // that streams its own finals, say. Store nothing
-                        // rather than a zero that would read as "instant".
-                        duration_ms: match spoken_ms.swap(0, Ordering::Relaxed) {
-                            0 => None,
-                            ms => Some(ms as i64),
-                        },
-                        app: focused.clone(),
-                        // Two passes, counted separately, because they answer
-                        // different questions: the dictionary is your own
-                        // correction working, the clean-up is Echo's.
-                        dictionary_fixes: word_edits(segment.text.trim(), &corrected),
-                        cleanup_fixes: word_edits(&corrected, &processed),
-                        ..Default::default()
-                    };
-                    if let Err(e) = crate::storage::repositories::insert_history(&conn, &record) {
-                        error!("Failed to record history: {e}");
-                    }
-                    // Trim here as well as at startup. The window is a promise
-                    // about what Echo is still holding, and checking it only on
-                    // launch quietly breaks that for anyone who leaves the app
-                    // running — which is how it is meant to be used.
-                    if let Err(e) = crate::storage::repositories::apply_retention(&conn) {
-                        error!("History retention pass failed: {e}");
-                    }
-                }
                 // Emit the transcript fields directly (not the tagged AppEvent
                 // wrapper) so the frontend reads `event.payload.text` naturally.
                 if let Err(e) = app_clone.emit(
@@ -435,10 +421,20 @@ pub async fn begin_recording(
                     error!("Failed to emit transcript event: {e}");
                 }
 
-                // The LLM cleanup pass runs *after* history on purpose. The
-                // deterministic stages only drop sounds nobody meant to write,
-                // so what they produce is still what was said; this one can
-                // change words, and History should keep the faithful version.
+                // What History keeps. Normally the words as said: the LLM
+                // cleanup below can change words and command mode replaces
+                // them with a model's reply, and History is a log of what you
+                // said, not of what a model made of it. A snippet and a style
+                // are the exceptions, because each is a form the user chose
+                // for their words: the row is what was delivered, so
+                // re-inserting it from History puts back what landed. The
+                // pre-style text is not kept beside it — a row holds one text,
+                // and the style fallback already guarantees the words survive.
+                let mut history_text = snippet.clone().unwrap_or_else(|| processed.clone());
+                // Counted now, against the formatted text, before any model
+                // or snippet replaces it: the figure is what the clean-up did.
+                let cleanup_fixes = word_edits(&corrected, &processed);
+
                 let processed = if let Some(body) = snippet.clone() {
                     body
                 } else if auto_edit_llm {
@@ -459,7 +455,26 @@ pub async fn begin_recording(
                     .flatten();
 
                 let to_inject = match instruction {
-                    None => processed,
+                    None if snippet.is_some() => Some(processed),
+                    // Ordinary dictation: the per-app style, if there is one
+                    // and styles are switched on. `restyle` makes no request
+                    // without a style and returns the text unchanged on any
+                    // failure, so this can only ever cost the styling.
+                    None => {
+                        let style = style_enabled.then_some(delivery.style.as_deref()).flatten();
+                        let styled = crate::core::command::restyle(
+                            &command_cfg,
+                            command_key.as_deref(),
+                            style,
+                            &processed,
+                            crate::core::command::STYLE_TIMEOUT,
+                        )
+                        .await;
+                        if styled != processed {
+                            history_text = styled.clone();
+                        }
+                        Some(styled)
+                    }
                     Some(instruction) => {
                         match run_command(
                             &command_cfg,
@@ -469,7 +484,7 @@ pub async fn begin_recording(
                         )
                         .await
                         {
-                            Ok(reply) => reply,
+                            Ok(reply) => Some(reply),
                             Err(e) => {
                                 error!("Command mode failed: {e}");
                                 let _ = app_clone.emit(
@@ -479,10 +494,50 @@ pub async fn begin_recording(
                                     .event_name(),
                                     serde_json::json!({ "message": e.to_string() }),
                                 );
-                                continue;
+                                // Still recorded below: the instruction was
+                                // said, whatever the model did with it.
+                                None
                             }
                         }
                     }
+                };
+
+                if delivery.record_history && !history_text.is_empty() {
+                    let state = app_clone.state::<AppState>();
+                    let conn = state.db.lock_live();
+                    let record = crate::storage::models::TranscriptionRecord {
+                        text: history_text,
+                        language: segment.language.clone(),
+                        provider: provider.clone(),
+                        // Zero means the speech edges never fired — a provider
+                        // that streams its own finals, say. Store nothing
+                        // rather than a zero that would read as "instant".
+                        duration_ms: match spoken_ms.swap(0, Ordering::Relaxed) {
+                            0 => None,
+                            ms => Some(ms as i64),
+                        },
+                        app: focused.clone(),
+                        // Two passes, counted separately, because they answer
+                        // different questions: the dictionary is your own
+                        // correction working, the clean-up is Echo's.
+                        dictionary_fixes: word_edits(segment.text.trim(), &corrected),
+                        cleanup_fixes,
+                        ..Default::default()
+                    };
+                    if let Err(e) = crate::storage::repositories::insert_history(&conn, &record) {
+                        error!("Failed to record history: {e}");
+                    }
+                    // Trim here as well as at startup. The window is a promise
+                    // about what Echo is still holding, and checking it only on
+                    // launch quietly breaks that for anyone who leaves the app
+                    // running — which is how it is meant to be used.
+                    if let Err(e) = crate::storage::repositories::apply_retention(&conn) {
+                        error!("History retention pass failed: {e}");
+                    }
+                }
+
+                let Some(to_inject) = to_inject else {
+                    continue;
                 };
 
                 // Inject into the focused application if enabled.
@@ -895,6 +950,9 @@ pub(crate) struct Delivery {
     pub record_history: bool,
     /// How long to let the target read the clipboard before restoring it.
     pub settle_ms: u64,
+    /// The focused app's writing style, if its profile sets a non-blank one.
+    /// Whether it is applied also depends on the global `app_style_enabled`.
+    pub style: Option<String>,
 }
 
 /// Resolve delivery settings for the focused app.
@@ -940,6 +998,8 @@ pub(crate) fn resolve_delivery(conn: &rusqlite::Connection, focused: Option<&str
         settle_ms: get("clipboard_settle_ms")
             .and_then(|v| v.parse::<u64>().ok())
             .unwrap_or(crate::core::injection::DEFAULT_SETTLE_MS),
+        // No global style: what "formal" means depends on where you type.
+        style: None,
     };
 
     if let Some(app) = focused {
@@ -959,6 +1019,7 @@ pub(crate) fn resolve_delivery(conn: &rusqlite::Connection, focused: Option<&str
                 delivery.format = Default::default();
             }
             delivery.dictionary_profile = profile.profile_id;
+            delivery.style = profile.style.filter(|s| !s.trim().is_empty());
         }
     }
 
