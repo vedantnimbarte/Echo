@@ -11,10 +11,13 @@
 //! tell it was Echo that changed it.
 
 mod en;
+mod fr;
+mod it;
 
 /// Language code → its parser. Matched on the leading subtag, so "en-GB" and
 /// "pt-BR" find their rules.
-const PARSERS: &[(&str, fn(&str) -> String)] = &[("en", en::apply)];
+const PARSERS: &[(&str, fn(&str) -> String)] =
+    &[("en", en::apply), ("fr", fr::apply), ("it", it::apply)];
 
 /// Language codes number conversion has rules for, so the settings screen can
 /// say which languages this stage applies to.
