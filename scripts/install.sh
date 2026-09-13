@@ -39,10 +39,13 @@ Linux) platform="linux" ;;
 *) die "Unsupported OS '$os'. Echo ships installers for macOS, Linux and Windows." ;;
 esac
 
+# Linux releases carry one AppImage per architecture, so the match has to name
+# the architecture: a bare \.AppImage$ would take whichever was uploaded first.
 if [ "$platform" = "linux" ]; then
     case "$arch" in
-    x86_64 | amd64) : ;;
-    *) die "Unsupported architecture '$arch'. Linux builds are x86_64 only for now; build from source instead — see the README." ;;
+    x86_64 | amd64) appimage='_amd64\.AppImage$' ;;
+    aarch64 | arm64) appimage='_aarch64\.AppImage$' ;;
+    *) die "Unsupported architecture '$arch'. Linux builds are x86_64 and arm64 only; build from source instead — see the README." ;;
     esac
 fi
 
@@ -70,8 +73,8 @@ if [ "$platform" = "macos" ]; then
     url="$(asset_url '\.dmg$')"
     [ -n "$url" ] || die "No .dmg in release $tag."
 else
-    url="$(asset_url '\.AppImage$')"
-    [ -n "$url" ] || die "No .AppImage in release $tag. A .deb may be available — see the release page."
+    url="$(asset_url "$appimage")"
+    [ -n "$url" ] || die "No $arch .AppImage in release $tag. Releases up to v0.4.0 are x86_64 only; a .deb may be available — see the release page."
 fi
 
 file="$(basename "$url")"

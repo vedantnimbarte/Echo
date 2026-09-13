@@ -27,13 +27,25 @@ jobs:
             args: "--target aarch64-apple-darwin"
           - platform: ubuntu-latest
             args: ""
+          # Native arm64 runner rather than cross-compiling: webkit2gtk and
+          # ALSA need arm64 system libraries to link against, and whisper-cli
+          # is built from source by the staging step, which wants a native
+          # toolchain. `ort` does publish aarch64-unknown-linux-gnu binaries.
+          - platform: ubuntu-24.04-arm
+            args: ""
 
     runs-on: ${{ matrix.platform }}
+    # `manifests` needs every build to succeed, so one failed platform leaves
+    # all of them without SHA256SUMS.txt — which is what the v0.3.0 macOS
+    # failure did. arm64 Linux has not yet produced a release, so until it has,
+    # it is not allowed to take the other three down with it. Drop this once a
+    # tag has built it cleanly.
+    continue-on-error: ${{ matrix.platform == 'ubuntu-24.04-arm' }}
     steps:
       - uses: actions/checkout@v5
 
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
