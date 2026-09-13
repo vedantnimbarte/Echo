@@ -297,6 +297,10 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
     queryKey: ["spoken-punctuation-languages"],
     queryFn: commands.spokenPunctuationLanguages,
   });
+  const { data: numberLanguages = [] } = useQuery({
+    queryKey: ["number-languages"],
+    queryFn: commands.numberLanguages,
+  });
   const { data: clipboardSettle } = useQuery({
     queryKey: ["setting", "clipboard_settle_ms"],
     queryFn: () => commands.getSetting("clipboard_settle_ms"),
@@ -1125,7 +1129,16 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
             onChange={(v) =>
               setFormatSetting.mutate({ key: "format_numbers", value: v ? "true" : "false" })
             }
-            hint="English only: number words are grammar, not a word list."
+            hint={
+              <p>
+                Works in{" "}
+                {numberLanguages
+                  .map((c) => languages.find((l) => l.code === c)?.label ?? c)
+                  .join(", ")}
+                . Number words are grammar, not a word list, so other languages
+                are left exactly as spoken.
+              </p>
+            }
           >
             Write numbers, times and units as digits — “twenty five” → 25
           </Check>

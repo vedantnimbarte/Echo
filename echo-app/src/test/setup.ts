@@ -96,6 +96,7 @@ export const ANSWERS: Record<string, unknown> = {
     ],
   },
   spoken_punctuation_languages: ["en", "es", "fr", "de", "it", "pt", "nl"],
+  number_languages: ["en"],
   diagnostics: "Echo 0.3.0\nOS: windows (x86_64)\nEngine: local\n",
   // Shortened, but `auto` first and real codes, because the language `<select>`
   // ticks against these and the punctuation hint looks labels up in them.

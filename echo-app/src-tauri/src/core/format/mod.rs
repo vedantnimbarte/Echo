@@ -70,7 +70,7 @@ pub fn apply(text: &str, opts: FormatOptions, language: Option<&str>) -> String 
     // reader cannot tell it was Echo that changed the figure. English only,
     // until someone writes and checks another.
     if opts.numbers && numbers::covers(language) {
-        out = numbers::apply(&out);
+        out = numbers::apply(&out, language);
     }
     if opts.tidy {
         out = tidy::apply(&out, language);

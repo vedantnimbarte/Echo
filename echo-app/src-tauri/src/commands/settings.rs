@@ -17,6 +17,14 @@ pub fn spoken_punctuation_languages() -> Vec<&'static str> {
     crate::core::format::punctuation::supported_languages()
 }
 
+/// Language codes that number conversion has a parser for. Same reason as
+/// [`spoken_punctuation_languages`]: which languages a stage covers is a fact to
+/// read, not one to discover by being ignored.
+#[tauri::command]
+pub fn number_languages() -> Vec<&'static str> {
+    crate::core::format::numbers::supported_languages()
+}
+
 /// The dictation languages the settings `<select>` and the tray submenu both
 /// render — one list, so the two cannot drift.
 #[tauri::command]

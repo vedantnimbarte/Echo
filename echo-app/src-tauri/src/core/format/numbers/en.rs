@@ -15,13 +15,12 @@
 //! date and becomes "the 25th of June", while a lone "fifth" stays a word —
 //! "first of all" and "a fifth of the budget" are prose, not numbers.
 //!
-//! ponytail: English only, and fractions ("two thirds") are still left alone —
-//! they collide with the ordinals above, and "two thirds" is as often prose as
-//! arithmetic. Other languages are a parser each, not another table. A number
-//! converted wrongly is worse than one left as words, because the reader cannot
-//! tell it was Echo that changed it.
+//! ponytail: fractions ("two thirds") are still left alone — they collide with
+//! the ordinals above, and "two thirds" is as often prose as arithmetic. A
+//! number converted wrongly is worse than one left as words, because the
+//! reader cannot tell it was Echo that changed it.
 
-use super::{key, words};
+use crate::core::format::{key, words};
 
 /// Number words below twenty, where each is its own value.
 const UNITS: &[(&str, u64)] = &[
@@ -115,17 +114,6 @@ const CURRENCIES: &[(&str, &str)] = &[
     ("euros", "\u{20ac}"),
     ("pounds", "\u{a3}"),
 ];
-
-/// Whether number conversion exists for `language`.
-///
-/// English only. Number words are grammar rather than a lookup — "quatre-vingt
-/// dix-sept", "einundzwanzig" — so another language is a parser of its own, not
-/// another table. Reported honestly so the settings screen can say which
-/// languages this stage applies to.
-pub fn covers(language: Option<&str>) -> bool {
-    let raw = language.unwrap_or("en").to_lowercase();
-    raw.split(['-', '_']).next() == Some("en")
-}
 
 /// Convert spelled-out numbers, times, years and units to their written forms.
 pub fn apply(text: &str) -> String {
@@ -486,16 +474,6 @@ mod tests {
     fn ordinary_words_are_left_alone() {
         for said in ["I have won the race", "no one knows", "for once"] {
             assert_eq!(apply(said), said);
-        }
-    }
-
-    #[test]
-    fn only_english_is_claimed() {
-        assert!(covers(None));
-        assert!(covers(Some("en")));
-        assert!(covers(Some("en-GB")));
-        for other in ["fr", "de", "es", "ja"] {
-            assert!(!covers(Some(other)), "{other} has no number rules");
         }
     }
 

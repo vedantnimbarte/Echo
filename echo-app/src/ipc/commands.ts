@@ -462,6 +462,9 @@ export const commands = {
   spokenPunctuationLanguages: () =>
     invoke<string[]>("spoken_punctuation_languages"),
 
+  /** Language codes that number conversion has a parser for. */
+  numberLanguages: () => invoke<string[]>("number_languages"),
+
   /**
    * The dictation languages Echo offers. Lives in Rust because the tray menu
    * renders the same list, and two copies drift.
