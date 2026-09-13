@@ -15,10 +15,46 @@
 //! date and becomes "the 25th of June", while a lone "fifth" stays a word —
 //! "first of all" and "a fifth of the budget" are prose, not numbers.
 //!
-//! ponytail: fractions ("two thirds") are still left alone — they collide with
-//! the ordinals above, and "two thirds" is as often prose as arithmetic. A
-//! number converted wrongly is worse than one left as words, because the
-//! reader cannot tell it was Echo that changed it.
+//! Fractions follow it as well. A plural denominator behind a number word is
+//! evidence the way a unit is, so "two thirds" becomes "2/3" and "three eighths"
+//! becomes "3/8". But only a proper fraction in lowest terms: "cut it into two
+//! halves" and "all four quarters" are counting pieces, not arithmetic, and
+//! nobody dictating a quantity says "two fourths". "quarters" also needs "of"
+//! behind it — "three quarters of the cake" is a fraction, "the last three
+//! quarters" is a financial calendar and "three quarters for the meter" is
+//! change. A singular is never enough on its own: "a third of the budget",
+//! "half the time", "one third" and "the second half" all stay words, because
+//! "a"/"one" before a singular is the lone-small-word case again.
+//!
+//! "twenty fifths" is not "25th"s: [`match_ordinal`] only knows the singular,
+//! so the plural never reaches it. And a number that runs into a denominator
+//! without making a fraction ("twenty two thirds" — 22/3, or 20 2/3?) is left
+//! as words whole, rather than as "22 thirds", which would be half a conversion.
+//!
+//! "second" and "seconds" are never denominators. "three seconds" is a unit of
+//! time and still goes through the unit path to "3 s"; "wait a second" is prose.
+//!
+//! Mixed numbers are written "2 1/2", not "2½". Echo types into terminals and
+//! code editors, where a vulgar-fraction glyph can be a font gap, and Unicode
+//! has ½ and ⅓ but no 3/7, so the glyphs would mix notations within one
+//! document. The whole number may be a lone word ("one and a half"), because
+//! "and a half" settles it the way a unit does. When a unit follows and the
+//! fraction is an exact decimal, the decimal wins — "two and a half percent" is
+//! "2.5%", "two and a half dollars" is "$2.50" — because "2 1/2%" is not how
+//! anyone writes a rate. The tail must be "a half", "a quarter", "one <nth>" or
+//! a proper plural ("two thirds"), never "a third": "step two and a third
+//! person checks it" is an ordinal adjective, not 2 1/3.
+//!
+//! ponytail: still left alone — singular fractions even with a unit ("a third
+//! of a mile", "a half percent"); "and a third"/"and a fifth" tails, so "two and
+//! a third cups" stays words; improper fractions ("five thirds"); hundredths and
+//! smaller; and a mixed number whose fraction is not an exact decimal keeps its
+//! unit as a word ("2 1/3 hours"). Each is either rarer than the prose it
+//! collides with or needs more context than this word-at-a-time pass has. A
+//! number converted wrongly is worse than one left as words, because the reader
+//! cannot tell it was Echo that changed it.
+
+use std::ops::RangeInclusive;
 
 use crate::core::format::{key, words};
 
@@ -90,6 +126,23 @@ const UNIT_ORDINALS: &[(&str, u64)] = &[
     ("nineteenth", 19),
 ];
 
+/// Fraction denominators, singular and plural, from halves to tenths.
+///
+/// "second" is absent on purpose: "three seconds" is a unit of time, and no one
+/// means a half when they say "one second".
+const DENOMINATORS: &[(&str, &str, u64)] = &[
+    ("half", "halves", 2),
+    ("third", "thirds", 3),
+    ("quarter", "quarters", 4),
+    ("fourth", "fourths", 4),
+    ("fifth", "fifths", 5),
+    ("sixth", "sixths", 6),
+    ("seventh", "sevenths", 7),
+    ("eighth", "eighths", 8),
+    ("ninth", "ninths", 9),
+    ("tenth", "tenths", 10),
+];
+
 /// Units that follow a number and are conventionally written as a symbol or
 /// abbreviation. `space` says whether the written form takes one.
 const UNIT_WORDS: &[(&str, &str, bool)] = &[
@@ -143,9 +196,27 @@ pub fn apply(text: &str) -> String {
             i += len;
             continue;
         }
+        // Before the cardinal too, or "twenty five and a half" would be written
+        // "25" and strand "and a half" beside it.
+        if let Some((len, written)) = match_fraction(&keys, i) {
+            out.push(written);
+            i += len;
+            continue;
+        }
         if let Some((len, value)) = match_cardinal(&keys, i) {
+            // A denominator behind a number that did not make a fraction
+            // ("twenty two thirds") leaves both as words. Pushing only the first
+            // word would let the next pass read "two thirds" as 2/3 on its own.
+            if keys
+                .get(i + len)
+                .is_some_and(|k| ends_in_plural_denominator(k))
+            {
+                out.extend(words[i..=i + len].iter().map(|w| w.to_string()));
+                i += len + 1;
+                continue;
+            }
             // A unit behind settles the ambiguity even for one word.
-            if let Some((unit_len, written)) = match_unit(&keys, i + len, value) {
+            if let Some((unit_len, written)) = match_unit(&keys, i + len, &value.to_string()) {
                 out.push(written);
                 i += len + unit_len;
                 continue;
@@ -300,8 +371,117 @@ fn match_cardinal(keys: &[String], i: usize) -> Option<(usize, u64)> {
         break;
     }
 
+    // An "and" only belongs to the number if something was added after it.
+    // "one and two" breaks on the second unit, and must give the "and" back or
+    // it would be swallowed into "1" — and "five and two thirds" would lose the
+    // "and" that makes it a mixed number.
+    if len > 0 && keys[i + len - 1] == "and" {
+        len -= 1;
+    }
+
     let value = total + current;
     (saw_number && len > 0).then_some((len, value))
+}
+
+/// The value of a plural denominator ("thirds" → 3), if the word is one.
+fn plural_denominator(word: &str) -> Option<u64> {
+    DENOMINATORS
+        .iter()
+        .find(|(_, plural, _)| *plural == word)
+        .map(|(_, _, d)| *d)
+}
+
+/// Whether a word is a plural denominator, alone or as the end of a hyphenated
+/// "two-thirds".
+fn ends_in_plural_denominator(word: &str) -> bool {
+    word.rsplit('-')
+        .next()
+        .is_some_and(|last| plural_denominator(last).is_some())
+}
+
+/// Match a proper plural fraction at `i` — "two thirds", "two-thirds" — and
+/// return how many words it spans, the numerator and the denominator.
+///
+/// Proper and in lowest terms only; see the module doc for why "two halves"
+/// and "two quarters" are counting, not arithmetic. With a denominator of ten
+/// at most, the numerator is always one word, so only the units are looked up.
+fn match_proper(keys: &[String], i: usize) -> Option<(usize, u64, u64)> {
+    let here = keys.get(i)?.as_str();
+    // "two-thirds" arrives as one token, like "twenty-fifth" does.
+    let (span, numerator, denominator) = match here.split_once('-') {
+        Some((n, d)) => (1, n, d),
+        None => (2, here, keys.get(i + 1)?.as_str()),
+    };
+    let n = UNITS
+        .iter()
+        .find(|(w, _)| *w == numerator)
+        .map(|(_, v)| *v)?;
+    let d = plural_denominator(denominator)?;
+    let lowest = !(2..=n).any(|f| n.is_multiple_of(f) && d.is_multiple_of(f));
+    (n >= 2 && n < d && lowest).then_some((span, n, d))
+}
+
+/// Match a fraction or mixed number at `i`, returning how many words it spans
+/// and the written form: "two thirds" → "2/3", "two and a half" → "2 1/2",
+/// "two and a half percent" → "2.5%".
+fn match_fraction(keys: &[String], i: usize) -> Option<(usize, String)> {
+    if let Some((span, n, d)) = match_proper(keys, i) {
+        // "quarters" is also coins and a financial calendar; "of" is what says
+        // it is a share of something.
+        let quarters = keys[i + span - 1].ends_with("quarters");
+        if quarters && keys.get(i + span).is_none_or(|k| k != "of") {
+            return None;
+        }
+        return Some((span, format!("{n}/{d}")));
+    }
+
+    let (len, whole) = match_cardinal(keys, i)?;
+    if keys.get(i + len)? != "and" {
+        return None;
+    }
+    let tail = i + len + 1;
+    let (tail_len, n, d) = match (
+        keys.get(tail).map(String::as_str),
+        keys.get(tail + 1).map(String::as_str),
+    ) {
+        // "a third" is left out: it is an ordinal adjective as often as a
+        // fraction ("step two and a third person").
+        (Some("a"), Some("half")) => (2, 1, 2),
+        (Some("a"), Some("quarter")) => (2, 1, 4),
+        (Some("one"), Some(word)) => {
+            let d = DENOMINATORS
+                .iter()
+                .find(|(singular, _, _)| *singular == word)
+                .map(|(_, _, d)| *d)?;
+            (2, 1, d)
+        }
+        _ => match_proper(keys, tail)?,
+    };
+    let span = len + 1 + tail_len;
+
+    // A unit writes the fraction as a decimal, when there is an exact one.
+    // Money takes exactly two places: "$2.50", and never "$2.125".
+    let is_currency = keys
+        .get(i + span)
+        .is_some_and(|k| CURRENCIES.iter().any(|(w, _)| w == k));
+    let places = if is_currency { 2..=2 } else { 1..=3 };
+    if let Some((unit_len, written)) =
+        decimal(whole, n, d, places).and_then(|dec| match_unit(keys, i + span, &dec))
+    {
+        return Some((span + unit_len, written));
+    }
+    Some((span, format!("{whole} {n}/{d}")))
+}
+
+/// `whole + n/d` as a decimal, at the first number of `places` that is exact.
+/// Thirds never are, which is the point of asking.
+fn decimal(whole: u64, n: u64, d: u64, places: RangeInclusive<u32>) -> Option<String> {
+    places.into_iter().find_map(|p| {
+        let scaled = n * 10u64.pow(p);
+        scaled
+            .is_multiple_of(d)
+            .then(|| format!("{whole}.{:0width$}", scaled / d, width = p as usize))
+    })
 }
 
 /// A clock time: "three thirty", "three thirty pm", "nine oh five".
@@ -368,7 +548,9 @@ fn match_year(keys: &[String], i: usize) -> Option<(usize, String)> {
 
 /// A unit word following a number at `i`, returning how many words it spans and
 /// the written form of number-plus-unit.
-fn match_unit(keys: &[String], i: usize, value: u64) -> Option<(usize, String)> {
+///
+/// `value` arrives already written, so a whole number and a decimal share it.
+fn match_unit(keys: &[String], i: usize, value: &str) -> Option<(usize, String)> {
     let k = keys.get(i)?.as_str();
 
     if let Some((_, symbol)) = CURRENCIES.iter().find(|(w, _)| *w == k) {
@@ -467,6 +649,99 @@ mod tests {
     fn a_short_remainder_is_a_quantity_not_a_year() {
         assert_eq!(apply("twenty five"), "25");
         assert_eq!(apply("twenty twenty"), "2020");
+    }
+
+    #[test]
+    fn proper_fractions_become_digits() {
+        assert_eq!(apply("two thirds of voters"), "2/3 of voters");
+        assert_eq!(apply("about two-thirds of it"), "about 2/3 of it");
+        assert_eq!(apply("three eighths"), "3/8");
+        assert_eq!(apply("nine tenths"), "9/10");
+        assert_eq!(apply("three fourths"), "3/4");
+        // "of" is what makes quarters a share rather than coins or a calendar.
+        assert_eq!(apply("three quarters of a mile"), "3/4 of a mile");
+    }
+
+    /// A fraction is only a number when nothing else reads it better.
+    #[test]
+    fn fraction_words_in_prose_stay_words() {
+        for said in [
+            "a third of the budget",
+            "a half",
+            "half the time",
+            "only one third agreed",
+            "the second half",
+            "a quarter past",
+            // Counting pieces, not arithmetic: improper, or not lowest terms.
+            "cut it into two halves",
+            "all four quarters",
+            "five thirds",
+            "two fourths",
+            // Coins and a financial calendar.
+            "three quarters for the meter",
+            "the last three quarters",
+        ] {
+            assert_eq!(apply(said), said);
+        }
+    }
+
+    /// "twenty fifths" must not be read as an ordinal, nor half converted.
+    #[test]
+    fn a_number_running_into_a_denominator_stays_words() {
+        assert_eq!(apply("twenty fifths"), "twenty fifths");
+        assert_eq!(apply("twenty two thirds"), "twenty two thirds");
+        assert_eq!(apply("twenty two-thirds"), "twenty two-thirds");
+        assert_eq!(apply("twenty-fifths"), "twenty-fifths");
+        // The plural never reaches the ordinal path; the singular still does.
+        assert_eq!(apply("the twenty fifth"), "the 25th");
+    }
+
+    /// "seconds" is a unit of time, never a denominator.
+    #[test]
+    fn seconds_are_time_not_a_fraction() {
+        assert_eq!(apply("three seconds"), "3 s");
+        assert_eq!(apply("wait a second"), "wait a second");
+        assert_eq!(apply("two and a second"), "two and a second");
+        assert_eq!(apply("two and a half seconds"), "2.5 s");
+    }
+
+    #[test]
+    fn mixed_numbers_are_written_with_a_space() {
+        assert_eq!(apply("two and a half"), "2 1/2");
+        assert_eq!(apply("one and a quarter cups"), "1 1/4 cups");
+        assert_eq!(apply("five and two thirds"), "5 2/3");
+        assert_eq!(apply("three and one third"), "3 1/3");
+        assert_eq!(apply("twenty five and a half"), "25 1/2");
+        // "a third" is an ordinal adjective as often as a fraction.
+        assert_eq!(
+            apply("step two and a third person"),
+            "step two and a third person"
+        );
+    }
+
+    /// A unit wants a decimal, and gets one when the fraction has an exact one.
+    #[test]
+    fn a_unit_turns_a_mixed_number_into_a_decimal() {
+        assert_eq!(apply("up two and a half percent"), "up 2.5%");
+        assert_eq!(apply("three and a quarter kilometres"), "3.25 km");
+        assert_eq!(apply("two and a half dollars"), "$2.50");
+        // No exact decimal, so the unit stays a word rather than "2.333 h".
+        assert_eq!(apply("two and one third hours"), "2 1/3 hours");
+    }
+
+    /// The "and" in "a hundred and one" must not swallow a separate number.
+    #[test]
+    fn a_trailing_and_is_not_part_of_the_number() {
+        assert_eq!(apply("one and two"), "one and two");
+        assert_eq!(apply("twenty and done"), "twenty and done");
+        assert_eq!(apply("a hundred and one uses"), "101 uses");
+    }
+
+    #[test]
+    fn fractions_leave_times_years_and_ordinals_alone() {
+        assert_eq!(apply("meet at three thirty pm"), "meet at 3:30 pm");
+        assert_eq!(apply("in twenty twenty six"), "in 2026");
+        assert_eq!(apply("the twenty first of June"), "the 21st of June");
     }
 
     /// Words that merely sound like numbers must never be touched.
