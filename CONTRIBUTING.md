@@ -146,7 +146,7 @@ npm run tauri build
 > build, set `bundle.createUpdaterArtifacts` to `false` in `tauri.conf.json`.
 
 Artifacts land in `echo-app/src-tauri/target/release/bundle/`. Tagging a release
-(`v*`) triggers the GitHub Actions matrix to build Windows / macOS (universal) /
+(`v*`) triggers the GitHub Actions matrix to build Windows / macOS (Apple Silicon) /
 Linux installers and staple the offline Whisper engine into each. See
 [`docs/RELEASING.md`](docs/RELEASING.md) for the release + auto-update setup.
 

@@ -109,8 +109,8 @@ ECHO_VERSION=v0.1.0 sh scripts/install.sh
 ```
 
 A failure here usually means an asset name changed — the scripts match on
-`.dmg` / `.AppImage` / `-setup.exe`, and `packaging/homebrew/echo.rb` builds its
-URL from `Echo_#{version}_universal.dmg`.
+`.dmg` / `_amd64.AppImage` / `_aarch64.AppImage` / `-setup.exe`, and `packaging/homebrew/echo.rb` builds its
+URL from `Echo_#{version}_aarch64.dmg`.
 
 ## Platform coverage
 
