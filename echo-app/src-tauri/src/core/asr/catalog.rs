@@ -58,6 +58,17 @@ pub struct ProviderSpec {
     pub needs_endpoint: bool,
     /// The user must provide a region — the host itself depends on it.
     pub needs_region: bool,
+    /// Echo can ask this provider who spoke when transcribing an imported
+    /// recording — see [`super::AsrProvider::transcribe_speakers`]. The import
+    /// panel reads it to enable its "Label speakers" box and to name the
+    /// providers that would, so a row set `true` must implement that method.
+    ///
+    /// Google stays `false` even though its API can diarize: Echo uses the
+    /// synchronous endpoint, which refuses anything past sixty seconds, and a
+    /// recording worth labelling is longer than that. OpenAI's diarizing model
+    /// is one model behind an endpoint shared with Groq, Mistral and every
+    /// self-hosted clone, so it is not a per-row fact either.
+    pub speaker_labels: bool,
     pub docs_url: &'static str,
     /// Shown under the provider in Settings. Use it for the things people
     /// discover the hard way: latency, hard limits, where the key travels.
@@ -82,6 +93,7 @@ pub const PROVIDERS: &[ProviderSpec] = &[
         models: &["whisper-1", "gpt-4o-mini-transcribe", "gpt-4o-transcribe"],
         needs_endpoint: false,
         needs_region: false,
+        speaker_labels: false,
         docs_url: "https://platform.openai.com/api-keys",
         note: "Max 25 MB per request. gpt-4o-mini-transcribe is cheaper and more accurate than whisper-1.",
     },
@@ -93,6 +105,7 @@ pub const PROVIDERS: &[ProviderSpec] = &[
         models: &["whisper-large-v3", "whisper-large-v3-turbo"],
         needs_endpoint: false,
         needs_region: false,
+        speaker_labels: false,
         docs_url: "https://console.groq.com/keys",
         note: "Usually the fastest cloud option. Turbo is cheaper and faster at a small accuracy cost.",
     },
@@ -104,6 +117,7 @@ pub const PROVIDERS: &[ProviderSpec] = &[
         models: &["nova-2", "nova-3"],
         needs_endpoint: false,
         needs_region: false,
+        speaker_labels: true,
         docs_url: "https://console.deepgram.com/",
         note: "The only provider with live streaming — words appear as you speak.",
     },
@@ -115,6 +129,7 @@ pub const PROVIDERS: &[ProviderSpec] = &[
         models: &["voxtral-mini-latest"],
         needs_endpoint: false,
         needs_region: false,
+        speaker_labels: false,
         docs_url: "https://console.mistral.ai/api-keys",
         note: "Inexpensive, around $0.18 per hour of audio.",
     },
@@ -126,6 +141,7 @@ pub const PROVIDERS: &[ProviderSpec] = &[
         models: &["scribe_v2", "scribe_v1"],
         needs_endpoint: false,
         needs_region: false,
+        speaker_labels: true,
         docs_url: "https://elevenlabs.io/app/settings/api-keys",
         note: "High accuracy across 99 languages. Batch only — no live streaming.",
     },
@@ -137,6 +153,7 @@ pub const PROVIDERS: &[ProviderSpec] = &[
         models: &["universal-3-5-pro", "universal-2"],
         needs_endpoint: false,
         needs_region: false,
+        speaker_labels: true,
         docs_url: "https://www.assemblyai.com/app/account",
         note: "Uploads, queues and polls — expect a few seconds even for a short phrase.",
     },
@@ -148,6 +165,7 @@ pub const PROVIDERS: &[ProviderSpec] = &[
         models: &["enhanced", "standard"],
         needs_endpoint: false,
         needs_region: false,
+        speaker_labels: true,
         docs_url: "https://portal.speechmatics.com/",
         note: "Strong multilingual accuracy. Submits a job and polls — expect a few seconds.",
     },
@@ -159,6 +177,7 @@ pub const PROVIDERS: &[ProviderSpec] = &[
         models: &[],
         needs_endpoint: false,
         needs_region: true,
+        speaker_labels: true,
         docs_url: "https://portal.azure.com/",
         note: "Needs the region of your Speech resource (for example westeurope), not just a key.",
     },
@@ -170,6 +189,7 @@ pub const PROVIDERS: &[ProviderSpec] = &[
         models: &["latest_short", "latest_long", "default"],
         needs_endpoint: false,
         needs_region: false,
+        speaker_labels: false,
         docs_url: "https://console.cloud.google.com/apis/credentials",
         note: "Audio must be under 60 seconds. Google requires the key in the URL, so it may appear in proxy logs.",
     },
@@ -181,6 +201,7 @@ pub const PROVIDERS: &[ProviderSpec] = &[
         models: &[],
         needs_endpoint: true,
         needs_region: false,
+        speaker_labels: false,
         docs_url: "https://github.com/vedantnimbarte/Echo/blob/main/README.md#cloud-providers",
         note: "Point Echo at any OpenAI-compatible endpoint: LiteLLM, OpenRouter, vLLM, or a self-hosted Whisper server.",
     },

@@ -932,10 +932,10 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
 
       {/* ---- Engine · Tools ---------------------------------------------- */}
 
-      {on("engine.tools", ["import", "file", "audio file", "recording", "mp3", "wav", "transcribe file", "voice memo"]) && (
+      {on("engine.tools", ["import", "file", "audio file", "recording", "mp3", "wav", "transcribe file", "voice memo", "speakers", "diarization", "meeting", "interview"]) && (
         <Group
           title={label("engine.tools", "Transcribe a file")}
-          hint="Uses the offline engine and the model selected above, so nothing is uploaded."
+          hint="Uses the offline engine and the model selected above, so nothing is uploaded — unless you ask for speaker labels, which need a cloud engine."
         >
           <AudioImport />
         </Group>

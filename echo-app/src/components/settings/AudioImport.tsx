@@ -7,6 +7,11 @@ import { commands } from "../../ipc/commands";
  * Transcribe a recording the user already has — a voice memo, a call, an
  * interview — with the same offline engine that handles dictation.
  *
+ * "Label speakers" is the one option that leaves the machine. Whisper cannot
+ * tell voices apart, so ticking it sends the whole file to the active cloud
+ * engine instead. The box is only enabled when that engine can do it, and the
+ * line under it names where the file goes before anyone ticks it.
+ *
  * The result is shown rather than injected. An import is not aimed at a text
  * cursor the way a dictation is, and pasting a twenty-minute transcript into
  * whatever happened to be focused would be a genuinely bad surprise.
@@ -16,6 +21,36 @@ export function AudioImport() {
   const [text, setText] = useState<string | null>(null);
   const [name, setName] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [speakers, setSpeakers] = useState(false);
+
+  // The same query keys the engine picker uses, so switching engines there
+  // updates this box without a reload.
+  const { data: engine } = useQuery({
+    queryKey: ["setting", "asr_provider"],
+    queryFn: () => commands.getSetting("asr_provider"),
+  });
+  const { data: providers = [] } = useQuery({
+    queryKey: ["cloud-providers"],
+    queryFn: commands.listCloudProviders,
+  });
+  const active = providers.find((p) => p.id === engine);
+  const canLabel = active?.speaker_labels === true;
+  // Held separately from `speakers` so switching to an engine that cannot do
+  // it silently unticks the box rather than leaving a stale choice armed.
+  const labelling = speakers && canLabel;
+  const able = providers.filter((p) => p.speaker_labels).map((p) => p.label);
+
+  let speakersHint: string;
+  if (active && canLabel) {
+    speakersHint = `Uploads the whole recording to ${active.label}, which works out who is speaking. Unticked, nothing leaves your machine.`;
+  } else {
+    const why = active
+      ? `${active.label} doesn't label speakers.`
+      : engine === "none"
+        ? "Transcription is turned off."
+        : "The offline Whisper engine doesn't label speakers.";
+    speakersHint = `${why} Switch the engine to ${able.join(", ")} to use this — the recording is then uploaded to that provider.`;
+  }
 
   // Audio a crash interrupted before it could be transcribed. Normally empty,
   // which is why this sits above the picker rather than in a group of its own:
@@ -26,10 +61,10 @@ export function AudioImport() {
     queryFn: commands.recoveredRecordings,
   });
 
-  function transcribe(path: string) {
+  function transcribe(path: string, withSpeakers = false) {
     setName(path.split(/[\\/]/).pop() ?? path);
     setText(null);
-    return commands.transcribeFile(path);
+    return commands.transcribeFile(path, undefined, withSpeakers);
   }
 
   const run = useMutation({
@@ -40,15 +75,17 @@ export function AudioImport() {
         filters: [{ name: "Audio", extensions: formats }],
       });
       if (typeof picked !== "string") return null;
-      return transcribe(picked);
+      return transcribe(picked, labelling);
     },
     onSuccess: (result) => {
       if (result !== null) setText(result);
     },
   });
 
+  // A rescued dictation is always decoded locally, whatever the box says: it
+  // was a dictation, not a meeting, and uploading it would be a surprise.
   const rescue = useMutation({
-    mutationFn: transcribe,
+    mutationFn: (path: string) => transcribe(path),
     onSuccess: (result) => setText(result),
   });
 
@@ -96,6 +133,22 @@ export function AudioImport() {
         </div>
       ))}
 
+      <label className="flex items-start gap-2.5">
+        <input
+          type="checkbox"
+          checked={labelling}
+          disabled={!canLabel || busy}
+          onChange={(e) => setSpeakers(e.target.checked)}
+          className="mt-0.5 h-3.5 w-3.5 accent-white"
+        />
+        <span className="text-[14px] leading-snug">
+          Label speakers
+          <span className="block text-[12.5px] text-[var(--ink-muted)]">
+            {speakersHint}
+          </span>
+        </span>
+      </label>
+
       <button
         type="button"
         className="btn-ghost text-[13px]"
@@ -107,8 +160,10 @@ export function AudioImport() {
 
       {busy && name && (
         <p className="text-[12.5px] leading-relaxed text-[var(--ink-faint)]">
-          Transcribing {name}. Long recordings take a while — this runs entirely
-          on your machine.
+          Transcribing {name}. Long recordings take a while —{" "}
+          {run.isPending && labelling && active
+            ? `the file is being uploaded to ${active.label}.`
+            : "this runs entirely on your machine."}
         </p>
       )}
 

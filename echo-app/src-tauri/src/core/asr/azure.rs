@@ -31,12 +31,18 @@ struct AzureResponse {
     combined_phrases: Vec<AzurePhrase>,
     #[serde(default)]
     duration: Option<u64>,
+    #[serde(default)]
+    phrases: Vec<AzurePhrase>,
 }
 
+/// Used for both `combinedPhrases` and `phrases`; only the latter ever has a
+/// `speaker`, and only with diarization on.
 #[derive(Debug, Deserialize)]
 struct AzurePhrase {
     #[serde(default)]
     text: String,
+    #[serde(default)]
+    speaker: Option<u32>,
 }
 
 /// The transcription endpoint for a Speech resource in `region`.
@@ -69,31 +75,53 @@ impl AsrProvider for AzureSpeechProvider {
     ) -> Result<TranscriptSegment> {
         let wav = pcm_f32_to_wav(&audio, 16_000)?;
         let locale = to_locale(language);
-
         let part = multipart::Part::bytes(wav)
             .file_name("audio.wav")
             .mime_str("audio/wav")
             .map_err(|e| EchoError::AsrProvider(e.to_string()))?;
+        let parsed = self.send(part, &locale, false).await?;
+        Ok(segment_from_response(parsed, &locale))
+    }
 
-        // `channels: [0]` keeps Azure from splitting the mono capture into a
-        // per-channel result set, which would arrive as an empty second phrase.
-        let definition = serde_json::json!({
-            "locales": [locale],
-            "profanityFilterMode": "None",
-            "channels": [0],
-        })
-        .to_string();
+    async fn transcribe_speakers(
+        &self,
+        audio: Vec<u8>,
+        mime: &str,
+        language: Option<&str>,
+    ) -> Result<Vec<(String, String)>> {
+        let part = multipart::Part::bytes(audio)
+            .file_name("audio")
+            .mime_str(mime)
+            .map_err(|e| EchoError::AsrProvider(e.to_string()))?;
+        turns_from_response(self.send(part, &to_locale(language), true).await?)
+    }
+}
 
+impl AzureSpeechProvider {
+    /// One fast-transcription request. `speakers` is the import path: it turns
+    /// diarization on and swaps the utterance-sized timeout for
+    /// [`super::http::IMPORT_TIMEOUT`], because Azure answers a whole recording
+    /// in this same single request.
+    async fn send(
+        &self,
+        part: multipart::Part,
+        locale: &str,
+        speakers: bool,
+    ) -> Result<AzureResponse> {
         let form = multipart::Form::new()
-            .text("definition", definition)
+            .text("definition", definition(locale, speakers))
             .part("audio", part);
 
         crate::core::egress::record(&self.endpoint, "cloud transcription");
 
-        let resp = super::http::client()
+        let mut request = super::http::client()
             .post(&self.endpoint)
             .header("Ocp-Apim-Subscription-Key", &self.api_key)
-            .multipart(form)
+            .multipart(form);
+        if speakers {
+            request = request.timeout(super::http::IMPORT_TIMEOUT);
+        }
+        let resp = request
             .send()
             .await
             .map_err(|e| EchoError::AsrProvider(e.to_string()))?;
@@ -106,13 +134,53 @@ impl AsrProvider for AzureSpeechProvider {
             )));
         }
 
-        let parsed: AzureResponse = resp
-            .json()
+        resp.json()
             .await
-            .map_err(|e| EchoError::AsrProvider(e.to_string()))?;
-
-        Ok(segment_from_response(parsed, &locale))
+            .map_err(|e| EchoError::AsrProvider(e.to_string()))
     }
+}
+
+/// The request's `definition` JSON.
+///
+/// For dictation, `channels: [0]` keeps Azure from splitting the mono capture
+/// into a per-channel result set, which would arrive as an empty second phrase.
+///
+/// For speakers it is left out entirely. Azure does not diarize more than one
+/// channel, and without `channels` it merges a stereo recording down to one
+/// rather than transcribing each side — which is what a two-person call
+/// recorded as stereo needs. `maxSpeakers` is a ceiling, not a count; Azure's
+/// default of 2 would fold a third voice into one of the other two, so it is
+/// raised to cover a meeting (Azure accepts 2–35).
+fn definition(locale: &str, speakers: bool) -> String {
+    let mut definition = serde_json::json!({
+        "locales": [locale],
+        "profanityFilterMode": "None",
+    });
+    if speakers {
+        definition["diarization"] = serde_json::json!({ "enabled": true, "maxSpeakers": 10 });
+    } else {
+        definition["channels"] = serde_json::json!([0]);
+    }
+    definition.to_string()
+}
+
+/// Speaker turns out of a diarized response, in spoken order.
+///
+/// `phrases` is Azure's per-phrase list; with diarization on each carries an
+/// integer `speaker`. A phrase without one means diarization did not run,
+/// which is an error rather than a transcript attributed to nobody.
+fn turns_from_response(parsed: AzureResponse) -> Result<Vec<(String, String)>> {
+    parsed
+        .phrases
+        .into_iter()
+        .filter(|p| !p.text.trim().is_empty())
+        .map(|p| {
+            let speaker = p
+                .speaker
+                .ok_or_else(|| EchoError::AsrProvider("azure returned no speaker labels".into()))?;
+            Ok((speaker.to_string(), p.text.trim().to_string()))
+        })
+        .collect()
 }
 
 /// Flatten Azure's phrase list into one transcript.
@@ -174,6 +242,60 @@ mod tests {
         // would prefix the transcript with a space and shift every insert.
         let seg = parse(r#"{"combinedPhrases":[{"text":""},{"text":"second"}]}"#);
         assert_eq!(seg.text, "second");
+    }
+
+    #[test]
+    fn diarization_replaces_the_channel_pin_only_for_an_import() {
+        let import: serde_json::Value = serde_json::from_str(&definition("en-US", true)).unwrap();
+        assert_eq!(import["diarization"]["enabled"], true);
+        assert!(
+            import.get("channels").is_none(),
+            "Azure refuses to diarize separated channels"
+        );
+
+        let dictation: serde_json::Value =
+            serde_json::from_str(&definition("en-US", false)).unwrap();
+        assert!(dictation.get("diarization").is_none());
+        assert_eq!(dictation["channels"], serde_json::json!([0]));
+    }
+
+    /// Shaped like the documented fast-transcription answer with diarization
+    /// on: `phrases` in spoken order, each with an integer `speaker`.
+    #[test]
+    fn speaker_turns_are_read_out_of_the_phrases() {
+        let parsed: AzureResponse = serde_json::from_str(
+            r#"{
+              "durationMilliseconds": 182439,
+              "combinedPhrases": [{"text": "Good afternoon. Hi there."}],
+              "phrases": [
+                {"speaker": 1, "offsetMilliseconds": 960, "durationMilliseconds": 640,
+                 "text": "Good afternoon.",
+                 "words": [{"text": "Good", "offsetMilliseconds": 960, "durationMilliseconds": 240},
+                           {"text": "afternoon.", "offsetMilliseconds": 1200, "durationMilliseconds": 400}],
+                 "locale": "en-US", "confidence": 0.93616915},
+                {"speaker": 0, "offsetMilliseconds": 5040, "durationMilliseconds": 400,
+                 "text": "Hi there.",
+                 "words": [{"text": "Hi", "offsetMilliseconds": 5040, "durationMilliseconds": 240},
+                           {"text": "there.", "offsetMilliseconds": 5280, "durationMilliseconds": 160}],
+                 "locale": "en-US", "confidence": 0.93616915}
+              ]
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            turns_from_response(parsed).unwrap(),
+            vec![
+                ("1".into(), "Good afternoon.".into()),
+                ("0".into(), "Hi there.".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn phrases_without_speakers_are_an_error_not_one_long_monologue() {
+        let parsed: AzureResponse =
+            serde_json::from_str(r#"{"phrases":[{"text":"hello","locale":"en-US"}]}"#).unwrap();
+        assert!(turns_from_response(parsed).is_err());
     }
 
     #[test]

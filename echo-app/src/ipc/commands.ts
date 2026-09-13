@@ -45,6 +45,8 @@ export interface CloudProvider {
   models: string[];
   needs_endpoint: boolean;
   needs_region: boolean;
+  /** Can say who spoke when transcribing an imported file. */
+  speaker_labels: boolean;
   docs_url: string;
   /** Latency, limits, and other things people otherwise learn the hard way. */
   note: string;
@@ -418,8 +420,9 @@ export const commands = {
       { original, edited },
     ),
 
-  transcribeFile: (path: string, language?: string) =>
-    invoke<string>("transcribe_file", { path, language }),
+  /** `speakers` uploads the file to the active cloud engine for labels. */
+  transcribeFile: (path: string, language?: string, speakers?: boolean) =>
+    invoke<string>("transcribe_file", { path, language, speakers }),
 
   supportedImportFormats: () => invoke<string[]>("supported_import_formats"),
 

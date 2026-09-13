@@ -30,6 +30,21 @@ struct ScribeResponse {
     language_code: Option<String>,
     #[serde(default)]
     language_probability: Option<f32>,
+    #[serde(default)]
+    words: Vec<ScribeWord>,
+}
+
+/// One entry of Scribe's `words` list, which holds spacing and audio events
+/// ("(laughter)") alongside the words themselves.
+#[derive(Debug, Deserialize)]
+struct ScribeWord {
+    #[serde(default)]
+    text: String,
+    #[serde(default, rename = "type")]
+    kind: String,
+    /// "speaker_0", "speaker_1", …; only present with `diarize` on.
+    #[serde(default)]
+    speaker_id: Option<String>,
 }
 
 impl ElevenLabsProvider {
@@ -54,12 +69,40 @@ impl AsrProvider for ElevenLabsProvider {
         language: Option<&str>,
     ) -> Result<TranscriptSegment> {
         let wav = pcm_f32_to_wav(&audio, 16_000)?;
-
         let part = multipart::Part::bytes(wav)
             .file_name("audio.wav")
             .mime_str("audio/wav")
             .map_err(|e| EchoError::AsrProvider(e.to_string()))?;
+        Ok(segment_from_response(
+            self.send(part, language, false).await?,
+        ))
+    }
 
+    async fn transcribe_speakers(
+        &self,
+        audio: Vec<u8>,
+        mime: &str,
+        language: Option<&str>,
+    ) -> Result<Vec<(String, String)>> {
+        let part = multipart::Part::bytes(audio)
+            .file_name("audio")
+            .mime_str(mime)
+            .map_err(|e| EchoError::AsrProvider(e.to_string()))?;
+        turns_from_response(self.send(part, language, true).await?)
+    }
+}
+
+impl ElevenLabsProvider {
+    /// One request to Scribe. `speakers` is the import path: it sets `diarize`
+    /// and swaps the utterance-sized timeout for
+    /// [`super::http::IMPORT_TIMEOUT`], because Scribe answers a whole
+    /// recording in the same single request.
+    async fn send(
+        &self,
+        part: multipart::Part,
+        language: Option<&str>,
+        speakers: bool,
+    ) -> Result<ScribeResponse> {
         let mut form = multipart::Form::new()
             .text("model_id", self.model.clone())
             .part("file", part);
@@ -68,13 +111,20 @@ impl AsrProvider for ElevenLabsProvider {
         if let Some(lang) = language {
             form = form.text("language_code", lang.to_string());
         }
+        if speakers {
+            form = form.text("diarize", "true");
+        }
 
         crate::core::egress::record(&self.endpoint, "cloud transcription");
 
-        let resp = super::http::client()
+        let mut request = super::http::client()
             .post(&self.endpoint)
             .header("xi-api-key", &self.api_key)
-            .multipart(form)
+            .multipart(form);
+        if speakers {
+            request = request.timeout(super::http::IMPORT_TIMEOUT);
+        }
+        let resp = request
             .send()
             .await
             .map_err(|e| EchoError::AsrProvider(e.to_string()))?;
@@ -87,13 +137,45 @@ impl AsrProvider for ElevenLabsProvider {
             )));
         }
 
-        let parsed: ScribeResponse = resp
-            .json()
+        resp.json()
             .await
-            .map_err(|e| EchoError::AsrProvider(e.to_string()))?;
-
-        Ok(segment_from_response(parsed))
+            .map_err(|e| EchoError::AsrProvider(e.to_string()))
     }
+}
+
+/// Speaker turns out of a diarized response, in spoken order.
+///
+/// Scribe labels each word, not each sentence, so a turn is a run of words
+/// with the same `speaker_id`. Spacing entries are kept (they are the only
+/// spaces there are — the words carry none) and audio events are dropped: a
+/// "(laughter)" in the middle of someone's paragraph reads as something they
+/// said. A word with no speaker means diarization did not run, which is an
+/// error rather than a transcript attributed to nobody.
+fn turns_from_response(parsed: ScribeResponse) -> Result<Vec<(String, String)>> {
+    let mut turns: Vec<(String, String)> = Vec::new();
+    for word in parsed.words {
+        match word.kind.as_str() {
+            "word" => {
+                let speaker = word.speaker_id.ok_or_else(|| {
+                    EchoError::AsrProvider("elevenlabs returned no speaker labels".into())
+                })?;
+                match turns.last_mut() {
+                    Some((current, text)) if *current == speaker => text.push_str(&word.text),
+                    _ => turns.push((speaker, word.text)),
+                }
+            }
+            "spacing" => {
+                if let Some((_, text)) = turns.last_mut() {
+                    text.push_str(&word.text);
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(turns
+        .into_iter()
+        .map(|(speaker, text)| (speaker, text.trim().to_string()))
+        .collect())
 }
 
 fn segment_from_response(parsed: ScribeResponse) -> TranscriptSegment {
@@ -132,6 +214,46 @@ mod tests {
         assert_eq!(seg.text, "hi");
         assert!(seg.language.is_none());
         assert!(seg.confidence.is_none());
+    }
+
+    /// Shaped like the documented `POST /v1/speech-to-text` answer with
+    /// `diarize` on: words, spacing and audio events share one list, each
+    /// word carrying a `speaker_id`.
+    #[test]
+    fn speaker_turns_are_rebuilt_from_labelled_words() {
+        let parsed: ScribeResponse = serde_json::from_str(
+            r#"{
+              "language_code": "en",
+              "language_probability": 0.98,
+              "text": "Hello there. (laughter) Hi!",
+              "words": [
+                {"text": "Hello", "start": 0.0, "end": 0.5, "type": "word", "speaker_id": "speaker_0", "logprob": -0.12, "characters": []},
+                {"text": " ", "start": 0.5, "end": 0.52, "type": "spacing", "speaker_id": "speaker_0", "logprob": 0.0},
+                {"text": "there.", "start": 0.52, "end": 0.9, "type": "word", "speaker_id": "speaker_0", "logprob": -0.2},
+                {"text": " ", "start": 0.9, "end": 1.0, "type": "spacing", "speaker_id": "speaker_0", "logprob": 0.0},
+                {"text": "(laughter)", "start": 1.0, "end": 1.6, "type": "audio_event", "speaker_id": "speaker_1", "logprob": -0.4},
+                {"text": " ", "start": 1.6, "end": 1.7, "type": "spacing", "speaker_id": "speaker_1", "logprob": 0.0},
+                {"text": "Hi!", "start": 1.7, "end": 2.0, "type": "word", "speaker_id": "speaker_1", "logprob": -0.1}
+              ]
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            turns_from_response(parsed).unwrap(),
+            vec![
+                ("speaker_0".into(), "Hello there.".into()),
+                ("speaker_1".into(), "Hi!".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn words_without_speakers_are_an_error_not_one_long_monologue() {
+        let parsed: ScribeResponse = serde_json::from_str(
+            r#"{"text":"hi","words":[{"text":"hi","type":"word","start":0,"end":0.2}]}"#,
+        )
+        .unwrap();
+        assert!(turns_from_response(parsed).is_err());
     }
 
     #[test]
