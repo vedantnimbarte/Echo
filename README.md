@@ -129,9 +129,11 @@ ways Settings spells out for your machine:
 What has been run: under WSLg on Ubuntu 24.04, with session accessibility off,
 a GTK 3 `GtkEntry` and a GTK 4 `GtkPasswordEntry` were reported as password
 fields and their unmasked counterparts as ordinary ones, and with no session
-bus the guard reported itself unavailable. That was the detection call, not a
-full dictation into the app. Chromium, Electron, Firefox, Qt, and real GNOME,
-KDE or wlroots desktops are unverified.
+bus the guard reported itself unavailable. A GTK 3 password entry that already
+had focus before Echo's listener started was also recognised, from a one-off
+walk of the active window at startup rather than a focus event. That was the
+detection call, not a full dictation into the app. Chromium, Electron, Firefox,
+Qt, and real GNOME, KDE or wlroots desktops are unverified.
 
 ### Support tiers — what has actually been run
 

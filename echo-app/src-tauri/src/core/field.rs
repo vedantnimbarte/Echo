@@ -268,7 +268,7 @@ mod linux_impl {
 
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use zbus::blocking::{connection, Connection, MessageIterator};
     use zbus::zvariant::{OwnedObjectPath, OwnedValue};
@@ -278,11 +278,23 @@ mod linux_impl {
     const ROLE_PASSWORD_TEXT: u32 = 40;
     /// `ATSPI_STATE_FOCUSED`: a bit index into the first word of `GetState`.
     const STATE_FOCUSED: u32 = 12;
+    /// `ATSPI_STATE_ACTIVE`: on a top-level window, the one with focus.
+    const STATE_ACTIVE: u32 = 1;
+    /// `ATSPI_STATE_MANAGES_DESCENDANTS`: children are created on request.
+    const STATE_MANAGES_DESCENDANTS: u32 = 16;
 
     /// An app that has hung, or is stopped in a debugger, must not hold up
     /// dictation. Every answer here is a local round trip that takes a
     /// millisecond or two; half a second is already a wrong one.
     const CALL_TIMEOUT: Duration = Duration::from_millis(500);
+
+    /// The startup walk's budget. A real desktop's active window has a few
+    /// hundred nodes; these only exist so a pathological one ends the walk.
+    /// The time limit can be overrun by one [`CALL_TIMEOUT`], the call already
+    /// in flight when it passes.
+    const STARTUP_SCAN: Duration = Duration::from_secs(2);
+    const SCAN_MAX_NODES: usize = 5_000;
+    const SCAN_MAX_DEPTH: usize = 40;
 
     /// The session bus (for the enablement flag) and the accessibility bus
     /// (for everything else). Set once the listener is up; absent forever when
@@ -300,14 +312,17 @@ mod linux_impl {
     /// focus has moved somewhere that sent no event, so this control is not
     /// where the text would go.
     pub(super) fn classify(role: u32, states: &[u32]) -> FieldKind {
-        let focused = states
-            .first()
-            .is_some_and(|word| word & (1 << STATE_FOCUSED) != 0);
-        match (focused, role) {
+        match (has_state(states, STATE_FOCUSED), role) {
             (false, _) => FieldKind::Unknown,
             (true, ROLE_PASSWORD_TEXT) => FieldKind::Secure,
             (true, _) => FieldKind::Plain,
         }
+    }
+
+    /// Whether `GetState`'s answer includes `state`. Every state used here is
+    /// below 32, so only the first word is read.
+    fn has_state(words: &[u32], state: u32) -> bool {
+        words.first().is_some_and(|word| word & (1 << state) != 0)
     }
 
     pub fn start() {
@@ -368,7 +383,19 @@ mod linux_impl {
             &("Object:StateChanged:focused",),
         )?;
 
-        let _ = BUSES.set((session, a11y));
+        let _ = BUSES.set((session, a11y.clone()));
+
+        // A field focused before Echo started, and still focused, never sends
+        // the event the loop below waits for — so without this, a password box
+        // the user clicked into and then launched Echo from a keyboard
+        // shortcut would read `Unknown` until they clicked somewhere else.
+        // Look once. It runs here, on the listener's own thread, so a slow tree
+        // delays nothing but this answer; and any focus event that arrives in
+        // the meantime is queued on `events` and read afterwards, so the
+        // fresher answer still wins.
+        if let Some(found) = focused_at_startup(&a11y) {
+            *FOCUS.lock().unwrap_or_else(|e| e.into_inner()) = Some(found);
+        }
 
         for message in events {
             let Ok(message) = message else { continue };
@@ -393,6 +420,102 @@ mod linux_impl {
         Err(zbus::Error::Failure(
             "the accessibility bus closed the connection".into(),
         ))
+    }
+
+    /// Find whatever holds focus right now by walking the tree: every
+    /// application the registry knows, into its active window, down to the
+    /// first control whose state says FOCUSED.
+    ///
+    /// Bounded three ways, because an office document or a browser tab can
+    /// publish tens of thousands of nodes and an app can hang: [`find_focused`]
+    /// caps depth and node count, and past [`STARTUP_SCAN`] every remaining
+    /// call is skipped rather than made. Any failure is "not found", which
+    /// leaves the answer `Unknown` — exactly what it was before this existed.
+    fn focused_at_startup(a11y: &Connection) -> Option<(String, OwnedObjectPath)> {
+        let deadline = Instant::now() + STARTUP_SCAN;
+        let ask = |(owner, path): &(String, OwnedObjectPath), method: &str| {
+            if Instant::now() > deadline {
+                return None;
+            }
+            a11y.call_method(
+                Some(owner.as_str()),
+                path,
+                Some("org.a11y.atspi.Accessible"),
+                method,
+                &(),
+            )
+            .ok()
+        };
+        let root = (
+            "org.a11y.atspi.Registry".to_string(),
+            OwnedObjectPath::try_from("/org/a11y/atspi/accessible/root").ok()?,
+        );
+        find_focused(
+            root,
+            |node| ask(node, "GetState")?.body().deserialize::<Vec<u32>>().ok(),
+            |node| {
+                ask(node, "GetChildren")
+                    .and_then(|m| {
+                        m.body()
+                            .deserialize::<Vec<(String, OwnedObjectPath)>>()
+                            .ok()
+                    })
+                    .unwrap_or_default()
+            },
+        )
+    }
+
+    /// The walk behind [`focused_at_startup`], free of D-Bus so its pruning
+    /// can be tested: `states` answers a node's state words (`None` when the
+    /// node could not be asked) and `children` its children.
+    ///
+    /// The tree is the registry at depth 0, applications at 1 and their
+    /// top-level windows at 2. Only the *active* window is entered — a focused
+    /// control in a window that is not active is not where typing would land —
+    /// and nothing that manages its own descendants is: those are the lists
+    /// and tables that invent a node per row on demand, where walking is how
+    /// a scan never ends, and a row is never a password box.
+    ///
+    /// ponytail: depth-first and stops at the first FOCUSED node. Toolkits
+    /// clear FOCUSED when their window deactivates, so within the active
+    /// window there is one; a toolkit that leaves a stale one earlier in the
+    /// tree would be read instead, and [`classify`] still re-checks focus.
+    pub(super) fn find_focused<N>(
+        root: N,
+        mut states: impl FnMut(&N) -> Option<Vec<u32>>,
+        mut children: impl FnMut(&N) -> Vec<N>,
+    ) -> Option<N> {
+        let mut stack = vec![(root, 0)];
+        let mut visited = 0;
+        while let Some((node, depth)) = stack.pop() {
+            visited += 1;
+            if visited > SCAN_MAX_NODES {
+                return None;
+            }
+            // The registry and the application objects are containers; asking
+            // them for state would be a round trip per app for nothing.
+            if depth >= 2 {
+                let Some(words) = states(&node) else { continue };
+                if has_state(&words, STATE_FOCUSED) {
+                    return Some(node);
+                }
+                let enter = if depth == 2 {
+                    has_state(&words, STATE_ACTIVE)
+                } else {
+                    !has_state(&words, STATE_MANAGES_DESCENDANTS)
+                };
+                if !enter {
+                    continue;
+                }
+            }
+            if depth < SCAN_MAX_DEPTH {
+                // Reversed so the first child is popped first: focus is far
+                // more often near the top of a window than in its last pane.
+                let kids = children(&node);
+                stack.extend(kids.into_iter().rev().map(|kid| (kid, depth + 1)));
+            }
+        }
+        None
     }
 
     pub fn focused_field() -> FieldKind {
@@ -529,12 +652,102 @@ mod tests {
             assert_eq!(classify(40, &[]), FieldKind::Unknown);
         }
 
+        const ACTIVE: u32 = 1 << 1;
+        const MANAGES: u32 = 1 << 16;
+
+        /// Walk a tree given as `(node, state word, children)` rows; a node
+        /// with no row cannot be asked. Also returns how many nodes had their
+        /// children fetched, which is the round trip the budget exists for.
+        fn walk(rows: &[(&'static str, u32, &[&'static str])]) -> (Option<&'static str>, usize) {
+            let row = |n: &str| rows.iter().find(|r| r.0 == n);
+            let mut expanded = 0;
+            let found = super::super::linux_impl::find_focused(
+                "registry",
+                |n| row(n).map(|r| vec![r.1, 0]),
+                |n| {
+                    expanded += 1;
+                    row(n).map(|r| r.2.to_vec()).unwrap_or_default()
+                },
+            );
+            (found, expanded)
+        }
+
+        #[test]
+        fn startup_scan_finds_the_field_in_the_active_window() {
+            let (found, _) = walk(&[
+                ("registry", 0, &["editor", "browser"]),
+                ("editor", 0, &["editor-window"]),
+                ("editor-window", 0, &["editor-text"]),
+                // A toolkit that leaves a stale FOCUSED in a window that is
+                // not active must not be read: typing goes elsewhere.
+                ("editor-text", FOCUSED[0], &[]),
+                ("browser", 0, &["browser-window"]),
+                ("browser-window", ACTIVE, &["panel"]),
+                ("panel", 0, &["search", "password"]),
+                ("search", 0, &[]),
+                ("password", FOCUSED[0], &[]),
+            ]);
+            assert_eq!(found, Some("password"));
+        }
+
+        /// A node that does not answer — the app hung past the timeout, or
+        /// the deadline passed — is skipped, and its siblings are still asked.
+        #[test]
+        fn startup_scan_steps_over_a_node_that_does_not_answer() {
+            let (found, _) = walk(&[
+                ("registry", 0, &["hung", "app"]),
+                ("hung", 0, &["hung-window"]),
+                ("app", 0, &["window"]),
+                ("window", ACTIVE, &["field"]),
+                ("field", FOCUSED[0], &[]),
+            ]);
+            assert_eq!(found, Some("field"));
+        }
+
+        /// Lists and tables that invent a child per row are not entered, and
+        /// neither is the tree below an inactive window.
+        #[test]
+        fn startup_scan_does_not_enter_what_it_does_not_need() {
+            let (found, expanded) = walk(&[
+                ("registry", 0, &["app"]),
+                ("app", 0, &["inactive", "window"]),
+                ("inactive", 0, &["hidden-field"]),
+                ("hidden-field", FOCUSED[0], &[]),
+                ("window", ACTIVE, &["rows"]),
+                ("rows", MANAGES, &["row"]),
+                ("row", FOCUSED[0], &[]),
+            ]);
+            assert_eq!(found, None);
+            // registry, app, window: nothing under `inactive` or `rows`.
+            assert_eq!(expanded, 3);
+        }
+
+        /// A pathological tree ends the walk with no answer rather than a
+        /// stall: the focused control past the node budget is never reached.
+        #[test]
+        fn startup_scan_gives_up_on_a_huge_tree() {
+            // Ten thousand cells with no row (asked, no answer) and then the
+            // focused field, which would be found if the walk ran to the end.
+            let mut cells = vec!["cell"; 10_000];
+            cells.push("focused");
+            let (found, _) = walk(&[
+                ("registry", 0, &["app"]),
+                ("app", 0, &["window"]),
+                ("window", ACTIVE, &cells),
+                ("focused", FOCUSED[0], &[]),
+            ]);
+            assert_eq!(found, None);
+        }
+
         /// Against a real desktop: start the listener, then focus a field
         /// within 30 seconds. `ECHO_LIVE_EXPECT=plain` for an ordinary one.
+        /// A field that already has focus when the listener starts must be
+        /// found too, so both orders are worth running.
         ///
         /// ```sh
         /// cargo test --lib field::tests::atspi::live -- --ignored --nocapture &
         /// sleep 3; zenity --password
+        /// # or: zenity --password & sleep 3; cargo test ... live -- --ignored
         /// ```
         #[test]
         #[ignore = "needs a desktop session with an accessibility bus"]
