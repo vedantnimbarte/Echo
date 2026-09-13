@@ -229,6 +229,16 @@ export default function App() {
     };
   }, []);
 
+  // The pill's engine tag asks for Voice engine from its own webview. Above the
+  // onboarding gate with the other listeners, so it is in place from launch,
+  // while the window is still hidden, rather than from the shell's first paint.
+  useEffect(() => {
+    const unlisten = echoEvents.onOpenPage(setPage);
+    return () => {
+      unlisten.then((f) => f());
+    };
+  }, []);
+
   // Keep this window alive when closed so the pill's gear can reopen it.
   useEffect(() => {
     const win = getCurrentWindow();

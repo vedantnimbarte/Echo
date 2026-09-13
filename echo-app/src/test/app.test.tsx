@@ -9,9 +9,10 @@
 //! restatement of the markup and has to be rewritten every time the copy changes.
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { listen } from "@tauri-apps/api/event";
 
 import { settings, invoked, ANSWERS } from "./setup";
 import App from "../App";
@@ -56,6 +57,26 @@ describe("the app shell", () => {
     for (const page of ["Settings", "Voice engine", "Output", "Privacy", "About"]) {
       expect((await screen.findAllByText(page)).length).toBeGreaterThan(0);
     }
+  });
+
+  // The pill is a separate webview, so its engine tag cannot set this window's
+  // page — it asks, and this is the half that has to answer. The ask is only
+  // wired in Pill.tsx; what is pinned here is that asking lands somewhere.
+  it("goes to the page another window asks for", async () => {
+    vi.mocked(listen).mockClear();
+    mount(<App />);
+    const engine = await screen.findByRole("button", { name: "Voice engine" });
+    expect(engine.getAttribute("aria-current")).toBeNull();
+
+    const calls = vi.mocked(listen).mock.calls.filter(([name]) => name === "echo://open-page");
+    expect(calls.length).toBeGreaterThan(0);
+    await act(async () => {
+      for (const [, handler] of calls) {
+        (handler as (e: unknown) => void)({ payload: "engine" });
+      }
+    });
+
+    expect(engine.getAttribute("aria-current")).toBe("page");
   });
 
   it("shows onboarding to someone who has not finished it", async () => {

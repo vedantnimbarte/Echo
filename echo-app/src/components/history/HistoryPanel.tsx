@@ -44,7 +44,7 @@ function wordCount(text: string): number {
 /* ---- greeting -------------------------------------------------------------- */
 
 /**
- * The page's heading, in place of the word "Dictation".
+ * The page's heading, in place of the word "History".
  *
  * The sidebar already says which page you are on, so spending the largest type
  * on that label again says nothing. This says the one thing the window cannot
@@ -60,7 +60,9 @@ function wordCount(text: string): number {
  *
  * Falls back to the page's name while the shortcut is still being read, and if
  * none is ever set — an empty heading would leave the page with nothing to be
- * found by, and "Dictation" is at least true.
+ * found by. The name is the sidebar's, "History" — it said "Dictation" until the
+ * button was renamed, and a heading that disagrees with the button you just
+ * pressed reads as having landed somewhere else.
  */
 function Greeting() {
   const { data: name } = useQuery({
@@ -74,7 +76,7 @@ function Greeting() {
   return (
     <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[22px]">
       {!hotkey ? (
-        "Dictation"
+        "History"
       ) : (
         <>
           {name ? `Hey ${name}, press` : "Press"}

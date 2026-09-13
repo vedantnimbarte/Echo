@@ -580,7 +580,7 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
       {on("settings.general", ["language", "interface", "translation", "locale", "english", "español", "deutsch", "français"]) && (
         <Group
           title={label("settings.general", "Interface language")}
-          hint="This is the language Echo's own buttons and labels use. It has no effect on which language it transcribes — that is set under Engine."
+          hint="This is the language Echo's own buttons and labels use. It has no effect on which language it transcribes — that is set under Voice engine."
         >
           {/* No Field label: the group is already called Interface language,
               and repeating it above the select said the same word twice. */}
@@ -1270,7 +1270,7 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
       {on("privacy", ["learn", "auto-learn", "corrections", "dictionary", "teach"]) && (
         <Group
           title={label("privacy", "Learning")}
-          hint="When you fix a word in History, Echo can add that correction to your dictionary so the mistake stops happening. Only confident, small corrections are kept, and every one shows up in the Dictionary where you can remove it."
+          hint="When you fix a word in History, Echo can add that correction to your dictionary so the mistake stops happening. Only confident, small corrections are kept, and every one shows up in Custom dictionary, where you can remove it."
         >
           <Check
             checked={autoLearn !== "false"}
