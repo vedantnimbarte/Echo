@@ -6,24 +6,36 @@
 //! running, listening on a global hotkey, and unreachable.
 //!
 //! The menu opens on a left click, which is the default on every platform and
-//! the only affordance macOS offers anyway — so there is no per-OS branch here.
+//! the only affordance macOS offers anyway.
 //!
 //! It also carries the two settings worth changing without opening a window:
 //! dictation language and microphone. Both are a tick beside the live value
 //! rather than a bare list, so the menu answers "what is Echo using?" as well as
 //! changing it — which means it is rebuilt, not built once (see [`refresh`]).
 //!
-//! **Never rebuild from a click event.** The shell posts the tray's button-down
-//! and button-up messages back to back, so tao gets no turn between them: by the
-//! time our click handler runs, `TrackPopupMenu` is already up and pumping the
+//! **Never rebuild while tray-icon's own popup is up.** Left to itself, the
+//! Windows backend calls `TrackPopupMenu` straight from its window procedure,
+//! the moment the button comes up, and only *queues* the click for us. So by
+//! the time a click handler runs, the popup is already open and pumping the
 //! queue, and the handler runs *inside* that modal loop. Swapping the menu there
 //! destroys the `HMENU` the popup is tracking and it vanishes on the frame it
-//! appeared. `Enter` — the cursor arriving on the icon — is the hook that works:
-//! it lands a whole gesture before the press, outside any modal loop.
+//! appeared.
+//!
+//! On Windows we therefore switch tray-icon's popup off and open the menu
+//! ourselves from the click handler: refresh first, then `show_menu`, so the
+//! menu is right however the click arrived — a real hover, automation, or a
+//! remote session that never reports the cursor crossing the icon. Elsewhere
+//! the rebuild happens on `Enter`, the cursor arriving on the icon, which lands
+//! a whole gesture before the press. macOS keeps that because its menu opens
+//! natively on mouse-down, and moving it to our handler would open it on the
+//! release instead; Linux gets neither event, and relies on [`refresh`] being
+//! called wherever a setting changes.
 
 use std::sync::Mutex;
 
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
+#[cfg(windows)]
+use tauri::tray::{MouseButton, MouseButtonState};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
@@ -272,18 +284,31 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let mut tray = TrayIconBuilder::with_id("echo")
         .tooltip("Echo — voice keyboard")
         .menu(&build_menu(app, &state)?)
-        .on_tray_icon_event(|tray, event| {
-            // The cursor arriving on the icon, not the click — see the note at
-            // the top of this file. One device query per hover, and the menu is
-            // already correct by the time the button goes down.
-            //
-            // ponytail: a click with no hover first (automation, or a desktop
-            // that reports no motion over the icon) opens the previous list.
-            // Fix by driving the popup ourselves if Tauri ever exposes
-            // `TrayIcon::show_menu`.
-            if let TrayIconEvent::Enter { .. } = event {
+        // Ours to open on Windows — see the note at the top of this file. The
+        // right-click half has no builder method and is switched off below.
+        .show_menu_on_left_click(cfg!(not(windows)))
+        .on_tray_icon_event(|tray, event| match event {
+            // The release, like the shell's own menus. Both buttons, because
+            // tray-icon used to open the menu on either and people use both.
+            #[cfg(windows)]
+            TrayIconEvent::Click {
+                button: MouseButton::Left | MouseButton::Right,
+                button_state: MouseButtonState::Up,
+                ..
+            } => {
+                // We are on the main thread in tao's own event handler, not in
+                // anyone's modal loop, so the rebuild is safe, and the popup
+                // `show_menu` runs holds off every other event until it closes.
+                // One device query per click, the same as it was per hover.
                 refresh(tray.app_handle());
+                let _ = tray.with_inner_tray_icon(|inner| inner.show_menu());
             }
+            // The cursor arriving on the icon, not the click. One device query
+            // per hover, and the menu is already correct by the time the
+            // button goes down.
+            #[cfg(not(windows))]
+            TrayIconEvent::Enter { .. } => refresh(tray.app_handle()),
+            _ => {}
         })
         .on_menu_event(|app, event| match event.id.as_ref() {
             "tray_settings" => show_main(app),
@@ -318,7 +343,9 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         }
     }
 
-    tray.build(app)?;
+    let _tray = tray.build(app)?;
+    #[cfg(windows)]
+    _tray.with_inner_tray_icon(|inner| inner.set_show_menu_on_right_click(false))?;
     Ok(())
 }
 

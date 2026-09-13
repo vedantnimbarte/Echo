@@ -1155,6 +1155,7 @@ dependencies = [
  "futures-util",
  "hound",
  "keyring",
+ "libc",
  "libloading 0.8.9",
  "log",
  "ndarray 0.16.1",
