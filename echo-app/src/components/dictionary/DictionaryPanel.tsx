@@ -5,6 +5,7 @@ import { save, open } from "@tauri-apps/plugin-dialog";
 import { commands } from "../../ipc/commands";
 import { Page, Group } from "../common/Page";
 import { Hint } from "../common/Hint";
+import { SyncSection } from "./SyncSection";
 
 export function DictionaryPanel() {
   const qc = useQueryClient();
@@ -285,6 +286,7 @@ export function DictionaryPanel() {
       )}
       </div>
       </Group>
+      <SyncSection />
     </Page>
   );
 }

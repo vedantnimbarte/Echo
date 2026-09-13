@@ -120,6 +120,15 @@ export interface PluginManifest {
   entry: string;
 }
 
+/** How the last dictionary sync through a shared folder went. */
+export interface DictionarySyncStatus {
+  /** RFC 3339. When a sync last succeeded; kept when a later one fails. */
+  last_synced_at: string | null;
+  last_error: string | null;
+  /** Conflicted copies the sync service made, merged in on the last sync. */
+  conflict_copies: string[];
+}
+
 /** A dictionary profile: a named group of entries. */
 export interface Profile {
   id: number | null;
@@ -236,6 +245,12 @@ export const commands = {
 
   importDictionary: (path: string) =>
     invoke<number>("import_dictionary", { path }),
+
+  /** Sync with the folder now, if sync is on. Resolves to how it went. */
+  syncDictionaryNow: () => invoke<DictionarySyncStatus>("sync_dictionary_now"),
+
+  getDictionarySyncStatus: () =>
+    invoke<DictionarySyncStatus>("get_dictionary_sync_status"),
 
   getHistory: (limit?: number) =>
     invoke<TranscriptionRecord[]>("get_history", { limit }),

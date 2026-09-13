@@ -364,6 +364,31 @@ describe("the plugins panel", () => {
   });
 });
 
+describe("dictionary sync", () => {
+  // The warning is asserted, not just the section: it is the sentence someone
+  // has to read before pointing Echo at a folder other people can open.
+  it("mounts on the dictionary page and says the file is unencrypted", async () => {
+    mount(<DictionaryPanel />);
+    expect(await screen.findByRole("heading", { name: /Sync/ })).toBeTruthy();
+    expect(await screen.findByText(/not encrypted/i)).toBeTruthy();
+    expect(await screen.findByText(/Last synced:\s*never/)).toBeTruthy();
+    const button = await screen.findByRole("button", { name: /Sync now/ });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("syncs from the button once a folder is chosen and sync is on", async () => {
+    settings.set("dictionary_sync_folder", "/home/you/Dropbox");
+    settings.set("dictionary_sync_enabled", "true");
+    const user = userEvent.setup();
+    mount(<DictionaryPanel />);
+
+    const button = await screen.findByRole("button", { name: /Sync now/ });
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    await user.click(button);
+    await waitFor(() => expect(invoked).toContain("sync_dictionary_now"));
+  });
+});
+
 describe("the other panels", () => {
   it.each([
     ["dictionary", <DictionaryPanel key="d" />],
