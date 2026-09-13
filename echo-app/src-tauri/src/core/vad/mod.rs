@@ -13,6 +13,8 @@ pub mod gate;
 mod silero;
 
 pub use silero::{SileroModel, SileroVad};
+// The wake word runs its own ONNX sessions through the same runtime.
+pub(crate) use silero::load_onnx_runtime;
 
 /// A voice activity detector. Implementations debounce internally so the caller
 /// sees a stable speech/silence signal across chunk boundaries.

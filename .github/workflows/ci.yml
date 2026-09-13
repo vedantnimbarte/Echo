@@ -116,6 +116,47 @@ jobs:
       - name: cargo test
         run: cargo test --manifest-path echo-app/src-tauri/Cargo.toml --lib
 
+  # Intel macOS is built differently from every other target — `ort` with
+  # `load-dynamic` at API 23 against a downloaded 1.23.2 dylib, instead of a
+  # statically linked 1.24.2 — so the arm64 job above proves nothing about it.
+  #
+  # This runs on a real Intel runner rather than cross-checking from
+  # macos-latest, because the part most likely to be wrong is not compilation:
+  # it is whether that dylib loads and Silero actually runs on it, and only the
+  # tests show that. The release cross-compiles instead (see release.yml).
+  # macos-15-intel is GitHub's last x86_64 image and is retired in August 2027;
+  # when it goes, replace this with `cargo clippy --target x86_64-apple-darwin`
+  # on macos-latest, which still catches a compile break.
+  macos-intel:
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Cache cargo
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: echo-app/src-tauri
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+      # A test binary is not inside an app bundle, so point `ort` at the
+      # runtime the way a developer would. The staging script is what fetches
+      # and verifies it for the release; run the same code here rather than a
+      # second copy of the URL and checksum.
+      - name: Fetch the Intel ONNX Runtime
+        working-directory: echo-app
+        run: |
+          node scripts/stage-runtime-deps.mjs --onnxruntime-only
+          echo "ORT_DYLIB_PATH=$PWD/src-tauri/resources/bin/libonnxruntime.dylib" >> "$GITHUB_ENV"
+      - name: cargo clippy
+        run: cargo clippy --manifest-path echo-app/src-tauri/Cargo.toml --all-targets
+      - name: cargo test
+        run: cargo test --manifest-path echo-app/src-tauri/Cargo.toml --lib
+
   # Same reasoning as the macOS job, for the arm64 Linux build release.yml now
   # ships: without it, an aarch64-only break (a dependency with no arm64
   # binaries, a cfg that assumed x86_64) would surface only when a tag fired.

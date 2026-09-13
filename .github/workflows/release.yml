@@ -17,14 +17,26 @@ jobs:
         include:
           - platform: windows-latest
             args: ""
-          # Apple Silicon only. A universal build also compiles for
-          # x86_64-apple-darwin, and `ort` (the ONNX Runtime behind Silero VAD
-          # and wake word) publishes no prebuilt binaries for that target —
-          # `ort-sys`'s dist.txt lists aarch64-apple-darwin alone. Building
-          # universal fails at link time; Intel support would mean compiling
-          # ONNX Runtime from source.
+          # Two separate .dmg files, not one universal. A universal build links
+          # both slices the same way, and `ort` (the ONNX Runtime behind Silero
+          # VAD and the wake word) can only link statically on arm64 —
+          # `ort-sys`'s dist.txt has no x86_64-apple-darwin binaries. The Intel
+          # build uses `load-dynamic` instead and ships Microsoft's
+          # libonnxruntime.dylib; see the `ort` note in src-tauri/Cargo.toml.
           - platform: macos-latest
+            target: aarch64-apple-darwin
             args: "--target aarch64-apple-darwin"
+          # Cross-compiled on the arm64 runner rather than built on an Intel
+          # one. With `load-dynamic` nothing native is linked for ONNX Runtime,
+          # so there is nothing a cross-compile gets wrong: Apple's toolchain
+          # targets x86_64 from arm64 natively, and the staged whisper-cli is
+          # already a universal binary. And GitHub is retiring Intel macOS
+          # runners — macos-13 was shut down in December 2025, and
+          # macos-15-intel, the last x86_64 image, goes in August 2027 — so a
+          # release that needed one would stop building then.
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            args: "--target x86_64-apple-darwin"
           - platform: ubuntu-latest
             args: ""
           # Native arm64 runner rather than cross-compiling: webkit2gtk and
@@ -37,10 +49,10 @@ jobs:
     runs-on: ${{ matrix.platform }}
     # `manifests` needs every build to succeed, so one failed platform leaves
     # all of them without SHA256SUMS.txt — which is what the v0.3.0 macOS
-    # failure did. arm64 Linux has not yet produced a release, so until it has,
-    # it is not allowed to take the other three down with it. Drop this once a
-    # tag has built it cleanly.
-    continue-on-error: ${{ matrix.platform == 'ubuntu-24.04-arm' }}
+    # failure did. arm64 Linux and Intel macOS have not yet produced a release,
+    # so until each has, it is not allowed to take the others down with it.
+    # Drop each half once a tag has built that platform cleanly.
+    continue-on-error: ${{ matrix.platform == 'ubuntu-24.04-arm' || matrix.target == 'x86_64-apple-darwin' }}
     steps:
       - uses: actions/checkout@v5
 
@@ -59,12 +71,15 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin' || '' }}
+          targets: ${{ matrix.target }}
 
       - name: Cache cargo
         uses: swatinem/rust-cache@v2
         with:
           workspaces: echo-app/src-tauri
+          # Both macOS entries run the same job on the same runner, so without
+          # this they share one cache key and each saves over the other's.
+          key: ${{ matrix.target }}
 
       - name: Set up Node
         uses: actions/setup-node@v5
@@ -80,9 +95,13 @@ jobs:
       # Stage the offline whisper-cli into resources/bin so the installer ships
       # it and a fresh install transcribes offline out of the box. Windows
       # downloads a prebuilt CLI; macOS/Linux build it from source (needs cmake).
-      - name: Stage runtime deps (whisper-cli)
+      # The Intel macOS build also gets libonnxruntime.dylib here, which is why
+      # the script needs the target: the runner is arm64 either way.
+      - name: Stage runtime deps (whisper-cli, Intel ONNX Runtime)
         run: node scripts/stage-runtime-deps.mjs
         working-directory: echo-app
+        env:
+          ECHO_TARGET: ${{ matrix.target }}
 
       # Signing is opt-in, and the opt-in has to be the *absence of the
       # variable* rather than an empty one.

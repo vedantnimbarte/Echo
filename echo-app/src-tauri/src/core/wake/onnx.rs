@@ -1,6 +1,8 @@
 //! openWakeWord inference: a three-stage ONNX chain run through the same
-//! statically-linked ONNX Runtime that already serves the Silero VAD, so wake
-//! word detection adds no new runtime dependency and nothing to bundle.
+//! ONNX Runtime that already serves the Silero VAD, so wake word detection adds
+//! no new runtime dependency and nothing to bundle. (Statically linked
+//! everywhere but Intel macOS, which loads a bundled dylib — see
+//! `core::vad::load_onnx_runtime`.)
 //!
 //! ```text
 //! audio (16 kHz f32) → melspectrogram.onnx → 32-bin mel frames
@@ -45,6 +47,7 @@ pub struct WakeModel {
 }
 
 fn build_session(path: &Path) -> Result<Session> {
+    crate::core::vad::load_onnx_runtime()?;
     Session::builder()
         .map_err(|e| EchoError::Config(format!("ort session builder: {e}")))?
         .with_optimization_level(GraphOptimizationLevel::Level3)
