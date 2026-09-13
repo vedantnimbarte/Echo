@@ -220,10 +220,13 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- packaging; then
+          # links.ts is written by the same script. It used to be left out of
+          # this list, so the site's download buttons stayed on v0.1.0 file
+          # names through every release since.
+          if git diff --quiet -- packaging website/src/lib/links.ts; then
             echo "manifests unchanged"
             exit 0
           fi
-          git add packaging
+          git add packaging website/src/lib/links.ts
           git commit -m "chore(packaging): manifests for ${{ github.ref_name }}"
           git push
