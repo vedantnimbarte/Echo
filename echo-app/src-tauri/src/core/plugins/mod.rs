@@ -1,32 +1,17 @@
-use std::sync::Arc;
-
-use crate::core::asr::AsrProvider;
-use crate::core::dictionary::DictionaryEntry;
-
+pub mod dispatch;
 pub mod integrity;
 pub mod loader;
 pub mod scaffold;
 
-// The base plugin API lives in the standalone `echo-sdk` crate so external
-// plugin authors can compile against the same trait/manifest definitions the
-// host uses (the FFI is only sound if both sides share them). Re-exported here
-// so existing `crate::core::plugins::…` paths keep working unchanged.
-pub use echo_sdk::{
-    AudioPlugin, OutputPlugin, Plugin, PluginContext, PluginError, PluginInfo, PluginManifest,
-    PluginPermission, PluginResult,
-};
-
-// The capability traits below reference host-internal types (`AsrProvider`,
-// `DictionaryEntry`), so they stay in the app rather than the SDK — pulling
-// those into the public SDK would couple it to the host's async runtime and
-// error type. They build on the re-exported `Plugin` trait above.
-
-/// A plugin that contributes an ASR provider.
-pub trait AsrPlugin: Plugin {
-    fn as_asr_provider(&self) -> Arc<dyn AsrProvider>;
-}
-
-/// A plugin that contributes dictionary entries.
-pub trait DictionaryPlugin: Plugin {
-    fn entries(&self) -> Vec<DictionaryEntry>;
-}
+// The plugin API lives in the standalone `echo-sdk` crate so external plugin
+// authors compile against the same trait/manifest definitions the host uses
+// (the FFI is only sound if both sides share them). Re-exported here so
+// `crate::core::plugins::…` paths keep working. Only what the host names is
+// re-exported; the capability traits are reached through `Plugin::as_*`.
+//
+// All four capability traits are SDK types now. `AsrPlugin` and
+// `DictionaryPlugin` used to live here and name host-internal types
+// (`AsrProvider`, the engine's `DictionaryEntry`), which meant no crate outside
+// this one could implement them — a trait nobody can write is not an API. The
+// SDK defines plain types for each, and `dispatch` translates at the boundary.
+pub use echo_sdk::{Plugin, PluginContext, PluginInfo, PluginManifest, Transcript};

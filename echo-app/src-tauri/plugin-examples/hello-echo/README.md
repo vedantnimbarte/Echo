@@ -11,9 +11,15 @@ Copy it, or generate your own from the app.
 ## What it does
 
 `on_load` appends a line to `hello-echo.log` in the data directory Echo hands
-the plugin, and `on_unload` does nothing. That is the whole plugin. It is
-enough to prove the loader found your library, called your code, and gave you a
-place to write.
+the plugin. It is also an **output plugin**: after each transcript is typed,
+Echo calls `on_transcript`, and the plugin appends a line saying how many
+characters went to which app — `delivered 42 characters to notepad.exe`.
+
+It deliberately does not write the words. An example you install to see a
+plugin work should not start keeping a copy of your dictation outside Echo's
+history and its retention window. Dictate a sentence with it enabled, and the
+log proves the loader found your library, Echo called your capability, and you
+had somewhere to write.
 
 ## Build
 
@@ -22,8 +28,9 @@ cargo build --release
 ```
 
 Inside this repository the crate depends on `echo-sdk` by path, so it always
-matches the host. A plugin of your own outside the repo takes `echo-sdk = "0.1"`
-from crates.io.
+matches the host. A plugin of your own outside the repo takes `echo-sdk = "0.2"`
+from crates.io. A library built against echo-sdk 0.1 is refused by this Echo —
+rebuild it.
 
 ## The `entry` field is per-platform
 

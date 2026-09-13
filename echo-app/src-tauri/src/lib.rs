@@ -392,6 +392,15 @@ pub fn run() {
 
             app.manage(app_state);
 
+            // The dictionary engine and the ASR engines were built before any
+            // plugin loaded, so enabled plugins' entries and engines join now.
+            {
+                let handle = app.handle().clone();
+                tauri::async_runtime::block_on(async move {
+                    commands::plugins::sync_capabilities(&handle.state::<AppState>()).await;
+                });
+            }
+
             // Bind the global hotkey now that state is available. Which
             // mechanism gets used depends on the shortcut itself.
             let handle = app.handle().clone();

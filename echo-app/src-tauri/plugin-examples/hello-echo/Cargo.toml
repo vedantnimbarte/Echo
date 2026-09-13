@@ -12,5 +12,5 @@ crate-type = ["cdylib"]
 # By path, not by version: this example ships inside the repository, so it
 # builds against the SDK the host was built against and proves the scaffold
 # template still compiles. A scaffold written to your own machine gets
-# `echo-sdk = "0.1"` from crates.io instead.
+# `echo-sdk = "0.2"` from crates.io instead.
 echo-sdk = { path = "../../echo-sdk" }

@@ -34,6 +34,26 @@ export function PluginsPanel() {
     mutationFn: ({ name, enabled }: { name: string; enabled: boolean }) =>
       enabled ? commands.enablePlugin(name) : commands.disablePlugin(name),
     onSuccess: invalidate,
+    // Enabling is a load, and a load can be refused — a library changed since
+    // install, or one built against an older echo-sdk. The reason is the
+    // whole fix ("rebuild it"), so it goes on screen, not only in the log.
+    onError: (e) => {
+      setError(String(e));
+      invalidate();
+    },
+  });
+
+  // A plugin engine is registered as `plugin:<name>` once enabled, and picked
+  // here rather than on the engine page: that page is laid out around local and
+  // cloud, and a plugin is neither.
+  const { data: asrProvider } = useQuery({
+    queryKey: ["setting", "asr_provider"],
+    queryFn: () => commands.getSetting("asr_provider"),
+  });
+  const useEngineMutation = useMutation({
+    mutationFn: (name: string) => commands.setAsrProvider(`plugin:${name}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["setting", "asr_provider"] }),
+    onError: (e) => setError(String(e)),
   });
 
   const uninstallMutation = useMutation({
@@ -204,6 +224,18 @@ export function PluginsPanel() {
                   </span>
                 )}
               </div>
+              {p.enabled &&
+                p.permissions.includes("asr") &&
+                (asrProvider === `plugin:${p.name}` ? (
+                  <span className="text-xs text-[var(--ink-muted)]">Transcribing</span>
+                ) : (
+                  <button
+                    onClick={() => useEngineMutation.mutate(p.name)}
+                    className="text-xs text-[var(--ink-muted)] transition-colors hover:text-[var(--ink)]"
+                  >
+                    Use for dictation
+                  </button>
+                ))}
               <button
                 onClick={() => uninstallMutation.mutate(p.name)}
                 className="text-[var(--ink-faint)] transition-colors hover:text-[var(--ink)]"
