@@ -12,7 +12,7 @@ const RAW_URL = REPO_URL.replace("github.com", "raw.githubusercontent.com");
  * the same reason the packaging manifests are: hand-maintained, it silently
  * rots into download links that 404 on the previous version's filenames.
  */
-export const VERSION = "0.5.0";
+export const VERSION = "0.5.1";
 
 const asset = (name: string) =>
   `${REPO_URL}/releases/download/v${VERSION}/${name}`;

@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
+
+PackageIdentifier: Echo.Echo
+PackageVersion: 0.5.1
+InstallerType: nullsoft
+Scope: user
+InstallModes:
+- interactive
+- silent
+- silentWithProgress
+UpgradeBehavior: install
+# NSIS writes its uninstall key as HKCU\...\Uninstall\Echo, and winget needs
+# this to correlate an install back to the package. Verified by installing from
+# this manifest and reading the registry.
+ProductCode: Echo
+Installers:
+- Architecture: x64
+  InstallerUrl: https://github.com/vedantnimbarte/Echo/releases/download/v0.5.1/Echo_0.5.1_x64-setup.exe
+  InstallerSha256: 72A03EDC128F4B2791E981B9BF69C3E477AB6DFC8916DA498EBEC4FFF7DB4374
+ManifestType: installer
+ManifestVersion: 1.12.0
