@@ -183,9 +183,14 @@ async fn start_wake_dictation(app: AppHandle) {
 
     {
         let state = app.state::<AppState>();
-        if let Err(e) =
-            crate::commands::recording::begin_recording(app.clone(), state.inner(), None, None)
-                .await
+        if let Err(e) = crate::commands::recording::begin_recording(
+            app.clone(),
+            state.inner(),
+            None,
+            None,
+            true,
+        )
+        .await
         {
             warn!("Wake word could not start recording: {e}");
             app.unlisten(handler);

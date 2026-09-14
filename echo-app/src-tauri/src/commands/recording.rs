@@ -28,18 +28,31 @@ pub async fn start_recording(
     device_name: Option<String>,
     language: Option<String>,
 ) -> Result<()> {
-    begin_recording(app, state.inner(), device_name, language).await
+    // Hold and toggle end on the hotkey; only voice-activated mode has
+    // nothing but a pause to say an utterance is over.
+    let end_on_pause = {
+        let conn = state.db.lock_live();
+        crate::storage::repositories::get_setting(&conn, "recording_mode")
+            .unwrap_or(None)
+            .as_deref()
+            == Some("auto")
+    };
+    begin_recording(app, state.inner(), device_name, language, end_on_pause).await
 }
 
 /// Start a capture session.
 ///
 /// Split out of the command so the wake-word listener can start recording
 /// directly, without bouncing a request through the frontend.
+///
+/// `end_on_pause` decides whether a long pause closes the utterance (see
+/// [`vad_gate`]) or only the end of capture does.
 pub async fn begin_recording(
     app: AppHandle,
     state: &AppState,
     device_name: Option<String>,
     language: Option<String>,
+    end_on_pause: bool,
 ) -> Result<()> {
     {
         let mut recording = state.recording.lock_live();
@@ -157,25 +170,31 @@ pub async fn begin_recording(
             Some(model) if vad_engine != "energy" => Box::new(SileroVad::new(model)),
             _ => Box::new(EnergyVad::new(0.01)),
         };
-        vad_gate(audio_rx, vad, vad_tx, move |event| match event {
-            // Payload is the bare f32 (read as `event.payload` in JS).
-            VadEvent::Level(rms) => {
-                let _ = level_app.emit("echo://audio-level", rms);
-            }
-            // Rising edge: drives the pill's listening state in voice-activated mode.
-            VadEvent::SpeechStarted => {
-                *since_for_vad.lock_live() = Some(Instant::now());
-                let _ = level_app.emit("echo://speech-started", ());
-            }
-            // Falling edge: the pill switches to "transcribing".
-            VadEvent::SpeechEnded => {
-                if let Some(started) = since_for_vad.lock_live().take() {
-                    spoken_for_vad
-                        .fetch_add(started.elapsed().as_millis() as u64, Ordering::Relaxed);
+        vad_gate(
+            audio_rx,
+            vad,
+            vad_tx,
+            end_on_pause,
+            move |event| match event {
+                // Payload is the bare f32 (read as `event.payload` in JS).
+                VadEvent::Level(rms) => {
+                    let _ = level_app.emit("echo://audio-level", rms);
                 }
-                let _ = level_app.emit("echo://speech-ended", ());
-            }
-        })
+                // Rising edge: drives the pill's listening state in voice-activated mode.
+                VadEvent::SpeechStarted => {
+                    *since_for_vad.lock_live() = Some(Instant::now());
+                    let _ = level_app.emit("echo://speech-started", ());
+                }
+                // Falling edge: the pill switches to "transcribing".
+                VadEvent::SpeechEnded => {
+                    if let Some(started) = since_for_vad.lock_live().take() {
+                        spoken_for_vad
+                            .fetch_add(started.elapsed().as_millis() as u64, Ordering::Relaxed);
+                    }
+                    let _ = level_app.emit("echo://speech-ended", ());
+                }
+            },
+        )
         .await;
     });
 
@@ -805,9 +824,33 @@ pub(crate) enum VadEvent {
     SpeechEnded,
 }
 
+/// Audio kept from just before the VAD's rising edge and sent ahead of it.
+///
+/// The detector needs a frame or several of confident speech before it
+/// triggers, and a soft onset ("f", "h", "s", a quiet first syllable) sits
+/// under its threshold for most of that — dropping it is what turns "first"
+/// into "irst".
+const LEAD_IN_SAMPLES: usize = 16_000 * 300 / 1000;
+
+/// Silence, beyond the VAD's own trailing debounce, that ends an utterance when
+/// `end_on_pause` is set. With Silero's ~770 ms tail that is about two seconds
+/// in all: long enough to stop and think mid-sentence without being cut off.
+const END_OF_UTTERANCE_PAUSE_SAMPLES: usize = 16_000 * 1_200 / 1000;
+
 /// The VAD gating stage: sits between raw audio capture and the ASR pipeline,
-/// forwarding only speech chunks and emitting an empty-vec sentinel at each
-/// speech→silence transition so the ASR provider knows an utterance ended.
+/// forwarding speech chunks (plus a short [`LEAD_IN_SAMPLES`] before each) and
+/// emitting an empty-vec sentinel when an utterance ends.
+///
+/// With `end_on_pause` false — hold and toggle, where the hotkey brackets the
+/// utterance — everything from the first speech to the end of capture is
+/// forwarded as one utterance, pauses included. Splitting there only hands the
+/// decoder fragments without the context around them, and throws away any
+/// fragment spoken softly enough to fail the utterance gate on its own.
+///
+/// With it set — voice-activated mode and the wake word, where nothing else
+/// says the speaker is done — an utterance ends after
+/// [`END_OF_UTTERANCE_PAUSE_SAMPLES`] of silence. Speech resuming sooner
+/// continues the same utterance, with the pause trimmed to the lead-in.
 ///
 /// Split out of [`begin_recording`] so the pipeline can be driven in tests
 /// without a Tauri app — `events` receives exactly what the app forwards to the
@@ -817,11 +860,17 @@ pub(crate) async fn vad_gate<F>(
     mut audio_rx: mpsc::Receiver<Vec<f32>>,
     mut vad: Box<dyn Vad>,
     vad_tx: mpsc::Sender<Vec<f32>>,
+    end_on_pause: bool,
     events: F,
 ) where
     F: Fn(VadEvent),
 {
     let mut was_speaking = false;
+    // Speech has been forwarded and no sentinel has closed it yet.
+    let mut open = false;
+    let mut pause_len = 0usize;
+    let mut lead_in: std::collections::VecDeque<Vec<f32>> = Default::default();
+    let mut lead_in_len = 0usize;
 
     while let Some(chunk) = audio_rx.recv().await {
         if chunk.is_empty() {
@@ -835,17 +884,43 @@ pub(crate) async fn vad_gate<F>(
         let rms = (chunk.iter().map(|s| s * s).sum::<f32>() / chunk.len() as f32).sqrt();
         events(VadEvent::Level(rms));
 
-        if vad.is_speech(&chunk) {
-            if !was_speaking {
-                was_speaking = true;
-                events(VadEvent::SpeechStarted);
+        let speech = vad.is_speech(&chunk);
+        if speech && !was_speaking {
+            was_speaking = true;
+            open = true;
+            pause_len = 0;
+            events(VadEvent::SpeechStarted);
+            for held in lead_in.drain(..) {
+                if vad_tx.send(held).await.is_err() {
+                    return;
+                }
             }
+            lead_in_len = 0;
+        } else if !speech && was_speaking {
+            was_speaking = false;
+            events(VadEvent::SpeechEnded);
+        }
+
+        if speech || (open && !end_on_pause) {
             if vad_tx.send(chunk).await.is_err() {
                 return;
             }
-        } else if was_speaking {
-            was_speaking = false;
-            events(VadEvent::SpeechEnded);
+            continue;
+        }
+
+        lead_in_len += chunk.len();
+        pause_len += chunk.len();
+        lead_in.push_back(chunk);
+        // Whole chunks only, keeping at least the lead-in's worth.
+        while lead_in
+            .front()
+            .is_some_and(|c| lead_in_len - c.len() >= LEAD_IN_SAMPLES)
+        {
+            lead_in_len -= lead_in.pop_front().map_or(0, |c| c.len());
+        }
+
+        if open && pause_len >= END_OF_UTTERANCE_PAUSE_SAMPLES {
+            open = false;
             if vad_tx.send(Vec::new()).await.is_err() {
                 return;
             }

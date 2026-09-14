@@ -382,16 +382,43 @@ fn push_pre_roll(ring: &mut VecDeque<f32>, chunk: &[f32]) {
     ring.extend(chunk);
 }
 
-/// Naive linear resampler: down-mix interleaved frames to mono and resample to 16000 Hz.
+/// A channel this far (20 dB) below the loudest one in a buffer is treated as
+/// dead and left out of the down-mix.
+const DEAD_CHANNEL_ENERGY_RATIO: f32 = 0.01;
+
+/// Down-mix interleaved frames to mono and resample to 16000 Hz.
 /// `channels` is the source channel count so mono (1ch) input is not corrupted.
 fn resample_to_16k(data: &[f32], source_rate: u32, channels: u16) -> Vec<f32> {
-    // Down-mix interleaved frames to mono by averaging each frame's channels.
     let mono: Vec<f32> = if channels <= 1 {
         data.to_vec()
     } else {
+        // Average only the channels carrying signal. A mono mic in a stereo
+        // jack (a desktop's rear "Line In" is the usual case) arrives on one
+        // channel with the other silent, and a plain average halves it —
+        // soft speech then falls under every threshold downstream.
         let ch = channels as usize;
-        data.chunks(ch)
-            .map(|frame| frame.iter().sum::<f32>() / frame.len() as f32)
+        let mut energy = vec![0.0_f32; ch];
+        for frame in data.chunks_exact(ch) {
+            for (e, s) in energy.iter_mut().zip(frame) {
+                *e += s * s;
+            }
+        }
+        let loudest = energy.iter().copied().fold(0.0, f32::max);
+        let live: Vec<bool> = energy
+            .iter()
+            .map(|e| *e >= loudest * DEAD_CHANNEL_ENERGY_RATIO)
+            .collect();
+        let live_count = live.iter().filter(|l| **l).count().max(1) as f32;
+        data.chunks_exact(ch)
+            .map(|frame| {
+                frame
+                    .iter()
+                    .zip(&live)
+                    .filter(|(_, l)| **l)
+                    .map(|(s, _)| s)
+                    .sum::<f32>()
+                    / live_count
+            })
             .collect()
     };
 
@@ -399,13 +426,23 @@ fn resample_to_16k(data: &[f32], source_rate: u32, channels: u16) -> Vec<f32> {
         return mono;
     }
 
+    // Each output sample is the mean of the source samples it spans. A box
+    // filter is a crude low-pass, but it stops everything above 8 kHz (hiss,
+    // sibilance) folding back into the speech band, which picking every Nth
+    // sample does not.
     let ratio = source_rate as f64 / 16000.0;
     let out_len = (mono.len() as f64 / ratio).ceil() as usize;
     let mut out = Vec::with_capacity(out_len);
 
     for i in 0..out_len {
-        let src_idx = (i as f64 * ratio) as usize;
-        out.push(*mono.get(src_idx).unwrap_or(&0.0));
+        let end = (((i + 1) as f64 * ratio) as usize).min(mono.len());
+        let start = ((i as f64 * ratio) as usize).min(end.saturating_sub(1));
+        let span = &mono[start..end];
+        out.push(if span.is_empty() {
+            0.0
+        } else {
+            span.iter().sum::<f32>() / span.len() as f32
+        });
     }
 
     out
@@ -438,6 +475,25 @@ mod tests {
         let stereo = vec![1.0, 3.0, 2.0, 4.0];
         let out = resample_to_16k(&stereo, 16000, 2);
         assert_eq!(out, vec![2.0, 3.0]); // (1+3)/2, (2+4)/2
+    }
+
+    #[test]
+    fn a_silent_channel_does_not_halve_the_signal() {
+        // Mono mic on the left of a stereo jack, right channel dead.
+        let stereo = vec![0.5, 0.0, -0.5, 0.0001];
+        let out = resample_to_16k(&stereo, 16000, 2);
+        assert_eq!(out, vec![0.5, -0.5]);
+    }
+
+    #[test]
+    fn downsampling_averages_instead_of_skipping() {
+        // A 24 kHz tone at 48 kHz (+1, -1, ...) is inaudible to a 16 kHz
+        // decoder and must not alias into it as a full-scale signal.
+        let input: Vec<f32> = (0..480)
+            .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
+            .collect();
+        let out = resample_to_16k(&input, 48000, 1);
+        assert!(out.iter().all(|s| s.abs() <= 1.0 / 3.0 + 1e-6), "{out:?}");
     }
 
     #[test]

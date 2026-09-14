@@ -14,9 +14,11 @@ export function useAudioLevel(bars: number) {
     let unlisten: (() => void) | undefined;
     void echoEvents
       .onAudioLevel((raw) => {
-        // RMS sits low (~0–0.3 for speech). Lift with gain, then a gamma curve
-        // so quiet speech still registers without clipping loud peaks.
-        const n = Math.min(1, Math.pow(Math.max(0, raw) * 7, 0.7));
+        // Decibels, -60 dBFS (room noise) to -10 dBFS (loud), the way OS input
+        // meters read. A linear scale left soft speech into a quiet input —
+        // still perfectly transcribable — as a flat line.
+        const db = 20 * Math.log10(Math.max(raw, 1e-6));
+        const n = Math.min(1, Math.max(0, (db + 60) / 50));
         const buf = levels.current;
         buf.copyWithin(0, 1);
         buf[buf.length - 1] = n;

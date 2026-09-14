@@ -73,7 +73,11 @@ pub async fn retry_last(app: AppHandle) -> Result<Option<String>> {
 
     use crate::commands::recording::{Retained, MAX_RETAINED_SECONDS};
     let audio = match audio {
-        Some(Retained::Audio(a)) if !a.is_empty() => a,
+        // Retained raw, so it gets the same lift the first decode did.
+        Some(Retained::Audio(mut a)) if !a.is_empty() => {
+            crate::core::vad::gate::normalize(&mut a);
+            a
+        }
         // Worth saying plainly: the user just spoke for minutes, and "there's
         // no recent dictation" would read as Echo having missed all of it.
         Some(Retained::TooLong) => {
