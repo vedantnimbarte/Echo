@@ -242,6 +242,7 @@ async fn check_pipeline(report: &mut Report) {
         audio_rx,
         Box::new(EnergyVad::new(0.01)) as Box<dyn Vad>,
         vad_tx,
+        true,
         |event| match event {
             VadEvent::SpeechStarted => started.set(started.get() + 1),
             VadEvent::SpeechEnded => ended.set(ended.get() + 1),

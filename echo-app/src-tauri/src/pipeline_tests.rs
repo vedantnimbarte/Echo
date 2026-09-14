@@ -126,11 +126,18 @@ fn loud() -> Vec<f32> {
     chunk(0.3)
 }
 
+/// Silent chunks that end a voice-activated utterance: EnergyVad's 15-frame
+/// debounce, then the gate's 1.2 s pause (60 chunks of 20 ms), with margin.
+const PAUSE_CHUNKS: usize = 80;
+
 /// Feed chunks through the real VAD gate and collect everything downstream.
 /// Returns (chunks reaching ASR, events emitted to the UI).
-async fn run_vad_gate(input: Vec<Vec<f32>>) -> (Vec<Vec<f32>>, Vec<&'static str>) {
-    let (audio_tx, audio_rx) = mpsc::channel::<Vec<f32>>(64);
-    let (vad_tx, mut vad_rx) = mpsc::channel::<Vec<f32>>(64);
+async fn run_vad_gate(
+    input: Vec<Vec<f32>>,
+    end_on_pause: bool,
+) -> (Vec<Vec<f32>>, Vec<&'static str>) {
+    let (audio_tx, audio_rx) = mpsc::channel::<Vec<f32>>(1024);
+    let (vad_tx, mut vad_rx) = mpsc::channel::<Vec<f32>>(1024);
 
     for c in input {
         audio_tx.send(c).await.unwrap();
@@ -146,6 +153,7 @@ async fn run_vad_gate(input: Vec<Vec<f32>>) -> (Vec<Vec<f32>>, Vec<&'static str>
         audio_rx,
         Box::new(EnergyVad::new(0.01)) as Box<dyn Vad>,
         vad_tx,
+        end_on_pause,
         move |e| {
             let label = match e {
                 VadEvent::Level(_) => "level",
@@ -179,10 +187,10 @@ fn test_db() -> rusqlite::Connection {
 async fn vad_gate_drops_silence_and_marks_the_utterance_boundary() {
     let mut input = vec![silence(), silence()];
     input.extend(std::iter::repeat_with(loud).take(5));
-    // Past the 15-frame debounce so the falling edge actually fires.
-    input.extend(std::iter::repeat_with(silence).take(25));
+    // Past the debounce and the pause, so the utterance actually ends.
+    input.extend(std::iter::repeat_with(silence).take(PAUSE_CHUNKS));
 
-    let (downstream, events) = run_vad_gate(input).await;
+    let (downstream, events) = run_vad_gate(input, true).await;
 
     assert_eq!(
         events,
@@ -196,14 +204,13 @@ async fn vad_gate_drops_silence_and_marks_the_utterance_boundary() {
         .position(|c| c.is_empty())
         .expect("a speech→silence transition must emit the empty-vec sentinel");
 
-    // Everything before it is speech: leading silence never reaches ASR.
     assert!(
         first_sentinel > 0,
         "speech chunks should reach the ASR stage before the sentinel"
     );
     assert!(
         downstream[..first_sentinel].iter().all(|c| !c.is_empty()),
-        "silence must be dropped, not forwarded"
+        "no sentinel may split the utterance"
     );
 
     // Closing capture flushes a second sentinel after the falling edge already
@@ -220,16 +227,71 @@ async fn vad_gate_drops_silence_and_marks_the_utterance_boundary() {
 async fn vad_gate_separates_two_utterances() {
     let mut input = vec![silence()];
     input.extend(std::iter::repeat_with(loud).take(4));
-    input.extend(std::iter::repeat_with(silence).take(25));
+    input.extend(std::iter::repeat_with(silence).take(PAUSE_CHUNKS));
     input.extend(std::iter::repeat_with(loud).take(4));
-    input.extend(std::iter::repeat_with(silence).take(25));
+    input.extend(std::iter::repeat_with(silence).take(PAUSE_CHUNKS));
 
-    let (_, events) = run_vad_gate(input).await;
+    let (_, events) = run_vad_gate(input, true).await;
 
     assert_eq!(
         events,
         vec!["started", "ended", "started", "ended"],
         "two separated utterances should produce two edge pairs"
+    );
+}
+
+#[tokio::test]
+async fn vad_gate_keeps_only_a_short_lead_in() {
+    // A first utterance, then enough silence to end it and more: only ~300 ms
+    // of that may lead in to the second.
+    let mut input: Vec<Vec<f32>> = std::iter::repeat_with(loud).take(4).collect();
+    input.extend(std::iter::repeat_with(silence).take(PAUSE_CHUNKS));
+    input.extend(std::iter::repeat_with(loud).take(5));
+
+    let (downstream, _) = run_vad_gate(input, true).await;
+    let second = downstream.iter().position(|c| c.is_empty()).unwrap() + 1;
+    let lead_in = downstream[second..]
+        .iter()
+        .take_while(|c| c.first() == Some(&0.0))
+        .count();
+
+    assert_eq!(lead_in, 15, "300 ms of 20 ms chunks");
+}
+
+#[tokio::test]
+async fn a_short_pause_does_not_end_a_voice_activated_utterance() {
+    let mut input = vec![silence()];
+    input.extend(std::iter::repeat_with(loud).take(4));
+    // ~1 s: past the VAD's falling edge, well short of the pause.
+    input.extend(std::iter::repeat_with(silence).take(50));
+    input.extend(std::iter::repeat_with(loud).take(4));
+
+    let (downstream, events) = run_vad_gate(input, true).await;
+
+    assert_eq!(events, vec!["started", "ended", "started"]);
+    assert_eq!(
+        downstream.iter().filter(|c| c.is_empty()).count(),
+        1,
+        "only the end of capture closes the utterance"
+    );
+}
+
+#[tokio::test]
+async fn hotkey_modes_keep_pauses_inside_one_utterance() {
+    let mut input = vec![silence()];
+    input.extend(std::iter::repeat_with(loud).take(4));
+    input.extend(std::iter::repeat_with(silence).take(25));
+    input.extend(std::iter::repeat_with(loud).take(4));
+
+    let (downstream, events) = run_vad_gate(input, false).await;
+
+    assert_eq!(events, vec!["started", "ended", "started"]);
+    let sentinels = downstream.iter().filter(|c| c.is_empty()).count();
+    assert_eq!(sentinels, 1, "only the end of capture closes the utterance");
+    assert_eq!(
+        downstream.len(),
+        1 + 4 + 25 + 4 + 1,
+        "the pause is forwarded, not dropped"
     );
 }
 
@@ -240,7 +302,7 @@ async fn vad_gate_flushes_a_trailing_utterance_when_capture_stops() {
     let mut input = vec![silence()];
     input.extend(std::iter::repeat_with(loud).take(5));
 
-    let (downstream, events) = run_vad_gate(input).await;
+    let (downstream, events) = run_vad_gate(input, true).await;
 
     assert_eq!(events, vec!["started"], "no falling edge is expected here");
     assert!(
@@ -343,15 +405,15 @@ async fn a_long_paragraph_still_keeps_its_audio() {
 /// exactly one transcript, not one per chunk and not one for the whole session.
 #[tokio::test]
 async fn each_utterance_produces_exactly_one_transcript() {
-    let (audio_tx, audio_rx) = mpsc::channel::<Vec<f32>>(64);
-    let (vad_tx, vad_rx) = mpsc::channel::<Vec<f32>>(64);
+    let (audio_tx, audio_rx) = mpsc::channel::<Vec<f32>>(1024);
+    let (vad_tx, vad_rx) = mpsc::channel::<Vec<f32>>(1024);
     let (text_tx, mut text_rx) = mpsc::channel::<TranscriptSegment>(16);
 
     let mut input = vec![silence()];
     input.extend(std::iter::repeat_with(loud).take(4));
-    input.extend(std::iter::repeat_with(silence).take(25));
+    input.extend(std::iter::repeat_with(silence).take(PAUSE_CHUNKS));
     input.extend(std::iter::repeat_with(loud).take(4));
-    input.extend(std::iter::repeat_with(silence).take(25));
+    input.extend(std::iter::repeat_with(silence).take(PAUSE_CHUNKS));
     for c in input {
         audio_tx.send(c).await.unwrap();
     }
@@ -369,6 +431,7 @@ async fn each_utterance_produces_exactly_one_transcript() {
             audio_rx,
             Box::new(EnergyVad::new(0.01)) as Box<dyn Vad>,
             vad_tx,
+            true,
             |_| {},
         )
         .await;
@@ -573,6 +636,7 @@ async fn pipeline_delivers_dictionary_corrected_text_to_the_focused_app() {
             audio_rx,
             Box::new(EnergyVad::new(0.01)) as Box<dyn Vad>,
             vad_tx,
+            true,
             |_| {},
         )
         .await;

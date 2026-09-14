@@ -31,6 +31,43 @@ const STRONG_RMS: f32 = 0.006;
 /// that a one-word utterance still produces several windows.
 const WINDOW_SAMPLES: usize = 480;
 
+/// Loudest-window RMS [`normalize`] lifts an utterance toward: ordinary
+/// conversational speech into a well-set microphone.
+const TARGET_WINDOW_RMS: f32 = 0.1;
+
+/// Most [`normalize`] will amplify (20 dB). Enough to bring soft speech into a
+/// quiet onboard input up to a normal level; not so much that a room's noise
+/// floor is lifted past [`speech_gate`] and handed to whisper to hallucinate on.
+///
+/// ponytail: one fixed ceiling for every microphone. A per-device calibration
+/// is the upgrade if a very quiet input still needs more.
+const MAX_GAIN: f32 = 10.0;
+
+/// Bring a finished utterance up to a level the gate and the decoder expect.
+///
+/// Soft speech into a line-level or unamplified input arrives 30-40 dB below
+/// full scale, where it fails the gate's thresholds outright and whisper's
+/// accuracy drops even when it does not. Browser-based dictation gets this for
+/// free from WebRTC's automatic gain control; Echo captures raw.
+///
+/// Gain is set from the loudest 30 ms window rather than the single loudest
+/// sample, so one key click cannot pin it at unity. Only ever amplifies.
+pub fn normalize(samples: &mut [f32]) {
+    let loudest = samples
+        .chunks(WINDOW_SAMPLES)
+        .map(|w| (w.iter().map(|v| v * v).sum::<f32>() / w.len() as f32).sqrt())
+        .fold(0.0_f32, f32::max);
+    if loudest <= 0.0 {
+        return;
+    }
+    let gain = (TARGET_WINDOW_RMS / loudest).clamp(1.0, MAX_GAIN);
+    if gain > 1.0 {
+        for s in samples.iter_mut() {
+            *s = (*s * gain).clamp(-1.0, 1.0);
+        }
+    }
+}
+
 /// Why an utterance was, or was not, sent to the decoder.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GateDecision {
@@ -122,6 +159,26 @@ mod tests {
     fn a_short_loud_word_still_passes() {
         // ~90 ms, the "yes"/"stop" case a window-count-only rule would drop.
         assert_eq!(speech_gate(&tone(0.3)[..1_440]), GateDecision::Speech);
+    }
+
+    #[test]
+    fn soft_speech_is_lifted_past_the_gate() {
+        // Roughly what a soft voice into a rear Line In jack measured.
+        let mut soft = tone(0.004);
+        assert_ne!(speech_gate(&soft), GateDecision::Speech);
+        normalize(&mut soft);
+        assert_eq!(speech_gate(&soft), GateDecision::Speech);
+    }
+
+    #[test]
+    fn normalize_leaves_the_noise_floor_gated_and_loud_audio_alone() {
+        let mut hiss = tone(0.0002);
+        normalize(&mut hiss);
+        assert!(!speech_gate(&hiss).should_transcribe());
+
+        let mut loud = tone(0.5);
+        normalize(&mut loud);
+        assert_eq!(loud, tone(0.5));
     }
 
     #[test]
