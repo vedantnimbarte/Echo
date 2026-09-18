@@ -109,8 +109,8 @@ pub(crate) async fn stream(
         .await
         .map_err(|e| EchoError::AsrProvider(format!("nemo-speech realtime setup failed: {e}")))?;
 
-    // The last final text sent on, so a `completed` that merely repeats the
-    // partial does not deliver the sentence twice.
+    // Held rather than returned immediately: the session is torn down the same
+    // way whether it ended well or badly, and the caller wants the reason.
     let mut failure: Option<String> = None;
 
     loop {
