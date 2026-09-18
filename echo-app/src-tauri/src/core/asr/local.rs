@@ -154,6 +154,22 @@ impl AsrProvider for LocalWhisperProvider {
         }
     }
 
+    /// Start the resident server if there is one to start. The CLI fallback
+    /// has nothing to warm — it reloads the model per call by design — so this
+    /// is a no-op there rather than an error.
+    async fn preload(&self) -> Result<()> {
+        let Some(binary) = self.binaries.resolve_server() else {
+            return Ok(());
+        };
+        self.server
+            .warm(&Signature {
+                binary,
+                model: self.model_path.clone(),
+                decode: DecodeConfigKey::from(self.decode_config()),
+            })
+            .await
+    }
+
     async fn transcribe(
         &self,
         audio: Vec<f32>,

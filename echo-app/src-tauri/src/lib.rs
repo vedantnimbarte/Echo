@@ -239,6 +239,13 @@ pub fn run() {
                 }
             }
 
+            // Load the decoder's weights now rather than inside the first
+            // dictation. Spawned, so a slow model never delays the window.
+            {
+                let asr = asr_manager.clone();
+                tauri::async_runtime::spawn(async move { asr.preload_active().await });
+            }
+
             // Tell the screen when the engine the user chose stops being the
             // one answering. The diversion is deliberately silent in the
             // transcript — you still get your words, and history still credits

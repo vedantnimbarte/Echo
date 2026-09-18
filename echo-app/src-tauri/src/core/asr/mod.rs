@@ -73,6 +73,22 @@ pub trait AsrProvider: Send + Sync {
         false
     }
 
+    /// Load whatever this provider needs *before* an utterance arrives.
+    ///
+    /// A local engine holds its weights in a child process, and loading them
+    /// is seconds of work — 20 s for a 700 MB transducer reading off a cold
+    /// disk. Paying that inside the first dictation is the difference between
+    /// "instant" and "did it hear me?", so the pipeline calls this on the
+    /// signals that mean a recording is coming: the app starting, the
+    /// microphone warming, a dictation ending.
+    ///
+    /// Best-effort by contract. A provider that needs nothing, or fails to
+    /// warm, still transcribes exactly as before — so callers ignore the
+    /// result rather than surfacing it.
+    async fn preload(&self) -> crate::error::Result<()> {
+        Ok(())
+    }
+
     /// Tell the provider whether partial results will actually be used before
     /// a streaming session starts.
     ///

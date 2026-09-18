@@ -778,6 +778,13 @@ pub async fn end_recording(app: AppHandle, state: &AppState) -> Result<()> {
         state.audio.stop_capture();
     }
 
+    // People dictate in bursts, so the engine that just answered is the one
+    // about to be asked again. Cheap when it is already resident.
+    {
+        let asr = state.asr.clone();
+        tauri::async_runtime::spawn(async move { asr.preload_active().await });
+    }
+
     app.emit(
         AppEvent::RecordingStopped.event_name(),
         AppEvent::RecordingStopped,
@@ -814,6 +821,12 @@ pub fn warm_microphone(state: State<'_, AppState>) {
         return;
     }
     state.audio.warm(device.as_deref());
+
+    // The microphone opening means a dictation is coming, which makes this the
+    // moment to have the decoder's weights in memory too — the device costs
+    // milliseconds to open, the model can cost twenty seconds to load.
+    let asr = state.asr.clone();
+    tauri::async_runtime::spawn(async move { asr.preload_active().await });
 }
 
 /// Signals the VAD stage produces for the UI.

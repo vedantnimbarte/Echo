@@ -127,6 +127,12 @@ impl WhisperServer {
         self.infer(port, wav, audio_seconds, language, prompt).await
     }
 
+    /// Start the server for `sig` without decoding anything, so the model is
+    /// resident before the first utterance needs it.
+    pub async fn warm(&self, sig: &Signature) -> Result<()> {
+        self.ensure(sig).await.map(|_| ())
+    }
+
     /// Stop the server if one is running. Used when switching away from the
     /// local engine so an idle process is not left holding the model in RAM.
     pub async fn shutdown(&self) {

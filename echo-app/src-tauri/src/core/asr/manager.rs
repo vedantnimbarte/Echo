@@ -135,6 +135,19 @@ impl AsrManager {
             .await
     }
 
+    /// Warm the active provider, if it is registered and wants warming.
+    ///
+    /// Silent about a provider that is not registered yet: during onboarding
+    /// that is the normal state, not a fault worth reporting.
+    pub async fn preload_active(&self) {
+        let Ok(provider) = self.active().await else {
+            return;
+        };
+        if let Err(e) = provider.preload().await {
+            tracing::debug!("Could not warm {}: {e}", provider.name());
+        }
+    }
+
     /// The provider to transcribe with, already wrapped in its fallback.
     ///
     /// Resolved per call rather than cached at registration, because the point

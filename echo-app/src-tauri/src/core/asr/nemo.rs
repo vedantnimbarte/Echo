@@ -238,6 +238,10 @@ impl AsrProvider for NemoProvider {
         "nemo"
     }
 
+    async fn preload(&self) -> Result<()> {
+        self.server.warm(&self.signature()?).await
+    }
+
     async fn transcribe(
         &self,
         audio: Vec<f32>,
@@ -386,12 +390,24 @@ mod tests {
 
         let provider = NemoProvider::new(binaries, Arc::new(NemoServer::new()), model);
         let audio = fixture_pcm();
+
+        // What the pipeline does on app start and microphone warm, so that the
+        // first dictation does not pay for loading 708 MB of weights.
+        let started = std::time::Instant::now();
+        provider.preload().await.expect("the engine should warm");
+        let warmup = started.elapsed();
+
         let started = std::time::Instant::now();
         let first = provider
             .transcribe(audio.clone(), Some("en"))
             .await
             .unwrap();
         let cold = started.elapsed();
+        eprintln!("nemo: preload {warmup:?}, first decode after preload {cold:?}");
+        assert!(
+            cold < std::time::Duration::from_secs(5),
+            "a preloaded engine must not reload the model: took {cold:?}"
+        );
 
         // The model is resident now, so this is what a dictation actually pays.
         let started = std::time::Instant::now();

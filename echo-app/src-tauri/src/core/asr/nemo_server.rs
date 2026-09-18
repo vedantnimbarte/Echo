@@ -98,6 +98,12 @@ impl NemoServer {
         self.infer(port, wav, audio_seconds, language).await
     }
 
+    /// Start the server for `sig` without decoding anything, so the weights are
+    /// resident before the first utterance needs them.
+    pub async fn warm(&self, sig: &Signature) -> Result<()> {
+        self.ensure(sig).await.map(|_| ())
+    }
+
     /// Stop the server, releasing the model from memory. Used when switching
     /// away from this engine.
     pub async fn shutdown(&self) {
