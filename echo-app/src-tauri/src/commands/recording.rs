@@ -865,6 +865,7 @@ pub(crate) async fn vad_gate<F>(
 ) where
     F: Fn(VadEvent),
 {
+    let mut agc = crate::core::audio::Agc::new();
     let mut was_speaking = false;
     // Speech has been forwarded and no sentinel has closed it yet.
     let mut open = false;
@@ -872,12 +873,16 @@ pub(crate) async fn vad_gate<F>(
     let mut lead_in: std::collections::VecDeque<Vec<f32>> = Default::default();
     let mut lead_in_len = 0usize;
 
-    while let Some(chunk) = audio_rx.recv().await {
+    while let Some(mut chunk) = audio_rx.recv().await {
         if chunk.is_empty() {
             // Audio error/stop sentinel from the capture layer — flush and exit.
             let _ = vad_tx.send(Vec::new()).await;
             return;
         }
+
+        // Before anything reads the audio, so speech detection, the meter and
+        // the decoder all work from the same lifted signal.
+        agc.apply(&mut chunk);
 
         // Computed before the VAD gate so the visualization stays responsive in
         // near-silence.

@@ -156,7 +156,7 @@ where
 /// do their own endpointing) completely untouched.
 async fn transcribe_utterance<P>(
     provider: &P,
-    mut audio: Vec<f32>,
+    audio: Vec<f32>,
     language: Option<&str>,
 ) -> crate::error::Result<Option<TranscriptSegment>>
 where
@@ -165,8 +165,6 @@ where
     if audio.is_empty() {
         return Ok(None);
     }
-
-    crate::core::vad::gate::normalize(&mut audio);
 
     let decision = crate::core::vad::gate::speech_gate(&audio);
     if !decision.should_transcribe() {
