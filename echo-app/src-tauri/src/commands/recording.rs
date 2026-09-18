@@ -1,5 +1,5 @@
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
+    atomic::{AtomicU32, AtomicU64, Ordering},
     Arc, Mutex,
 };
 use std::time::Instant;
@@ -163,6 +163,11 @@ pub async fn begin_recording(
     // path sees them, and that path is optional.
     let spoken_ms = Arc::new(AtomicU64::new(0));
     let spoken_for_vad = spoken_ms.clone();
+    // Loudest chunk this session, as f32 bits. Only read when a session ends
+    // with nothing to show for it, to tell "the microphone is not working" from
+    // "you did not say anything".
+    let peak_level = Arc::new(AtomicU32::new(0));
+    let peak_for_vad = peak_level.clone();
     let since_for_vad: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
 
     tokio::spawn(async move {
@@ -178,6 +183,7 @@ pub async fn begin_recording(
             move |event| match event {
                 // Payload is the bare f32 (read as `event.payload` in JS).
                 VadEvent::Level(rms) => {
+                    peak_for_vad.fetch_max(rms.to_bits(), Ordering::Relaxed);
                     let _ = level_app.emit("echo://audio-level", rms);
                 }
                 // Rising edge: drives the pill's listening state in voice-activated mode.
@@ -346,7 +352,15 @@ pub async fn begin_recording(
     };
 
     let app_clone = app.clone();
+    let quiet_app = app.clone();
+    let peak_for_report = peak_level.clone();
     tokio::spawn(async move {
+        let session_started = Instant::now();
+        // Whether anything was actually delivered. A session that ends with
+        // this false and a silent microphone is the failure this whole pipeline
+        // used to keep to itself: the audio was dropped, a debug line was
+        // written, and the screen said nothing at all.
+        let mut delivered = false;
         // Partial text this process has typed into the focused app and not yet
         // replaced. Empty whenever nothing is streamed, which is the only state
         // in which a backspace count would be a guess.
@@ -357,6 +371,7 @@ pub async fn begin_recording(
 
         while let Some(segment) = transcript_rx.recv().await {
             if segment.is_final {
+                delivered |= !segment.text.trim().is_empty();
                 // Which app is focused decides how the text is delivered and
                 // which dictionary entries apply, so resolve it now rather than
                 // at recording start — focus can move while you talk.
@@ -731,6 +746,13 @@ pub async fn begin_recording(
                 }
             }
         }
+
+        report_if_nothing_was_heard(
+            &quiet_app,
+            delivered,
+            f32::from_bits(peak_for_report.load(Ordering::Relaxed)),
+            session_started.elapsed(),
+        );
     });
 
     Ok(())
@@ -827,6 +849,56 @@ pub fn warm_microphone(state: State<'_, AppState>) {
     // milliseconds to open, the model can cost twenty seconds to load.
     let asr = state.asr.clone();
     tauri::async_runtime::spawn(async move { asr.preload_active().await });
+}
+
+/// Below this peak level (about -46 dBFS) a whole session is, for practical
+/// purposes, silence. The capture AGC has already lifted anything speech-shaped
+/// well past it, so audio this quiet means the microphone is muted, unplugged,
+/// or not the device Echo is listening to.
+const SILENT_SESSION_PEAK: f32 = 0.005;
+
+/// Shortest hold worth reporting on. Below this the hotkey was tapped, not
+/// dictated into, and a warning would be nagging rather than news.
+const MIN_REPORTABLE_SESSION: std::time::Duration = std::time::Duration::from_millis(1_500);
+
+/// Say so when a dictation produced no text because nothing reached the
+/// microphone.
+///
+/// Silence used to be indistinguishable from a broken pipeline from the user's
+/// side: the utterance was gated out, a debug line went to the log, and the
+/// screen showed the same nothing either way. This is the one case Echo can
+/// explain rather than swallow.
+fn report_if_nothing_was_heard(
+    app: &AppHandle,
+    delivered: bool,
+    peak: f32,
+    session: std::time::Duration,
+) {
+    if !should_report_silence(delivered, peak, session) {
+        return;
+    }
+    info!(
+        peak_dbfs = 20.0 * peak.max(1e-6).log10(),
+        "Session produced no transcript and the input was silent"
+    );
+    let event = AppEvent::ErrorOccurred {
+        message: "Echo heard nothing. Check the microphone in Settings — the selected input                   may be muted, unplugged, or the wrong device."
+            .into(),
+    };
+    let _ = app.emit(event.event_name(), &event);
+}
+
+/// Whether a finished session is worth warning about.
+///
+/// Three ways to stay quiet, and each one is a complaint avoided: text did
+/// arrive, the hotkey was only tapped, or the microphone was working and the
+/// user simply did not speak.
+pub(crate) fn should_report_silence(
+    delivered: bool,
+    peak: f32,
+    session: std::time::Duration,
+) -> bool {
+    !delivered && session >= MIN_REPORTABLE_SESSION && peak < SILENT_SESSION_PEAK
 }
 
 /// Signals the VAD stage produces for the UI.

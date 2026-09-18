@@ -311,6 +311,32 @@ async fn vad_gate_flushes_a_trailing_utterance_when_capture_stops() {
     );
 }
 
+// ── Reporting a session that produced nothing ────────────────────────────────
+
+#[test]
+fn a_silent_dictation_is_reported_but_an_ordinary_one_is_not() {
+    use crate::commands::recording::should_report_silence;
+    use std::time::Duration;
+
+    let held = Duration::from_secs(3);
+
+    // The failure this exists for: the key was held, the input was dead, and
+    // nothing was typed.
+    assert!(should_report_silence(false, 0.0, held));
+    assert!(should_report_silence(false, 0.001, held));
+
+    // Text arrived, so whatever the levels were, they were good enough.
+    assert!(!should_report_silence(true, 0.0, held));
+    // The microphone was working; the user just did not say anything.
+    assert!(!should_report_silence(false, 0.2, held));
+    // A tap of the hotkey is not a dictation worth warning about.
+    assert!(!should_report_silence(
+        false,
+        0.0,
+        Duration::from_millis(200)
+    ));
+}
+
 // ── Retained audio (retry) ───────────────────────────────────────────────────
 
 /// Drive [`retain_utterances`] over a chunk sequence and report both what the
