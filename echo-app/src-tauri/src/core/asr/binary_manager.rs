@@ -9,10 +9,12 @@ use crate::core::gpu::GpuBackend;
 use crate::error::{EchoError, Result};
 
 /// Pinned whisper.cpp release whose prebuilt CLI we download on first run.
-/// NOTE: v1.7.4/v1.7.5 published no binary assets (the download 404s); v1.7.6 is
-/// the nearest tag that ships `whisper-bin-x64.zip`. Keep in sync with
-/// `scripts/stage-runtime-deps.mjs`.
-const WHISPER_RELEASE_TAG: &str = "v1.7.6";
+///
+/// NOTE: not every tag publishes binaries — v1.7.4, v1.7.5, v1.9.3 and v1.9.4
+/// all ship none, and the download 404s. v1.9.2 is the newest tag that carries
+/// `whisper-bin-x64.zip`, so check the assets before bumping this. Keep in sync
+/// with `scripts/stage-runtime-deps.mjs`.
+const WHISPER_RELEASE_TAG: &str = "v1.9.2";
 
 /// The executable name whisper.cpp ships (renamed from `main` in v1.7.x).
 #[cfg(target_os = "windows")]
@@ -67,9 +69,9 @@ impl Pack {
     /// ```
     pub fn sha256(self) -> &'static str {
         match self {
-            Pack::Cpu => "0d2eca299c248f965bd0341bcb219db4b433c7f0c0ce2200d4df85765e8156a9",
-            Pack::Cuda11 => "d42f531781627f8cdceffc18fa03414ae90d1748a5c3f103ada64c991dd7f828",
-            Pack::Cuda12 => "3fc4d3ebd9a678313de50c04d9e59c43117ae190f0cb7bff602d4aeefc4efe3d",
+            Pack::Cpu => "49dcc16de826f20bd53d44f947a1ae49dfa81f86cad67a64d80820cb192d674a",
+            Pack::Cuda11 => "1776668730f5594a0b15f930225779e863dd8280397f9ee7c6e47ccf82bbb203",
+            Pack::Cuda12 => "443110ddaad70d4290ab2e77179e31cf712035bbc4fad56bb4519a90c917b39c",
         }
     }
 
@@ -92,13 +94,13 @@ impl Pack {
     /// Download size in megabytes, rounded.
     ///
     /// Worth showing before the click rather than after: the CUDA 12 build is
-    /// 443 MB compressed and roughly a gigabyte unpacked, which is not
+    /// 640 MB compressed and well over a gigabyte unpacked, which is not
     /// something to start silently on somebody's connection.
     pub fn download_mb(self) -> u32 {
         match self {
-            Pack::Cpu => 4,
-            Pack::Cuda11 => 45,
-            Pack::Cuda12 => 443,
+            Pack::Cpu => 8,
+            Pack::Cuda11 => 257,
+            Pack::Cuda12 => 640,
         }
     }
 
