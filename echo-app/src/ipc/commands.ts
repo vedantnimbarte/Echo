@@ -97,6 +97,17 @@ export interface ModelInfo {
   downloaded: boolean;
   size_mb: number;
   english_only: boolean;
+  /** Which local engine runs it. A "nemo" model needs its own engine binary. */
+  engine: "whisper" | "nemo";
+}
+
+export interface NemoStatus {
+  ready: boolean;
+  engine_installed: boolean;
+  model_downloaded: boolean;
+  model: string;
+  engine_mb: number;
+  engine_label: string;
 }
 
 export interface TelemetrySummaryItem {
@@ -318,6 +329,10 @@ export const commands = {
     invoke<void>("set_whisper_model", { name }),
 
   whisperReady: () => invoke<boolean>("whisper_ready"),
+
+  nemoStatus: () => invoke<NemoStatus>("nemo_status"),
+
+  downloadNemoEngine: () => invoke<void>("download_nemo_engine"),
 
   downloadWhisperBinary: () => invoke<void>("download_whisper_binary"),
 

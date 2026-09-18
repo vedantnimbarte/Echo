@@ -321,62 +321,15 @@ impl BinaryManager {
                 "https://github.com/ggml-org/whisper.cpp/releases/download/{WHISPER_RELEASE_TAG}/{}",
                 pack.asset()
             );
-            let tmp_zip = dest.join("whisper-pack.zip.part");
 
-            crate::core::egress::record(&url, "whisper binary download");
-
-            // Same stall timeout as every other download: without one a dead
-            // connection freezes the progress bar forever. See core::download.
-            let resp = crate::core::download::client()?
-                .get(&url)
-                .send()
-                .await
-                .map_err(|e| EchoError::AsrProvider(e.to_string()))?
-                .error_for_status()
-                .map_err(|e| EchoError::AsrProvider(e.to_string()))?;
-
-            let total = resp.content_length();
-            let mut downloaded: u64 = 0;
-            let mut last_emitted = -1.0_f32;
-
-            let mut file = tokio::fs::File::create(&tmp_zip)
-                .await
-                .map_err(|e| EchoError::Config(e.to_string()))?;
-            let mut stream = resp.bytes_stream();
-            // Same per-chunk stall timeout as every other download; a frozen
-            // connection must error rather than hang. See core::download.
-            while let Some(chunk) = crate::core::download::next_chunk(&mut stream).await? {
-                file.write_all(&chunk)
-                    .await
-                    .map_err(|e| EchoError::Config(e.to_string()))?;
-                downloaded += chunk.len() as u64;
-                if let Some(total) = total {
-                    // Reserve the last 2% for extraction.
-                    let p = (downloaded as f32 / total as f32 * 0.98).clamp(0.0, 0.98);
-                    if p - last_emitted >= 0.01 {
-                        last_emitted = p;
-                        let _ = progress_tx.send(p).await;
-                    }
-                }
-            }
-            file.flush()
-                .await
-                .map_err(|e| EchoError::Config(e.to_string()))?;
-            drop(file);
-
-            // Before extraction, because what comes out of this archive is an
-            // executable Echo shells out to. A truncated or substituted pack is
-            // refused and deleted here rather than being unzipped and run.
-            crate::core::download::verify(&tmp_zip, pack.sha256()).await?;
-
-            // Extract on the blocking pool — zip reads are synchronous.
-            let extract_dir = dest.clone();
-            let zip_path = tmp_zip.clone();
-            tokio::task::spawn_blocking(move || extract_zip_flat(&zip_path, &extract_dir))
-                .await
-                .map_err(|e| EchoError::Config(e.to_string()))??;
-
-            let _ = tokio::fs::remove_file(&tmp_zip).await;
+            download_zip_into(
+                &url,
+                pack.sha256(),
+                &dest,
+                "whisper binary download",
+                progress_tx.clone(),
+            )
+            .await?;
 
             // Older whisper.cpp archives ship the CLI as `main.exe`; normalise to
             // `whisper-cli.exe` so the provider always finds it.
@@ -401,6 +354,79 @@ impl BinaryManager {
             Ok(installed)
         }
     }
+}
+
+/// Download a zip, check it against `sha256`, and unpack it flat into `dest`.
+///
+/// Shared with the NeMo-Speech packs (see [`super::nemo`]): both are archives of
+/// executables Echo then runs, so both are verified *before* anything is
+/// unpacked, and both report progress the same way — the last 2% is reserved
+/// for extraction so the bar does not sit at 100% while the disk works.
+pub(crate) async fn download_zip_into(
+    url: &str,
+    sha256: &str,
+    dest: &Path,
+    egress_reason: &str,
+    progress_tx: mpsc::Sender<f32>,
+) -> Result<()> {
+    tokio::fs::create_dir_all(dest)
+        .await
+        .map_err(|e| EchoError::Config(e.to_string()))?;
+    let tmp_zip = dest.join("pack.zip.part");
+
+    crate::core::egress::record(url, egress_reason);
+
+    // Same stall timeout as every other download: without one a dead
+    // connection freezes the progress bar forever. See core::download.
+    let resp = crate::core::download::client()?
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| EchoError::AsrProvider(e.to_string()))?
+        .error_for_status()
+        .map_err(|e| EchoError::AsrProvider(e.to_string()))?;
+
+    let total = resp.content_length();
+    let mut downloaded: u64 = 0;
+    let mut last_emitted = -1.0_f32;
+
+    let mut file = tokio::fs::File::create(&tmp_zip)
+        .await
+        .map_err(|e| EchoError::Config(e.to_string()))?;
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = crate::core::download::next_chunk(&mut stream).await? {
+        file.write_all(&chunk)
+            .await
+            .map_err(|e| EchoError::Config(e.to_string()))?;
+        downloaded += chunk.len() as u64;
+        if let Some(total) = total {
+            let p = (downloaded as f32 / total as f32 * 0.98).clamp(0.0, 0.98);
+            if p - last_emitted >= 0.01 {
+                last_emitted = p;
+                let _ = progress_tx.send(p).await;
+            }
+        }
+    }
+    file.flush()
+        .await
+        .map_err(|e| EchoError::Config(e.to_string()))?;
+    drop(file);
+
+    // Before extraction, because what comes out of this archive is an
+    // executable Echo shells out to. A truncated or substituted pack is
+    // refused and deleted here rather than being unzipped and run.
+    crate::core::download::verify(&tmp_zip, sha256).await?;
+
+    // Extract on the blocking pool — zip reads are synchronous.
+    let extract_dir = dest.to_path_buf();
+    let zip_path = tmp_zip.clone();
+    tokio::task::spawn_blocking(move || extract_zip_flat(&zip_path, &extract_dir))
+        .await
+        .map_err(|e| EchoError::Config(e.to_string()))??;
+
+    let _ = tokio::fs::remove_file(&tmp_zip).await;
+    let _ = progress_tx.send(1.0).await;
+    Ok(())
 }
 
 /// Extract every file in `zip_path` into `dest`, flattening directory structure

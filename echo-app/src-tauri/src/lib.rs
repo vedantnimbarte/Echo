@@ -200,6 +200,15 @@ pub fn run() {
             );
             let whisper_server = Arc::new(core::asr::whisper_server::WhisperServer::new());
 
+            // The second local engine. Its binaries live beside whisper's, in
+            // their own pack directories, and nothing is downloaded until the
+            // user picks a model that needs it.
+            let nemo_binaries = Arc::new(
+                core::asr::nemo::NemoBinaries::new(core::asr::nemo::binaries_dir_of(&data_dir))
+                    .with_gpu(gpu),
+            );
+            let nemo_server = Arc::new(core::asr::nemo_server::NemoServer::new());
+
             // Selected local model (defaults to base.en).
             let whisper_model = storage::repositories::get_setting(&conn, "whisper_model")
                 .unwrap_or(None)
@@ -368,11 +377,36 @@ pub fn run() {
                 .map(|v| v == "true")
                 .unwrap_or(false);
 
+            // Same rule as the whisper provider above: register it only when
+            // both halves are present, so a half-provisioned engine is never
+            // the active one.
+            {
+                let nemo_model = storage::repositories::get_setting(&conn, "nemo_model")
+                    .unwrap_or(None)
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or_else(|| core::asr::model_manager::DEFAULT_NEMO_MODEL.to_string());
+                if nemo_binaries.is_installed() && model_manager.is_downloaded(&nemo_model) {
+                    let (_, gpu_allowed) = commands::asr::local_decode_settings(&conn);
+                    let provider = core::asr::nemo::NemoProvider::new(
+                        nemo_binaries.clone(),
+                        nemo_server.clone(),
+                        model_manager.model_path(&nemo_model),
+                    )
+                    .with_gpu_allowed(gpu_allowed);
+                    let asr = asr_manager.clone();
+                    tauri::async_runtime::block_on(async move {
+                        asr.register(Arc::new(provider)).await;
+                    });
+                }
+            }
+
             let app_state = AppState {
                 db: Mutex::new(conn),
                 audio: Arc::new(AudioService::new().expect("Failed to initialize audio")),
                 asr: asr_manager,
                 models: model_manager,
+                nemo_binaries,
+                nemo_server,
                 binaries: binary_manager,
                 whisper_server,
                 silero,
@@ -529,6 +563,8 @@ pub fn run() {
             commands::app::account_name,
             commands::audio::get_audio_devices,
             commands::asr::list_models,
+            commands::asr::download_nemo_engine,
+            commands::asr::nemo_status,
             commands::asr::download_model,
             commands::asr::set_asr_provider,
             commands::asr::set_whisper_model,

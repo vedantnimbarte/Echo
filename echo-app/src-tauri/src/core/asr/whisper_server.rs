@@ -335,7 +335,7 @@ async fn start(sig: &Signature) -> Result<Running> {
 /// until Echo dies. Closing that gap needs a watchdog process of our own
 /// (kqueue `NOTE_EXIT` on Echo, then kill the server): a second binary to sign
 /// and ship, for a crash the user then does not relaunch from.
-async fn spawn_contained(cmd: Command) -> std::io::Result<Child> {
+pub(crate) async fn spawn_contained(cmd: Command) -> std::io::Result<Child> {
     #[cfg(target_os = "linux")]
     let child = linux::spawn(cmd).await?;
     #[cfg(not(target_os = "linux"))]
@@ -642,7 +642,7 @@ async fn wait_until_ready(child: &mut Child, port: u16, timeout: Duration) -> Re
 /// with "bind failed"), and recovered by the caller's fallback — which is a
 /// better trade than scanning a hardcoded range and colliding with whatever
 /// else the user happens to be running.
-fn free_port() -> Result<u16> {
+pub(crate) fn free_port() -> Result<u16> {
     let listener = std::net::TcpListener::bind("127.0.0.1:0")
         .map_err(|e| EchoError::AsrProvider(format!("could not reserve a port: {e}")))?;
     let port = listener

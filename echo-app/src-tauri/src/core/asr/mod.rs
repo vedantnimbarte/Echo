@@ -12,6 +12,8 @@ pub mod languages;
 pub mod local;
 pub mod manager;
 pub mod model_manager;
+pub mod nemo;
+pub mod nemo_server;
 pub mod prompt;
 
 #[cfg(test)]
