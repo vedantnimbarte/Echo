@@ -12,6 +12,7 @@
 //! and the engine that works when this one has no binary for the platform.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -204,6 +205,10 @@ pub struct NemoProvider {
     /// Which app is focused, which decides the profile the dictionary is
     /// scoped to.
     context: Option<Arc<PromptContext>>,
+    /// Whether anything is reading partial results. Streaming costs a socket
+    /// and a second code path, so it is only used when the text is wanted on
+    /// screen as it is spoken.
+    partials_wanted: AtomicBool,
 }
 
 impl NemoProvider {
@@ -215,6 +220,7 @@ impl NemoProvider {
             gpu_allowed: true,
             dictionary: None,
             context: None,
+            partials_wanted: AtomicBool::new(false),
         }
     }
 
@@ -276,6 +282,30 @@ impl NemoProvider {
 impl AsrProvider for NemoProvider {
     fn name(&self) -> &str {
         "nemo"
+    }
+
+    fn supports_streaming(&self) -> bool {
+        true
+    }
+
+    fn set_partials_wanted(&self, wanted: bool) {
+        self.partials_wanted.store(wanted, Ordering::Relaxed);
+    }
+
+    /// Words as they are spoken, over the realtime socket — but only when
+    /// somebody is reading them. Buffered decoding is both simpler and, for a
+    /// transducer this fast, barely slower for the final text.
+    async fn transcribe_stream(
+        &self,
+        audio_rx: tokio::sync::mpsc::Receiver<Vec<f32>>,
+        tx: tokio::sync::mpsc::Sender<TranscriptSegment>,
+        language: Option<&str>,
+    ) -> Result<()> {
+        if !self.partials_wanted.load(Ordering::Relaxed) {
+            return super::default_transcribe_stream(self, audio_rx, tx, language).await;
+        }
+        let port = self.server.port_for(&self.signature()?).await?;
+        super::nemo_realtime::stream(port, audio_rx, tx, language, &self.boost_terms().await).await
     }
 
     async fn preload(&self) -> Result<()> {
@@ -470,6 +500,83 @@ mod tests {
             first.text
         );
         assert_eq!(first.text, second.text, "the same audio must decode alike");
+    }
+
+    /// The realtime socket against the real server: partials while the audio
+    /// is still arriving, then a final. Ignored like its sibling — it needs the
+    /// engine and the weights on disk.
+    ///
+    /// ```text
+    /// cargo test --lib nemo_realtime_end_to_end -- --ignored --nocapture
+    /// ```
+    #[tokio::test]
+    #[ignore]
+    async fn nemo_realtime_end_to_end_streams_partials() {
+        let data_dir = dirs_data_dir().join("com.echo.app");
+        let model = data_dir.join("models").join("nemotron-streaming-0.6b.gguf");
+        let gpu = crate::core::gpu::detect();
+        let binaries = Arc::new(NemoBinaries::new(binaries_dir_of(&data_dir)).with_gpu(gpu));
+        if !model.exists() || !binaries.is_installed() {
+            eprintln!("skipping: the engine or the model is not installed");
+            return;
+        }
+
+        let provider = NemoProvider::new(binaries, Arc::new(NemoServer::new()), model);
+        provider.set_partials_wanted(true);
+        provider.preload().await.expect("the engine should warm");
+
+        let (audio_tx, audio_rx) = tokio::sync::mpsc::channel::<Vec<f32>>(64);
+        let (text_tx, mut text_rx) = tokio::sync::mpsc::channel::<TranscriptSegment>(64);
+
+        // Fed in 100 ms chunks, the way the VAD stage delivers them, then an
+        // empty chunk to close the utterance.
+        let audio = fixture_pcm();
+        tokio::spawn(async move {
+            for chunk in audio.chunks(1_600) {
+                audio_tx.send(chunk.to_vec()).await.unwrap();
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+            audio_tx.send(Vec::new()).await.unwrap();
+        });
+
+        let started = std::time::Instant::now();
+        let stream = provider.transcribe_stream(audio_rx, text_tx, Some("en"));
+        let result = tokio::time::timeout(std::time::Duration::from_secs(60), stream)
+            .await
+            .expect("the realtime session should not hang");
+
+        let mut partials = Vec::new();
+        let mut finals = Vec::new();
+        let mut first_partial_at = None;
+        while let Ok(seg) = text_rx.try_recv() {
+            if seg.is_final {
+                finals.push(seg.text);
+            } else {
+                first_partial_at.get_or_insert(started.elapsed());
+                partials.push(seg.text);
+            }
+        }
+        eprintln!(
+            "realtime: {} partials (first at {:?}), finals {:?}, result {:?}",
+            partials.len(),
+            first_partial_at,
+            finals,
+            result.as_ref().err()
+        );
+
+        result.expect("the realtime session should succeed");
+        assert!(
+            !finals.is_empty(),
+            "a committed utterance must produce a final transcript"
+        );
+        assert!(
+            finals.iter().any(|t| t.to_lowercase().contains("testing")),
+            "got {finals:?}"
+        );
+        assert!(
+            !partials.is_empty(),
+            "streaming exists for the partials; none arrived"
+        );
     }
 
     /// The bundled 16 kHz mono speech clip as f32 samples.

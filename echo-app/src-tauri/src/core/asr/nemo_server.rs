@@ -105,6 +105,13 @@ impl NemoServer {
         self.ensure(sig).await.map(|_| ())
     }
 
+    /// The port a server for `sig` is listening on, starting it if needed.
+    /// The realtime socket needs this; buffered requests go through
+    /// [`Self::transcribe`].
+    pub async fn port_for(&self, sig: &Signature) -> Result<u16> {
+        self.ensure(sig).await
+    }
+
     /// Stop the server, releasing the model from memory. Used when switching
     /// away from this engine.
     pub async fn shutdown(&self) {
