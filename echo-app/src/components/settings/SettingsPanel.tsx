@@ -11,7 +11,7 @@ import {
   Laptop,
   Cloud,
 } from "lucide-react";
-import { commands } from "../../ipc/commands";
+import { commands, type InputTest } from "../../ipc/commands";
 import { echoEvents } from "../../ipc/events";
 import { normalizeMode, useRecordingStore, type RecordingMode } from "../../store/recordingStore";
 import { ModelSelector } from "./ModelSelector";
@@ -195,8 +195,27 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
   });
   const setDeviceMutation = useMutation({
     mutationFn: (v: string) => commands.setSetting("audio_device", v),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["setting", "audio_device"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["setting", "audio_device"] });
+      // A verdict belongs to the device it was measured on.
+      setInputTest(null);
+    },
   });
+  // Result of the last "Test microphone" run, and whether one is running.
+  const [inputTest, setInputTest] = useState<InputTest | null>(null);
+  const [testingInput, setTestingInput] = useState(false);
+
+  async function testInput() {
+    setTestingInput(true);
+    setInputTest(null);
+    try {
+      setInputTest(await commands.testInputLevel(savedDevice ?? undefined));
+    } catch {
+      setInputTest(null);
+    } finally {
+      setTestingInput(false);
+    }
+  }
 
   /* ---- pill ------------------------------------------------------------- */
   const { data: pillSize } = useQuery({
@@ -735,6 +754,27 @@ export function SettingsPanel({ page }: { page: SettingsPage }) {
               </option>
             ))}
           </select>
+
+          {/* The pill's meter shows audio after the capture gain, so it moves
+              on an input that is barely working. This reports what the device
+              itself delivers, which is the difference between "fine" and
+              "carried on 20 dB of gain". */}
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => void testInput()}
+              disabled={testingInput}
+              className="btn-ghost px-2.5 py-1 text-[13px] disabled:opacity-60"
+            >
+              {testingInput ? "Listening…" : "Test microphone"}
+            </button>
+            <span className="text-[13px] text-[var(--ink-muted)]">
+              {testingInput
+                ? "Say something at your normal volume…"
+                : inputTest
+                  ? `${inputTest.advice} (peak ${inputTest.peak_dbfs.toFixed(0)} dB)`
+                  : ""}
+            </span>
+          </div>
 
           {/* Moved here from Performance, which only renders on the local lane
               — this is about opening the audio device and has nothing to do

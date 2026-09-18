@@ -101,6 +101,13 @@ export interface ModelInfo {
   engine: "whisper" | "nemo";
 }
 
+export interface InputTest {
+  peak: number;
+  peak_dbfs: number;
+  verdict: "good" | "quiet" | "faint" | "silent";
+  advice: string;
+}
+
 export interface NemoStatus {
   ready: boolean;
   engine_installed: boolean;
@@ -329,6 +336,9 @@ export const commands = {
     invoke<void>("set_whisper_model", { name }),
 
   whisperReady: () => invoke<boolean>("whisper_ready"),
+
+  testInputLevel: (device?: string) =>
+    invoke<InputTest>("test_input_level", { device: device ?? null }),
 
   nemoStatus: () => invoke<NemoStatus>("nemo_status"),
 

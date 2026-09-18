@@ -569,6 +569,7 @@ pub fn run() {
             commands::app::set_autostart,
             commands::app::account_name,
             commands::audio::get_audio_devices,
+            commands::audio::test_input_level,
             commands::asr::list_models,
             commands::asr::download_nemo_engine,
             commands::asr::nemo_status,

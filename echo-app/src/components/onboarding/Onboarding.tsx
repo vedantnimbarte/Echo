@@ -14,7 +14,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 
-import { commands } from "../../ipc/commands";
+import { commands, type InputTest } from "../../ipc/commands";
 import { echoEvents } from "../../ipc/events";
 import { Waveform } from "../pill/Waveform";
 import { CloudProviders } from "../settings/CloudProviders";
@@ -175,6 +175,10 @@ function WelcomeStep() {
 
 function MicStep() {
   const [testing, setTesting] = useState(false);
+  // What the last test measured. The meter beside it shows audio *after* the
+  // capture gain, so it looks lively even on an input that is barely working —
+  // this is the number that tells the truth about the device.
+  const [result, setResult] = useState<InputTest | null>(null);
   const { data: devices = [] } = useQuery({
     queryKey: ["audio-devices"],
     queryFn: commands.getAudioDevices,
@@ -185,15 +189,19 @@ function MicStep() {
   });
   const qc = useQueryClient();
 
-  // Start/stop a live capture so the meter reflects the real mic. At this point
-  // the local engine usually isn't provisioned yet, so nothing is transcribed.
-  useEffect(() => {
-    if (!testing) return;
-    void commands.startRecording().catch(() => setTesting(false));
-    return () => {
-      void commands.stopRecording();
-    };
-  }, [testing]);
+  // Listen for a few seconds, then say what was heard. The capture itself
+  // measures the raw device level; nothing is transcribed and nothing is typed.
+  async function runTest() {
+    setTesting(true);
+    setResult(null);
+    try {
+      setResult(await commands.testInputLevel(savedDevice ?? undefined));
+    } catch {
+      setResult(null);
+    } finally {
+      setTesting(false);
+    }
+  }
 
   return (
     <div>
@@ -222,11 +230,14 @@ function MicStep() {
             {testing ? (
               <Waveform mode="listening" />
             ) : (
-              <span className="text-[14px] text-[var(--ink-faint)]">Meter idle</span>
+              <span className="text-[14px] text-[var(--ink-faint)]">
+                {result ? `Peak ${result.peak_dbfs.toFixed(0)} dB` : "Meter idle"}
+              </span>
             )}
           </div>
           <button
-            onClick={() => setTesting((t) => !t)}
+            onClick={() => void runTest()}
+            disabled={testing}
             className={clsx(
               "rounded-lg px-3 py-1.5 text-[14px] font-medium transition",
               testing
@@ -234,9 +245,29 @@ function MicStep() {
                 : "border border-[var(--hairline)] text-[var(--ink)] hover:bg-[var(--surface-2)]"
             )}
           >
-            {testing ? "Stop test" : "Test microphone"}
+            {testing ? "Listening…" : "Test microphone"}
           </button>
         </div>
+
+        {testing && (
+          <p className="text-[13px] text-[var(--ink-muted)]">
+            Say something at your normal volume…
+          </p>
+        )}
+        {result && !testing && (
+          <p
+            className={clsx(
+              "text-[13px]",
+              result.verdict === "good"
+                ? "text-[var(--ink-muted)]"
+                : result.verdict === "silent"
+                  ? "text-[var(--rec)]"
+                  : "text-[var(--ink)]"
+            )}
+          >
+            {result.advice}
+          </p>
+        )}
       </div>
     </div>
   );
