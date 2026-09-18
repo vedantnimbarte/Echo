@@ -179,7 +179,14 @@ impl WhisperServer {
             // free of decoder tuning, so changing a threshold never forces a
             // model reload.
             .text("entropy_thold", super::decode_opts::ENTROPY_THOLD)
-            .text("logprob_thold", super::decode_opts::LOGPROB_THOLD);
+            .text("logprob_thold", super::decode_opts::LOGPROB_THOLD)
+            // Per request, not a startup flag: the right context depends on how
+            // long *this* utterance is, and putting it in the server's
+            // signature would restart the model on every sentence.
+            .text(
+                "audio_ctx",
+                super::decode_opts::audio_ctx_for(audio_seconds).to_string(),
+            );
 
         if let Some(prompt) = prompt {
             form = form.text("prompt", prompt);

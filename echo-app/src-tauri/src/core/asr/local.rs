@@ -187,9 +187,13 @@ impl AsrProvider for LocalWhisperProvider {
                     self.binaries.mark_gpu_failed();
                 }
                 tracing::warn!("whisper-server failed, falling back to whisper-cli: {e}");
-                self.run_cli_fallback(&wav, lang, &prompt).await?
+                self.run_cli_fallback(&wav, lang, &prompt, audio_seconds)
+                    .await?
             }
-            None => self.run_cli_fallback(&wav, lang, &prompt).await?,
+            None => {
+                self.run_cli_fallback(&wav, lang, &prompt, audio_seconds)
+                    .await?
+            }
         };
 
         Ok(TranscriptSegment {
@@ -289,6 +293,7 @@ impl DecodeJob {
             &self.language,
             self.decode,
             self.prompt.as_deref(),
+            audio_seconds,
         )
         .await
     }
@@ -425,6 +430,7 @@ impl LocalWhisperProvider {
         wav: &[u8],
         language: &str,
         prompt: &Option<String>,
+        audio_seconds: u32,
     ) -> Result<String> {
         let binary = self
             .binaries
@@ -437,6 +443,7 @@ impl LocalWhisperProvider {
             language,
             self.decode_config(),
             prompt.as_deref(),
+            audio_seconds,
         )
         .await
     }

@@ -62,6 +62,7 @@ pub(crate) async fn run_cli(
     language: &str,
     decode: DecodeConfig,
     prompt: Option<&str>,
+    audio_seconds: u32,
 ) -> Result<String> {
     // whisper-cli reads audio from disk. Stage it under a unique name so
     // concurrent utterances never collide.
@@ -70,7 +71,16 @@ pub(crate) async fn run_cli(
         .await
         .map_err(|e| EchoError::Config(e.to_string()))?;
 
-    let result = run_cli_on_file(binary, model_path, &tmp, language, decode, prompt).await;
+    let result = run_cli_on_file(
+        binary,
+        model_path,
+        &tmp,
+        language,
+        decode,
+        prompt,
+        Some(audio_seconds),
+    )
+    .await;
     let _ = tokio::fs::remove_file(&tmp).await;
     result
 }
@@ -79,6 +89,11 @@ pub(crate) async fn run_cli(
 ///
 /// whisper.cpp decodes flac/mp3/ogg/wav itself, so an imported recording can go
 /// straight to the binary — there is no reason to decode and re-encode it here.
+///
+/// `audio_seconds` is the length of the audio when the caller knows it: it
+/// clamps the encoder to the utterance instead of whisper's padded 30 s window.
+/// An imported file passes `None` and decodes at full context, where latency is
+/// not the point anyway.
 pub(crate) async fn run_cli_on_file(
     binary: &Path,
     model_path: &Path,
@@ -86,6 +101,7 @@ pub(crate) async fn run_cli_on_file(
     language: &str,
     decode: DecodeConfig,
     prompt: Option<&str>,
+    audio_seconds: Option<u32>,
 ) -> Result<String> {
     let tmp = audio_path;
     let mut cmd = Command::new(binary);
@@ -97,6 +113,13 @@ pub(crate) async fn run_cli_on_file(
         .args(decode.args())
         .arg("-nt") // no timestamps — stdout is plain transcript text
         .arg("-np"); // no progress / system-info prints
+
+    if let Some(seconds) = audio_seconds {
+        cmd.args([
+            "-ac",
+            &super::decode_opts::audio_ctx_for(seconds).to_string(),
+        ]);
+    }
 
     if let Some(prompt) = prompt {
         cmd.arg("--prompt").arg(prompt);

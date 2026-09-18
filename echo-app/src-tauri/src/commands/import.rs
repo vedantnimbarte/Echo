@@ -120,6 +120,7 @@ pub async fn transcribe_path(
         lang,
         decode,
         prompt.as_deref(),
+        None,
     )
     .await?;
 

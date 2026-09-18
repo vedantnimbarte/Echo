@@ -301,15 +301,32 @@ async fn measure_asr(
     // off disk rather than out of the page cache. Including it produced a
     // median almost twice every later run, and a headline figure that was
     // simply wrong.
-    let _ = whisper_cli::run_cli(&cli_binary, &model_path, &wav, language, decode, None).await;
+    let _ = whisper_cli::run_cli(
+        &cli_binary,
+        &model_path,
+        &wav,
+        language,
+        decode,
+        None,
+        CLIP_SECONDS as u32,
+    )
+    .await;
 
     // ── One-shot CLI: reloads the model every call, which is the cost the
     //    resident server exists to remove.
     let mut cli_samples = Vec::new();
     for _ in 0..ASR_RUNS {
         let start = Instant::now();
-        let result =
-            whisper_cli::run_cli(&cli_binary, &model_path, &wav, language, decode, None).await;
+        let result = whisper_cli::run_cli(
+            &cli_binary,
+            &model_path,
+            &wav,
+            language,
+            decode,
+            None,
+            CLIP_SECONDS as u32,
+        )
+        .await;
         if let Err(e) = result {
             return Some(format!("  (whisper-cli failed: {e})\n"));
         }

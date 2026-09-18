@@ -249,7 +249,17 @@ async fn retry_locally(
     let wav = crate::core::asr::wav::pcm_f32_to_wav(&audio, 16_000)?;
     let lang = whisper_cli::resolve_language(model, language);
     info!(model, "Retrying the last utterance locally");
-    whisper_cli::run_cli(&binary, &model_path, &wav, lang, decode, prompt.as_deref()).await
+    let audio_seconds = audio.len().div_ceil(16_000) as u32;
+    whisper_cli::run_cli(
+        &binary,
+        &model_path,
+        &wav,
+        lang,
+        decode,
+        prompt.as_deref(),
+        audio_seconds,
+    )
+    .await
 }
 
 /// What the retry can be pointed at: every registered provider, plus every
