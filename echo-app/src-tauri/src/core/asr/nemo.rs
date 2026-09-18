@@ -17,8 +17,10 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use super::nemo_server::{Device, NemoServer, Signature};
+use super::prompt::PromptContext;
 use super::wav::pcm_f32_to_wav;
 use super::{AsrProvider, TranscriptSegment};
+use crate::core::dictionary::DictionaryEngine;
 use crate::core::gpu::GpuBackend;
 use crate::error::{EchoError, Result};
 
@@ -195,6 +197,13 @@ pub struct NemoProvider {
     /// Whether the user allows the GPU at all. A machine with no CUDA pack
     /// installed runs on CPU regardless.
     gpu_allowed: bool,
+    /// Custom vocabulary, boosted while the decoder is still choosing. The
+    /// whisper provider feeds the same terms in as an initial prompt; without
+    /// this the dictionary would only repair a name after it was misheard.
+    dictionary: Option<Arc<tokio::sync::RwLock<DictionaryEngine>>>,
+    /// Which app is focused, which decides the profile the dictionary is
+    /// scoped to.
+    context: Option<Arc<PromptContext>>,
 }
 
 impl NemoProvider {
@@ -204,12 +213,43 @@ impl NemoProvider {
             server,
             model_path,
             gpu_allowed: true,
+            dictionary: None,
+            context: None,
         }
     }
 
     pub fn with_gpu_allowed(mut self, allowed: bool) -> Self {
         self.gpu_allowed = allowed;
         self
+    }
+
+    pub fn with_dictionary(
+        mut self,
+        dictionary: Arc<tokio::sync::RwLock<DictionaryEngine>>,
+    ) -> Self {
+        self.dictionary = Some(dictionary);
+        self
+    }
+
+    pub fn with_prompt_context(mut self, context: Arc<PromptContext>) -> Self {
+        self.context = Some(context);
+        self
+    }
+
+    /// Dictionary spellings to boost for this utterance, scoped to the focused
+    /// app's profile.
+    async fn boost_terms(&self) -> Vec<String> {
+        let Some(dictionary) = &self.dictionary else {
+            return Vec::new();
+        };
+        let profile = self.context.as_ref().and_then(|c| c.profile());
+        dictionary
+            .read()
+            .await
+            .hint_terms(profile)
+            .into_iter()
+            .map(str::to_string)
+            .collect()
     }
 
     /// Resolve the binary and the device for *this* attempt.
@@ -262,7 +302,13 @@ impl AsrProvider for NemoProvider {
 
         let text = self
             .server
-            .transcribe(&sig, wav, audio_seconds, language)
+            .transcribe(
+                &sig,
+                wav,
+                audio_seconds,
+                language,
+                &self.boost_terms().await,
+            )
             .await?;
 
         Ok(TranscriptSegment {

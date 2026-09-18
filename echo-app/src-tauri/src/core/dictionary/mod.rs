@@ -61,7 +61,18 @@ impl DictionaryEngine {
     /// want produced. Entries scoped to another profile are left out so the
     /// hint matches the replacements that will actually be applied.
     pub fn prompt_terms(&self, profile: Option<i64>) -> Option<String> {
-        let mut prompt = String::new();
+        let terms = self.hint_terms(profile);
+        (!terms.is_empty()).then(|| terms.join(", "))
+    }
+
+    /// The same vocabulary as [`Self::prompt_terms`], unjoined.
+    ///
+    /// A transducer takes its hints as a list of phrases to boost rather than
+    /// as a sentence of context, so the two engines want the same terms in
+    /// different shapes. Splitting the joined string back apart would be a
+    /// guess about replacements that contain a comma.
+    pub fn hint_terms(&self, profile: Option<i64>) -> Vec<&str> {
+        let mut prompt_len = 0usize;
         let mut seen: Vec<&str> = Vec::new();
 
         for entry in &self.entries {
@@ -78,22 +89,19 @@ impl DictionaryEngine {
                 continue;
             }
             // Budget check before the push, so the prompt never overruns.
-            let addition = if prompt.is_empty() {
+            let addition = if prompt_len == 0 {
                 term.len()
             } else {
                 term.len() + 2
             };
-            if prompt.len() + addition > MAX_PROMPT_CHARS {
+            if prompt_len + addition > MAX_PROMPT_CHARS {
                 break;
             }
-            if !prompt.is_empty() {
-                prompt.push_str(", ");
-            }
-            prompt.push_str(term);
+            prompt_len += addition;
             seen.push(term);
         }
 
-        (!prompt.is_empty()).then_some(prompt)
+        seen
     }
 
     fn apply_replacements(&self, text: String, profile: Option<i64>) -> String {

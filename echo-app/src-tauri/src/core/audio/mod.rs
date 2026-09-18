@@ -135,11 +135,11 @@ impl AudioService {
     /// device just has its warm window renewed. Failure is deliberately not an
     /// error the caller has to handle: warming is an optimisation, and a
     /// machine that cannot warm can still record.
-    pub fn warm(&self, device_name: Option<&str>) {
+    pub fn warm(self: &Arc<Self>, device_name: Option<&str>) {
         self.warm_with(device_name, Cmd::Warm)
     }
 
-    fn warm_with(&self, device_name: Option<&str>, cmd: Cmd) {
+    fn warm_with(self: &Arc<Self>, device_name: Option<&str>, cmd: Cmd) {
         if let Err(e) = self.ensure_stream(device_name) {
             warn!("Could not warm the microphone: {e}");
             return;
@@ -148,8 +148,12 @@ impl AudioService {
 
         // Release the device if the recording we warmed for never arrives.
         let generation = self.warm_generation.fetch_add(1, Ordering::SeqCst) + 1;
-        let tx = self.cmd_tx.clone();
         let gen_handle = self.warm_generation.clone();
+        // The service itself, because stopping the *router* is not releasing
+        // the *device*: the capture stream has to be dropped, or the OS goes on
+        // showing the microphone as in use for as long as Echo is open — while
+        // this very task logs that it was released.
+        let service = self.clone();
         // Same reasoning as in `new`: `warm` is reachable from a synchronous
         // Tauri command, which does not run inside a Tokio runtime either.
         tauri::async_runtime::spawn(async move {
@@ -159,7 +163,8 @@ impl AudioService {
                 return;
             }
             info!("Warm microphone expired; releasing the device");
-            let _ = tx.send(Cmd::Stop);
+            let _ = service.cmd_tx.send(Cmd::Stop);
+            service.close_stream();
         });
     }
 
@@ -195,7 +200,7 @@ impl AudioService {
     /// This is the common case after a dictation: people dictate in bursts, and
     /// paying the device-open cost between every sentence is the difference
     /// between Echo feeling instant and feeling sluggish.
-    pub fn stop_capture_warm(&self, device_name: Option<&str>) {
+    pub fn stop_capture_warm(self: &Arc<Self>, device_name: Option<&str>) {
         self.warm_with(device_name, Cmd::EndCapture);
     }
 
@@ -372,12 +377,18 @@ async fn route(mut cmd_rx: mpsc::UnboundedReceiver<Cmd>) {
                             push_pre_roll(ring, &chunk);
                         }
                     }
-                    Mode::Active(tx) => {
-                        if tx.try_send(chunk).is_err() {
-                            // Receiver gone: the recording ended without a Stop.
-                            mode = Mode::Idle;
+                    Mode::Active(tx) => match tx.try_send(chunk) {
+                        Ok(()) => {}
+                        // Backlog, not an ending: the ASR stage blocks while it
+                        // decodes, and a slow decode used to look exactly like
+                        // a finished recording — capture stopped mid-sentence
+                        // and the user went on talking into nothing.
+                        Err(mpsc::error::TrySendError::Full(_)) => {
+                            warn!("Audio backlog: dropped a chunk while the decoder caught up")
                         }
-                    }
+                        // Receiver gone: the recording ended without a Stop.
+                        Err(mpsc::error::TrySendError::Closed(_)) => mode = Mode::Idle,
+                    },
                 }
             }
         }

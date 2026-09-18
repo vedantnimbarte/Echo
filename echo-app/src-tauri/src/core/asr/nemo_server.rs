@@ -93,9 +93,10 @@ impl NemoServer {
         wav: Vec<u8>,
         audio_seconds: u32,
         language: Option<&str>,
+        boost: &[String],
     ) -> Result<String> {
         let port = self.ensure(sig).await?;
-        self.infer(port, wav, audio_seconds, language).await
+        self.infer(port, wav, audio_seconds, language, boost).await
     }
 
     /// Start the server for `sig` without decoding anything, so the weights are
@@ -139,6 +140,7 @@ impl NemoServer {
         wav: Vec<u8>,
         audio_seconds: u32,
         language: Option<&str>,
+        boost: &[String],
     ) -> Result<String> {
         let part = reqwest::multipart::Part::bytes(wav)
             .file_name("audio.wav")
@@ -150,6 +152,9 @@ impl NemoServer {
             .text("response_format", "json");
         if let Some(language) = language {
             form = form.text("language", language.to_string());
+        }
+        if let Some(contexts) = speech_contexts(boost) {
+            form = form.text("speech_contexts", contexts);
         }
 
         let timeout = BASE_REQUEST_TIMEOUT
@@ -185,6 +190,24 @@ impl NemoServer {
 
         Ok(super::whisper_cli::clean_transcript(text))
     }
+}
+
+/// How hard to bias the decoder toward a dictionary spelling.
+///
+/// The server's own OpenAI-compatible `prompt` field boosts a single phrase at
+/// 10, which is heavy enough to put a rare name where it does not belong. This
+/// is the middle of the documented range: enough to win a close call, not
+/// enough to overrule what was actually said.
+const BOOST: f32 = 3.0;
+
+/// The `speech_contexts` field for a set of phrases, or `None` when there are
+/// none — an empty array is a request to boost nothing, which is not worth
+/// sending.
+fn speech_contexts(phrases: &[String]) -> Option<String> {
+    if phrases.is_empty() {
+        return None;
+    }
+    serde_json::to_string(&serde_json::json!([{ "phrases": phrases, "boost": BOOST }])).ok()
 }
 
 /// Spawn a server for `sig` and wait until `/health` answers.
@@ -308,6 +331,14 @@ pub fn binary_in(dir: &Path) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn word_boosting_is_sent_only_when_there_is_vocabulary_to_boost() {
+        assert_eq!(speech_contexts(&[]), None);
+        let json = speech_contexts(&["Kowalczyk".to_string(), "Echo".to_string()]).unwrap();
+        assert!(json.contains("\"Kowalczyk\""), "{json}");
+        assert!(json.contains("\"boost\":3.0"), "{json}");
+    }
 
     /// A signature is what decides whether the resident model can be reused, so
     /// every field in it has to count.

@@ -166,7 +166,9 @@ pub async fn register_nemo_provider(state: &AppState) -> Result<()> {
         state.nemo_server.clone(),
         state.models.model_path(&model),
     )
-    .with_gpu_allowed(gpu_allowed);
+    .with_gpu_allowed(gpu_allowed)
+    .with_dictionary(state.dictionary.clone())
+    .with_prompt_context(state.prompt_ctx.clone());
     state.asr.register(Arc::new(provider)).await;
     Ok(())
 }

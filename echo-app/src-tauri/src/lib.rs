@@ -399,7 +399,9 @@ pub fn run() {
                         nemo_server.clone(),
                         model_manager.model_path(&nemo_model),
                     )
-                    .with_gpu_allowed(gpu_allowed);
+                    .with_gpu_allowed(gpu_allowed)
+                    .with_dictionary(dictionary.clone())
+                    .with_prompt_context(prompt_ctx.clone());
                     let asr = asr_manager.clone();
                     tauri::async_runtime::block_on(async move {
                         asr.register(Arc::new(provider)).await;
