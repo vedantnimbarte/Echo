@@ -246,7 +246,7 @@ async fn check_pipeline(report: &mut Report) {
         |event| match event {
             VadEvent::SpeechStarted => started.set(started.get() + 1),
             VadEvent::SpeechEnded => ended.set(ended.get() + 1),
-            VadEvent::Level(_) => {}
+            VadEvent::Level(_) | VadEvent::RawLevel(_) | VadEvent::DeviceError => {}
         },
     );
 

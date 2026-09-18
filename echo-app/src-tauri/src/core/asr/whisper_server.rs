@@ -127,6 +127,12 @@ impl WhisperServer {
         self.infer(port, wav, audio_seconds, language, prompt).await
     }
 
+    /// Start the server for `sig` without decoding anything, so the model is
+    /// resident before the first utterance needs it.
+    pub async fn warm(&self, sig: &Signature) -> Result<()> {
+        self.ensure(sig).await.map(|_| ())
+    }
+
     /// Stop the server if one is running. Used when switching away from the
     /// local engine so an idle process is not left holding the model in RAM.
     pub async fn shutdown(&self) {
@@ -179,7 +185,14 @@ impl WhisperServer {
             // free of decoder tuning, so changing a threshold never forces a
             // model reload.
             .text("entropy_thold", super::decode_opts::ENTROPY_THOLD)
-            .text("logprob_thold", super::decode_opts::LOGPROB_THOLD);
+            .text("logprob_thold", super::decode_opts::LOGPROB_THOLD)
+            // Per request, not a startup flag: the right context depends on how
+            // long *this* utterance is, and putting it in the server's
+            // signature would restart the model on every sentence.
+            .text(
+                "audio_ctx",
+                super::decode_opts::audio_ctx_for(audio_seconds).to_string(),
+            );
 
         if let Some(prompt) = prompt {
             form = form.text("prompt", prompt);
@@ -328,7 +341,7 @@ async fn start(sig: &Signature) -> Result<Running> {
 /// until Echo dies. Closing that gap needs a watchdog process of our own
 /// (kqueue `NOTE_EXIT` on Echo, then kill the server): a second binary to sign
 /// and ship, for a crash the user then does not relaunch from.
-async fn spawn_contained(cmd: Command) -> std::io::Result<Child> {
+pub(crate) async fn spawn_contained(cmd: Command) -> std::io::Result<Child> {
     #[cfg(target_os = "linux")]
     let child = linux::spawn(cmd).await?;
     #[cfg(not(target_os = "linux"))]
@@ -635,7 +648,7 @@ async fn wait_until_ready(child: &mut Child, port: u16, timeout: Duration) -> Re
 /// with "bind failed"), and recovered by the caller's fallback — which is a
 /// better trade than scanning a hardcoded range and colliding with whatever
 /// else the user happens to be running.
-fn free_port() -> Result<u16> {
+pub(crate) fn free_port() -> Result<u16> {
     let listener = std::net::TcpListener::bind("127.0.0.1:0")
         .map_err(|e| EchoError::AsrProvider(format!("could not reserve a port: {e}")))?;
     let port = listener

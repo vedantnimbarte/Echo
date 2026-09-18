@@ -1,5 +1,5 @@
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
+    atomic::{AtomicU32, AtomicU64, Ordering},
     Arc, Mutex,
 };
 use std::time::Instant;
@@ -98,7 +98,24 @@ pub async fn begin_recording(
             .filter(|s| !s.is_empty() && s != "auto")
     });
 
-    let audio_rx = state.audio.start_capture(device_name.as_deref())?;
+    let audio_rx = match state.audio.start_capture(device_name.as_deref()) {
+        Ok(rx) => rx,
+        // The flag was claimed above and the pill is already showing a
+        // recording. Leaving both set meant the hotkey silently did nothing
+        // from then on — and the frontend's hotkey path discards this error.
+        Err(e) => {
+            *state.recording.lock_live() = false;
+            let _ = app.emit(
+                AppEvent::RecordingStopped.event_name(),
+                AppEvent::RecordingStopped,
+            );
+            let event = AppEvent::ErrorOccurred {
+                message: e.to_string(),
+            };
+            let _ = app.emit(event.event_name(), &event);
+            return Err(e);
+        }
+    };
     let (transcript_tx, mut transcript_rx) = mpsc::channel::<TranscriptSegment>(32);
 
     // Plugins, read once for the session: which capabilities anyone offers
@@ -163,12 +180,20 @@ pub async fn begin_recording(
     // path sees them, and that path is optional.
     let spoken_ms = Arc::new(AtomicU64::new(0));
     let spoken_for_vad = spoken_ms.clone();
+    // Loudest chunk this session, as f32 bits. Only read when a session ends
+    // with nothing to show for it, to tell "the microphone is not working" from
+    // "you did not say anything".
+    let peak_level = Arc::new(AtomicU32::new(0));
+    let peak_for_vad = peak_level.clone();
     let since_for_vad: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
 
     tokio::spawn(async move {
         let vad: Box<dyn Vad> = match silero_model {
             Some(model) if vad_engine != "energy" => Box::new(SileroVad::new(model)),
-            _ => Box::new(EnergyVad::new(0.01)),
+            // Calibrated against AGC-lifted audio, like the utterance gate:
+            // speech lands near 0.05 RMS and a boosted room floor well under
+            // it. The old 0.01 was a pre-AGC number and now sits in the noise.
+            _ => Box::new(EnergyVad::new(0.02)),
         };
         vad_gate(
             audio_rx,
@@ -180,6 +205,29 @@ pub async fn begin_recording(
                 VadEvent::Level(rms) => {
                     let _ = level_app.emit("echo://audio-level", rms);
                 }
+                // The *raw* level, before the capture gain. What the meter
+                // shows has already been lifted, so judging "was anything there
+                // at all" on it would call a dead input healthy.
+                VadEvent::RawLevel(rms) => {
+                    peak_for_vad.fetch_max(rms.to_bits(), Ordering::Relaxed);
+                }
+                // The device stopped delivering mid-session. The capture chain
+                // is already tearing down; without this the pill would sit on
+                // "recording" over a microphone that is gone.
+                VadEvent::DeviceError => {
+                    let app = level_app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let event = AppEvent::ErrorOccurred {
+                            message: MIC_LOST.into(),
+                        };
+                        let _ = app.emit(event.event_name(), &event);
+                        let state = app.state::<AppState>();
+                        if let Err(e) = end_recording(app.clone(), state.inner()).await {
+                            error!("Could not end a recording after a device error: {e}");
+                        }
+                    });
+                }
+
                 // Rising edge: drives the pill's listening state in voice-activated mode.
                 VadEvent::SpeechStarted => {
                     *since_for_vad.lock_live() = Some(Instant::now());
@@ -291,12 +339,21 @@ pub async fn begin_recording(
     // them before the session starts. With live text off, nothing changes.
     asr.set_partials_wanted(stream_partials).await;
 
+    let asr_error_app = app.clone();
     tokio::spawn(async move {
         if let Err(e) = asr
             .transcribe_stream(asr_rx, transcript_tx, lang.as_deref())
             .await
         {
             error!("ASR stream error: {e}");
+            // Without this the screen shows exactly what a successful silent
+            // recording shows: the pill finishes, nothing is typed, and an
+            // expired API key or a missing model is a line in a log file the
+            // user has no reason to open.
+            let event = AppEvent::ErrorOccurred {
+                message: e.to_string(),
+            };
+            let _ = asr_error_app.emit(event.event_name(), &event);
         }
     });
 
@@ -346,7 +403,15 @@ pub async fn begin_recording(
     };
 
     let app_clone = app.clone();
+    let quiet_app = app.clone();
+    let peak_for_report = peak_level.clone();
     tokio::spawn(async move {
+        let session_started = Instant::now();
+        // Whether anything was actually delivered. A session that ends with
+        // this false and a silent microphone is the failure this whole pipeline
+        // used to keep to itself: the audio was dropped, a debug line was
+        // written, and the screen said nothing at all.
+        let mut delivered = false;
         // Partial text this process has typed into the focused app and not yet
         // replaced. Empty whenever nothing is streamed, which is the only state
         // in which a backspace count would be a guess.
@@ -357,6 +422,7 @@ pub async fn begin_recording(
 
         while let Some(segment) = transcript_rx.recv().await {
             if segment.is_final {
+                delivered |= !segment.text.trim().is_empty();
                 // Which app is focused decides how the text is delivered and
                 // which dictionary entries apply, so resolve it now rather than
                 // at recording start — focus can move while you talk.
@@ -731,6 +797,13 @@ pub async fn begin_recording(
                 }
             }
         }
+
+        report_if_nothing_was_heard(
+            &quiet_app,
+            delivered,
+            f32::from_bits(peak_for_report.load(Ordering::Relaxed)),
+            session_started.elapsed(),
+        );
     });
 
     Ok(())
@@ -778,6 +851,13 @@ pub async fn end_recording(app: AppHandle, state: &AppState) -> Result<()> {
         state.audio.stop_capture();
     }
 
+    // People dictate in bursts, so the engine that just answered is the one
+    // about to be asked again. Cheap when it is already resident.
+    {
+        let asr = state.asr.clone();
+        tauri::async_runtime::spawn(async move { asr.preload_active().await });
+    }
+
     app.emit(
         AppEvent::RecordingStopped.event_name(),
         AppEvent::RecordingStopped,
@@ -814,15 +894,79 @@ pub fn warm_microphone(state: State<'_, AppState>) {
         return;
     }
     state.audio.warm(device.as_deref());
+
+    // The microphone opening means a dictation is coming, which makes this the
+    // moment to have the decoder's weights in memory too — the device costs
+    // milliseconds to open, the model can cost twenty seconds to load.
+    let asr = state.asr.clone();
+    tauri::async_runtime::spawn(async move { asr.preload_active().await });
+}
+
+/// Below this peak level (about -46 dBFS) a whole session is, for practical
+/// purposes, silence. The capture AGC has already lifted anything speech-shaped
+/// well past it, so audio this quiet means the microphone is muted, unplugged,
+/// or not the device Echo is listening to.
+const SILENT_SESSION_PEAK: f32 = 0.005;
+
+/// Shortest hold worth reporting on. Below this the hotkey was tapped, not
+/// dictated into, and a warning would be nagging rather than news.
+const MIN_REPORTABLE_SESSION: std::time::Duration = std::time::Duration::from_millis(1_500);
+
+/// Say so when a dictation produced no text because nothing reached the
+/// microphone.
+///
+/// Silence used to be indistinguishable from a broken pipeline from the user's
+/// side: the utterance was gated out, a debug line went to the log, and the
+/// screen showed the same nothing either way. This is the one case Echo can
+/// explain rather than swallow.
+fn report_if_nothing_was_heard(
+    app: &AppHandle,
+    delivered: bool,
+    peak: f32,
+    session: std::time::Duration,
+) {
+    if !should_report_silence(delivered, peak, session) {
+        return;
+    }
+    info!(
+        peak_dbfs = 20.0 * peak.max(1e-6).log10(),
+        "Session produced no transcript and the input was silent"
+    );
+    let event = AppEvent::ErrorOccurred {
+        message: "Echo heard nothing. Check the microphone in Settings — the selected input                   may be muted, unplugged, or the wrong device."
+            .into(),
+    };
+    let _ = app.emit(event.event_name(), &event);
+}
+
+/// Whether a finished session is worth warning about.
+///
+/// Three ways to stay quiet, and each one is a complaint avoided: text did
+/// arrive, the hotkey was only tapped, or the microphone was working and the
+/// user simply did not speak.
+pub(crate) fn should_report_silence(
+    delivered: bool,
+    peak: f32,
+    session: std::time::Duration,
+) -> bool {
+    !delivered && session >= MIN_REPORTABLE_SESSION && peak < SILENT_SESSION_PEAK
 }
 
 /// Signals the VAD stage produces for the UI.
 pub(crate) enum VadEvent {
-    /// Per-chunk RMS of the captured audio, for the live waveform.
+    /// Per-chunk RMS after the capture gain, for the live waveform.
     Level(f32),
+    /// Per-chunk RMS before the capture gain, for judging the input itself.
+    RawLevel(f32),
     SpeechStarted,
     SpeechEnded,
+    /// The capture layer reported that the device failed.
+    DeviceError,
 }
+
+/// Said when the microphone disappears mid-dictation.
+const MIC_LOST: &str =
+    "The microphone stopped responding. Check that it is still connected, then try again.";
 
 /// Audio kept from just before the VAD's rising edge and sent ahead of it.
 ///
@@ -865,6 +1009,7 @@ pub(crate) async fn vad_gate<F>(
 ) where
     F: Fn(VadEvent),
 {
+    let mut agc = crate::core::audio::Agc::new();
     let mut was_speaking = false;
     // Speech has been forwarded and no sentinel has closed it yet.
     let mut open = false;
@@ -872,12 +1017,23 @@ pub(crate) async fn vad_gate<F>(
     let mut lead_in: std::collections::VecDeque<Vec<f32>> = Default::default();
     let mut lead_in_len = 0usize;
 
-    while let Some(chunk) = audio_rx.recv().await {
+    while let Some(mut chunk) = audio_rx.recv().await {
         if chunk.is_empty() {
             // Audio error/stop sentinel from the capture layer — flush and exit.
+            events(VadEvent::DeviceError);
             let _ = vad_tx.send(Vec::new()).await;
             return;
         }
+
+        // Measured before the gain: this is the only look anything gets at what
+        // the microphone actually delivered.
+        events(VadEvent::RawLevel(
+            (chunk.iter().map(|s| s * s).sum::<f32>() / chunk.len() as f32).sqrt(),
+        ));
+
+        // Before anything reads the audio, so speech detection, the meter and
+        // the decoder all work from the same lifted signal.
+        agc.apply(&mut chunk);
 
         // Computed before the VAD gate so the visualization stays responsive in
         // near-silence.

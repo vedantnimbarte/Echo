@@ -73,11 +73,7 @@ pub async fn retry_last(app: AppHandle) -> Result<Option<String>> {
 
     use crate::commands::recording::{Retained, MAX_RETAINED_SECONDS};
     let audio = match audio {
-        // Retained raw, so it gets the same lift the first decode did.
-        Some(Retained::Audio(mut a)) if !a.is_empty() => {
-            crate::core::vad::gate::normalize(&mut a);
-            a
-        }
+        Some(Retained::Audio(a)) if !a.is_empty() => a,
         // Worth saying plainly: the user just spoke for minutes, and "there's
         // no recent dictation" would read as Echo having missed all of it.
         Some(Retained::TooLong) => {
@@ -253,7 +249,17 @@ async fn retry_locally(
     let wav = crate::core::asr::wav::pcm_f32_to_wav(&audio, 16_000)?;
     let lang = whisper_cli::resolve_language(model, language);
     info!(model, "Retrying the last utterance locally");
-    whisper_cli::run_cli(&binary, &model_path, &wav, lang, decode, prompt.as_deref()).await
+    let audio_seconds = audio.len().div_ceil(16_000) as u32;
+    whisper_cli::run_cli(
+        &binary,
+        &model_path,
+        &wav,
+        lang,
+        decode,
+        prompt.as_deref(),
+        audio_seconds,
+    )
+    .await
 }
 
 /// What the retry can be pointed at: every registered provider, plus every

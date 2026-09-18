@@ -9,10 +9,12 @@ use crate::core::gpu::GpuBackend;
 use crate::error::{EchoError, Result};
 
 /// Pinned whisper.cpp release whose prebuilt CLI we download on first run.
-/// NOTE: v1.7.4/v1.7.5 published no binary assets (the download 404s); v1.7.6 is
-/// the nearest tag that ships `whisper-bin-x64.zip`. Keep in sync with
-/// `scripts/stage-runtime-deps.mjs`.
-const WHISPER_RELEASE_TAG: &str = "v1.7.6";
+///
+/// NOTE: not every tag publishes binaries — v1.7.4, v1.7.5, v1.9.3 and v1.9.4
+/// all ship none, and the download 404s. v1.9.2 is the newest tag that carries
+/// `whisper-bin-x64.zip`, so check the assets before bumping this. Keep in sync
+/// with `scripts/stage-runtime-deps.mjs`.
+const WHISPER_RELEASE_TAG: &str = "v1.9.2";
 
 /// The executable name whisper.cpp ships (renamed from `main` in v1.7.x).
 #[cfg(target_os = "windows")]
@@ -67,9 +69,9 @@ impl Pack {
     /// ```
     pub fn sha256(self) -> &'static str {
         match self {
-            Pack::Cpu => "0d2eca299c248f965bd0341bcb219db4b433c7f0c0ce2200d4df85765e8156a9",
-            Pack::Cuda11 => "d42f531781627f8cdceffc18fa03414ae90d1748a5c3f103ada64c991dd7f828",
-            Pack::Cuda12 => "3fc4d3ebd9a678313de50c04d9e59c43117ae190f0cb7bff602d4aeefc4efe3d",
+            Pack::Cpu => "49dcc16de826f20bd53d44f947a1ae49dfa81f86cad67a64d80820cb192d674a",
+            Pack::Cuda11 => "1776668730f5594a0b15f930225779e863dd8280397f9ee7c6e47ccf82bbb203",
+            Pack::Cuda12 => "443110ddaad70d4290ab2e77179e31cf712035bbc4fad56bb4519a90c917b39c",
         }
     }
 
@@ -92,13 +94,13 @@ impl Pack {
     /// Download size in megabytes, rounded.
     ///
     /// Worth showing before the click rather than after: the CUDA 12 build is
-    /// 443 MB compressed and roughly a gigabyte unpacked, which is not
+    /// 640 MB compressed and well over a gigabyte unpacked, which is not
     /// something to start silently on somebody's connection.
     pub fn download_mb(self) -> u32 {
         match self {
-            Pack::Cpu => 4,
-            Pack::Cuda11 => 45,
-            Pack::Cuda12 => 443,
+            Pack::Cpu => 8,
+            Pack::Cuda11 => 257,
+            Pack::Cuda12 => 640,
         }
     }
 
@@ -319,62 +321,15 @@ impl BinaryManager {
                 "https://github.com/ggml-org/whisper.cpp/releases/download/{WHISPER_RELEASE_TAG}/{}",
                 pack.asset()
             );
-            let tmp_zip = dest.join("whisper-pack.zip.part");
 
-            crate::core::egress::record(&url, "whisper binary download");
-
-            // Same stall timeout as every other download: without one a dead
-            // connection freezes the progress bar forever. See core::download.
-            let resp = crate::core::download::client()?
-                .get(&url)
-                .send()
-                .await
-                .map_err(|e| EchoError::AsrProvider(e.to_string()))?
-                .error_for_status()
-                .map_err(|e| EchoError::AsrProvider(e.to_string()))?;
-
-            let total = resp.content_length();
-            let mut downloaded: u64 = 0;
-            let mut last_emitted = -1.0_f32;
-
-            let mut file = tokio::fs::File::create(&tmp_zip)
-                .await
-                .map_err(|e| EchoError::Config(e.to_string()))?;
-            let mut stream = resp.bytes_stream();
-            // Same per-chunk stall timeout as every other download; a frozen
-            // connection must error rather than hang. See core::download.
-            while let Some(chunk) = crate::core::download::next_chunk(&mut stream).await? {
-                file.write_all(&chunk)
-                    .await
-                    .map_err(|e| EchoError::Config(e.to_string()))?;
-                downloaded += chunk.len() as u64;
-                if let Some(total) = total {
-                    // Reserve the last 2% for extraction.
-                    let p = (downloaded as f32 / total as f32 * 0.98).clamp(0.0, 0.98);
-                    if p - last_emitted >= 0.01 {
-                        last_emitted = p;
-                        let _ = progress_tx.send(p).await;
-                    }
-                }
-            }
-            file.flush()
-                .await
-                .map_err(|e| EchoError::Config(e.to_string()))?;
-            drop(file);
-
-            // Before extraction, because what comes out of this archive is an
-            // executable Echo shells out to. A truncated or substituted pack is
-            // refused and deleted here rather than being unzipped and run.
-            crate::core::download::verify(&tmp_zip, pack.sha256()).await?;
-
-            // Extract on the blocking pool — zip reads are synchronous.
-            let extract_dir = dest.clone();
-            let zip_path = tmp_zip.clone();
-            tokio::task::spawn_blocking(move || extract_zip_flat(&zip_path, &extract_dir))
-                .await
-                .map_err(|e| EchoError::Config(e.to_string()))??;
-
-            let _ = tokio::fs::remove_file(&tmp_zip).await;
+            download_zip_into(
+                &url,
+                pack.sha256(),
+                &dest,
+                "whisper binary download",
+                progress_tx.clone(),
+            )
+            .await?;
 
             // Older whisper.cpp archives ship the CLI as `main.exe`; normalise to
             // `whisper-cli.exe` so the provider always finds it.
@@ -399,6 +354,79 @@ impl BinaryManager {
             Ok(installed)
         }
     }
+}
+
+/// Download a zip, check it against `sha256`, and unpack it flat into `dest`.
+///
+/// Shared with the NeMo-Speech packs (see [`super::nemo`]): both are archives of
+/// executables Echo then runs, so both are verified *before* anything is
+/// unpacked, and both report progress the same way — the last 2% is reserved
+/// for extraction so the bar does not sit at 100% while the disk works.
+pub(crate) async fn download_zip_into(
+    url: &str,
+    sha256: &str,
+    dest: &Path,
+    egress_reason: &str,
+    progress_tx: mpsc::Sender<f32>,
+) -> Result<()> {
+    tokio::fs::create_dir_all(dest)
+        .await
+        .map_err(|e| EchoError::Config(e.to_string()))?;
+    let tmp_zip = dest.join("pack.zip.part");
+
+    crate::core::egress::record(url, egress_reason);
+
+    // Same stall timeout as every other download: without one a dead
+    // connection freezes the progress bar forever. See core::download.
+    let resp = crate::core::download::client()?
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| EchoError::AsrProvider(e.to_string()))?
+        .error_for_status()
+        .map_err(|e| EchoError::AsrProvider(e.to_string()))?;
+
+    let total = resp.content_length();
+    let mut downloaded: u64 = 0;
+    let mut last_emitted = -1.0_f32;
+
+    let mut file = tokio::fs::File::create(&tmp_zip)
+        .await
+        .map_err(|e| EchoError::Config(e.to_string()))?;
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = crate::core::download::next_chunk(&mut stream).await? {
+        file.write_all(&chunk)
+            .await
+            .map_err(|e| EchoError::Config(e.to_string()))?;
+        downloaded += chunk.len() as u64;
+        if let Some(total) = total {
+            let p = (downloaded as f32 / total as f32 * 0.98).clamp(0.0, 0.98);
+            if p - last_emitted >= 0.01 {
+                last_emitted = p;
+                let _ = progress_tx.send(p).await;
+            }
+        }
+    }
+    file.flush()
+        .await
+        .map_err(|e| EchoError::Config(e.to_string()))?;
+    drop(file);
+
+    // Before extraction, because what comes out of this archive is an
+    // executable Echo shells out to. A truncated or substituted pack is
+    // refused and deleted here rather than being unzipped and run.
+    crate::core::download::verify(&tmp_zip, sha256).await?;
+
+    // Extract on the blocking pool — zip reads are synchronous.
+    let extract_dir = dest.to_path_buf();
+    let zip_path = tmp_zip.clone();
+    tokio::task::spawn_blocking(move || extract_zip_flat(&zip_path, &extract_dir))
+        .await
+        .map_err(|e| EchoError::Config(e.to_string()))??;
+
+    let _ = tokio::fs::remove_file(&tmp_zip).await;
+    let _ = progress_tx.send(1.0).await;
+    Ok(())
 }
 
 /// Extract every file in `zip_path` into `dest`, flattening directory structure

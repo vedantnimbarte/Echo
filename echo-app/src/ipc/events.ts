@@ -53,6 +53,9 @@ export const echoEvents = {
   onWhisperBinaryProgress: (cb: (progress: number) => void) =>
     listen<number>("echo://whisper-binary-progress", (e) => cb(e.payload)),
 
+  onNemoEngineProgress: (cb: (progress: number) => void) =>
+    listen<number>("echo://nemo-engine-progress", (e) => cb(e.payload)),
+
   onHotkeyToggle: (cb: () => void) => listen("echo://hotkey-toggle", cb),
 
   // Hold-to-talk: these bracket one utterance, rather than toggling.

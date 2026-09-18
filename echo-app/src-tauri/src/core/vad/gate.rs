@@ -13,60 +13,28 @@
 //! anyway, and it protects cloud providers too, where a skipped call is also a
 //! saved round-trip and a saved API charge.
 
+// Every threshold here is calibrated against audio that has already been
+// through [`crate::core::audio::Agc`], which is what the capture path
+// guarantees: speech lands near 0.05 RMS whatever the microphone, and a boosted
+// room floor stays an order of magnitude below it.
+
 /// Below this peak RMS the buffer is silence: a muted mic, a hotkey pressed and
 /// released, a wake word that fired on nothing.
-const SILENCE_RMS: f32 = 0.002;
+const SILENCE_RMS: f32 = 0.004;
 
 /// A 30 ms window counts as speech only if it clears both of these. Requiring
 /// peak *and* RMS rejects steady low-level noise (fan, mains hum) that can
 /// carry a respectable RMS without any of the transients speech always has.
-const WINDOW_RMS: f32 = 0.003;
-const WINDOW_PEAK: f32 = 0.02;
+const WINDOW_RMS: f32 = 0.01;
+const WINDOW_PEAK: f32 = 0.05;
 
 /// A buffer this loud is speech regardless of the window count — it protects a
 /// short, sharp utterance ("yes", "stop") from being gated out.
-const STRONG_RMS: f32 = 0.006;
+const STRONG_RMS: f32 = 0.02;
 
 /// 30 ms at 16 kHz. Long enough to contain a syllable's energy, short enough
 /// that a one-word utterance still produces several windows.
 const WINDOW_SAMPLES: usize = 480;
-
-/// Loudest-window RMS [`normalize`] lifts an utterance toward: ordinary
-/// conversational speech into a well-set microphone.
-const TARGET_WINDOW_RMS: f32 = 0.1;
-
-/// Most [`normalize`] will amplify (20 dB). Enough to bring soft speech into a
-/// quiet onboard input up to a normal level; not so much that a room's noise
-/// floor is lifted past [`speech_gate`] and handed to whisper to hallucinate on.
-///
-/// ponytail: one fixed ceiling for every microphone. A per-device calibration
-/// is the upgrade if a very quiet input still needs more.
-const MAX_GAIN: f32 = 10.0;
-
-/// Bring a finished utterance up to a level the gate and the decoder expect.
-///
-/// Soft speech into a line-level or unamplified input arrives 30-40 dB below
-/// full scale, where it fails the gate's thresholds outright and whisper's
-/// accuracy drops even when it does not. Browser-based dictation gets this for
-/// free from WebRTC's automatic gain control; Echo captures raw.
-///
-/// Gain is set from the loudest 30 ms window rather than the single loudest
-/// sample, so one key click cannot pin it at unity. Only ever amplifies.
-pub fn normalize(samples: &mut [f32]) {
-    let loudest = samples
-        .chunks(WINDOW_SAMPLES)
-        .map(|w| (w.iter().map(|v| v * v).sum::<f32>() / w.len() as f32).sqrt())
-        .fold(0.0_f32, f32::max);
-    if loudest <= 0.0 {
-        return;
-    }
-    let gain = (TARGET_WINDOW_RMS / loudest).clamp(1.0, MAX_GAIN);
-    if gain > 1.0 {
-        for s in samples.iter_mut() {
-            *s = (*s * gain).clamp(-1.0, 1.0);
-        }
-    }
-}
 
 /// Why an utterance was, or was not, sent to the decoder.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -152,7 +120,7 @@ mod tests {
     #[test]
     fn room_tone_below_the_floor_is_gated_out() {
         // Audible to a meter, nothing like speech.
-        assert_eq!(speech_gate(&tone(0.0005)), GateDecision::Silence);
+        assert_eq!(speech_gate(&tone(0.002)), GateDecision::Silence);
     }
 
     #[test]
@@ -161,24 +129,28 @@ mod tests {
         assert_eq!(speech_gate(&tone(0.3)[..1_440]), GateDecision::Speech);
     }
 
+    /// Soft speech reaches this gate already lifted by the capture AGC, so what
+    /// it has to accept is AGC-level speech and reject an AGC-level noise floor.
     #[test]
-    fn soft_speech_is_lifted_past_the_gate() {
-        // Roughly what a soft voice into a rear Line In jack measured.
-        let mut soft = tone(0.004);
-        assert_ne!(speech_gate(&soft), GateDecision::Speech);
-        normalize(&mut soft);
+    fn agc_lifted_speech_passes_and_a_lifted_noise_floor_does_not() {
+        use crate::core::audio::Agc;
+
+        let mut soft = tone(0.014); // a soft voice into a rear Line In jack
+        let mut agc = Agc::new();
+        for chunk in soft.chunks_mut(160) {
+            agc.apply(chunk);
+        }
         assert_eq!(speech_gate(&soft), GateDecision::Speech);
-    }
 
-    #[test]
-    fn normalize_leaves_the_noise_floor_gated_and_loud_audio_alone() {
-        let mut hiss = tone(0.0002);
-        normalize(&mut hiss);
-        assert!(!speech_gate(&hiss).should_transcribe());
-
-        let mut loud = tone(0.5);
-        normalize(&mut loud);
-        assert_eq!(loud, tone(0.5));
+        let mut hiss = tone(0.0005);
+        let mut agc = Agc::new();
+        for chunk in hiss.chunks_mut(160) {
+            agc.apply(chunk);
+        }
+        assert!(
+            !speech_gate(&hiss).should_transcribe(),
+            "a boosted noise floor must not reach whisper"
+        );
     }
 
     #[test]

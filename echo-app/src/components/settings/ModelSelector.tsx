@@ -17,8 +17,10 @@ import { echoEvents } from "../../ipc/events";
  * to the biggest model in the catalog, and the header totals it. The same bar
  * fills as a model downloads — it is the same quantity arriving.
  *
- * Model choice is stored separately from the provider: choosing one sets
- * `whisper_model` and switches the active provider to `local`.
+ * Model choice is stored separately from the provider: choosing one sets the
+ * model setting for its engine and switches the active provider to match —
+ * `local` for whisper models, `nemo` for the NVIDIA transducer, which also
+ * needs its own engine binary installed before it can be picked.
  */
 
 /** The largest model in the catalog sets the scale every bar is drawn against. */
@@ -44,6 +46,16 @@ export function ModelSelector() {
     queryKey: ["setting", "whisper_model"],
     queryFn: () => commands.getSetting("whisper_model"),
   });
+  const { data: nemoModel } = useQuery({
+    queryKey: ["setting", "nemo_model"],
+    queryFn: () => commands.getSetting("nemo_model"),
+  });
+  const { data: nemo } = useQuery({
+    queryKey: ["nemo-status"],
+    queryFn: commands.nemoStatus,
+  });
+  // Fraction of the NeMo engine binary that has arrived, while it is arriving.
+  const [enginePct, setEnginePct] = useState<number | null>(null);
 
   // Map of model name → download progress (0..1). Present only while downloading.
   const [progress, setProgress] = useState<Record<string, number>>({});
@@ -55,6 +67,7 @@ export function ModelSelector() {
       echoEvents.onModelDownloadProgress((name, p) =>
         setProgress((prev) => ({ ...prev, [name]: p }))
       ),
+      echoEvents.onNemoEngineProgress((p) => setEnginePct(p)),
       echoEvents.onModelDownloadComplete((name) => {
         setProgress((prev) => {
           const next = { ...prev };
@@ -91,17 +104,34 @@ export function ModelSelector() {
   }
 
   async function select(name: string) {
+    const engine = models.find((m) => m.name === name)?.engine ?? "whisper";
+    // The transducer runs in its own binary, and selecting a model Echo cannot
+    // load would leave a dead engine selected. Fetch it first, on the click
+    // that needs it, rather than shipping 100 MB nobody asked for.
+    if (engine === "nemo" && !nemo?.engine_installed) {
+      setEnginePct(0);
+      try {
+        await commands.downloadNemoEngine();
+      } finally {
+        setEnginePct(null);
+        queryClient.invalidateQueries({ queryKey: ["nemo-status"] });
+      }
+    }
     await commands.setWhisperModel(name);
-    await commands.setAsrProvider("local");
+    await commands.setAsrProvider(engine === "nemo" ? "nemo" : "local");
     queryClient.invalidateQueries({ queryKey: ["setting", "whisper_model"] });
+    queryClient.invalidateQueries({ queryKey: ["setting", "nemo_model"] });
     queryClient.invalidateQueries({ queryKey: ["setting", "asr_provider"] });
     queryClient.invalidateQueries({ queryKey: ["whisper-ready"] });
+    queryClient.invalidateQueries({ queryKey: ["nemo-status"] });
     // The pill reports the engine too, and it is a separate webview.
     void echoEvents.emitEngineChanged();
   }
 
-  // Default to base.en in the highlight when nothing is explicitly chosen yet.
-  const effectiveModel = activeModel || "base.en";
+  // Which model the highlight belongs to depends on which engine is active:
+  // the two remember their own choice, so switching back restores it.
+  const effectiveModel =
+    activeProvider === "nemo" ? nemoModel || "nemotron-streaming-0.6b" : activeModel || "base.en";
   const downloaded = models.filter((m) => m.downloaded);
   const usedMb = downloaded.reduce((sum, m) => sum + m.size_mb, 0);
   const scale = largestSize(models);
@@ -115,12 +145,14 @@ export function ModelSelector() {
     { label: "All languages", models: models.filter((m) => !m.english_only) },
   ].filter((f) => f.models.length > 0);
 
+  const installingEngine = enginePct !== null;
+
   function card(m: ModelInfo) {
     const downloading = m.name in progress;
     const isActive = effectiveModel === m.name;
     // The model in use can't be removed: doing so would break transcription
     // with nothing on screen explaining why.
-    const inUse = isActive && activeProvider === "local";
+    const inUse = isActive && activeProvider === (m.engine === "nemo" ? "nemo" : "local");
     const pendingRemoval = confirming === m.name;
     const removing = deleteMutation.isPending && deleteMutation.variables === m.name;
     // The bar means disk: how much this model costs once it is here, or how
@@ -172,6 +204,13 @@ export function ModelSelector() {
               <span className="tabular text-[12.5px] text-[var(--ink-faint)]">
                 {formatSize(m.size_mb)}
                 {m.downloaded && " on disk"}
+                {/* The transducer is a different engine, not a bigger whisper:
+                    worth saying on the card, because it punctuates itself and
+                    needs its own binary. */}
+                {m.engine === "nemo" &&
+                  (nemo?.engine_installed
+                    ? " · NVIDIA engine"
+                    : ` · NVIDIA engine, +${nemo?.engine_mb ?? 0} MB`)}
               </span>
             </span>
 
@@ -196,6 +235,11 @@ export function ModelSelector() {
                     // A state, not a control: the card is already lit, and a
                     // button you cannot press is just something else to read.
                     <Check className="h-3.5 w-3.5 text-[var(--ink)]" aria-label="In use" />
+                  ) : installingEngine && m.engine === "nemo" ? (
+                    <span className="flex items-center gap-1.5 text-[13px] text-[var(--ink-muted)]">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span className="tabular">{Math.round((enginePct ?? 0) * 100)}%</span>
+                    </span>
                   ) : (
                     <button
                       onClick={() => select(m.name)}

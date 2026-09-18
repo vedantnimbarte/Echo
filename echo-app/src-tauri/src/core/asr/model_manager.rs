@@ -5,7 +5,17 @@ use tokio::sync::mpsc;
 
 use crate::error::{EchoError, Result};
 
-/// Catalog of downloadable Whisper models (ggml format, from Hugging Face).
+/// Which local engine runs a model. The file name on disk follows from it, and
+/// so does which provider can load it: a GGUF transducer means nothing to
+/// whisper.cpp and a ggml whisper model means nothing to NeMo-Speech.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Engine {
+    Whisper,
+    Nemo,
+}
+
+/// Catalog of downloadable local models (from Hugging Face).
 /// `size_mb` is approximate and used only for display in the UI.
 ///
 /// `sha256` is checked before a download is accepted — see
@@ -18,6 +28,18 @@ use crate::error::{EchoError, Result};
 /// curl -sIL <url> | grep -i x-linked-etag
 /// ```
 const MODEL_CATALOG: &[ModelSpec] = &[
+    // NVIDIA Nemotron, run by NeMo-Speech.cpp rather than whisper.cpp. A
+    // transducer: it punctuates and capitalises natively, decodes only the
+    // audio it is given rather than whisper's padded 30 s window, and has no
+    // temperature-fallback loop to hallucinate a sentence out of silence.
+    ModelSpec {
+        name: "nemotron-streaming-0.6b",
+        sha256: "3fc991d3badad7277c11030a7519832cddaf2057aafed6d4b25147e953a070b1",
+        url: "https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b/resolve/main/nemotron-3.5-asr-streaming-0.6b.q8_0.gguf",
+        size_mb: 708,
+        english_only: false,
+        engine: Engine::Nemo,
+    },
     // English-only models — smaller and more accurate for English speech.
     ModelSpec {
         name: "tiny.en",
@@ -25,6 +47,7 @@ const MODEL_CATALOG: &[ModelSpec] = &[
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin",
         size_mb: 75,
         english_only: true,
+        engine: Engine::Whisper,
     },
     ModelSpec {
         name: "base.en",
@@ -32,6 +55,7 @@ const MODEL_CATALOG: &[ModelSpec] = &[
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin",
         size_mb: 142,
         english_only: true,
+        engine: Engine::Whisper,
     },
     ModelSpec {
         name: "small.en",
@@ -39,6 +63,7 @@ const MODEL_CATALOG: &[ModelSpec] = &[
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en.bin",
         size_mb: 466,
         english_only: true,
+        engine: Engine::Whisper,
     },
     // Multilingual models.
     ModelSpec {
@@ -47,6 +72,7 @@ const MODEL_CATALOG: &[ModelSpec] = &[
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
         size_mb: 75,
         english_only: false,
+        engine: Engine::Whisper,
     },
     ModelSpec {
         name: "base",
@@ -54,6 +80,7 @@ const MODEL_CATALOG: &[ModelSpec] = &[
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
         size_mb: 142,
         english_only: false,
+        engine: Engine::Whisper,
     },
     ModelSpec {
         name: "small",
@@ -61,6 +88,7 @@ const MODEL_CATALOG: &[ModelSpec] = &[
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
         size_mb: 466,
         english_only: false,
+        engine: Engine::Whisper,
     },
     ModelSpec {
         name: "medium",
@@ -68,11 +96,16 @@ const MODEL_CATALOG: &[ModelSpec] = &[
         url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
         size_mb: 1500,
         english_only: false,
+        engine: Engine::Whisper,
     },
 ];
 
 /// The model fetched on first run and used by default.
 pub const DEFAULT_MODEL: &str = "base.en";
+
+/// The model the NeMo engine runs. One entry today, so this is also the only
+/// value `nemo_model` ever holds unless the catalog grows.
+pub const DEFAULT_NEMO_MODEL: &str = "nemotron-streaming-0.6b";
 
 struct ModelSpec {
     name: &'static str,
@@ -81,6 +114,18 @@ struct ModelSpec {
     sha256: &'static str,
     size_mb: u32,
     english_only: bool,
+    engine: Engine,
+}
+
+impl ModelSpec {
+    /// File name on disk. whisper models keep the `ggml-<name>.bin` shape they
+    /// have always had, so nothing already downloaded has to move.
+    fn file_name(&self) -> String {
+        match self.engine {
+            Engine::Whisper => format!("ggml-{}.bin", self.name),
+            Engine::Nemo => format!("{}.gguf", self.name),
+        }
+    }
 }
 
 /// Information about a model returned to the frontend.
@@ -90,6 +135,9 @@ pub struct ModelInfo {
     pub downloaded: bool,
     pub size_mb: u32,
     pub english_only: bool,
+    /// Which local engine runs it, so the UI can say what a model needs
+    /// installed before it can be selected.
+    pub engine: Engine,
 }
 
 /// Manages local Whisper model files: listing, download, and path resolution.
@@ -103,7 +151,19 @@ impl ModelManager {
     }
 
     pub fn model_path(&self, name: &str) -> PathBuf {
-        self.models_dir.join(format!("ggml-{name}.bin"))
+        // An unknown name is assumed to be a whisper model: that is what every
+        // stored setting from before the catalog gained a second engine is.
+        let file = Self::spec(name)
+            .map(|s| s.file_name())
+            .unwrap_or_else(|_| format!("ggml-{name}.bin"));
+        self.models_dir.join(file)
+    }
+
+    /// Which engine loads `name`.
+    pub fn engine_of(name: &str) -> Engine {
+        Self::spec(name)
+            .map(|s| s.engine)
+            .unwrap_or(Engine::Whisper)
     }
 
     pub fn is_downloaded(&self, name: &str) -> bool {
@@ -130,6 +190,10 @@ impl ModelManager {
                 m.downloaded
                     && m.size_mb < target.size_mb
                     && m.name.ends_with(".en") == english_only
+                    // Partials are decoded by the whisper provider itself, so a
+                    // model another engine owns is not a candidate however
+                    // small it is.
+                    && m.engine == Engine::Whisper
             })
             .min_by_key(|m| m.size_mb)
     }
@@ -142,6 +206,7 @@ impl ModelManager {
                 downloaded: self.is_downloaded(m.name),
                 size_mb: m.size_mb,
                 english_only: m.english_only,
+                engine: m.engine,
             })
             .collect()
     }

@@ -6,9 +6,10 @@ use tokio::sync::RwLock;
 
 use crate::core::{
     asr::binary_manager::BinaryManager, asr::manager::AsrManager, asr::model_manager::ModelManager,
-    asr::whisper_server::WhisperServer, audio::AudioService, dictionary::DictionaryEngine,
-    injection::TextInjector, modtap::ModTapWatcher, plugins::loader::PluginLoader,
-    telemetry::TelemetryService, vad::SileroModel, wake::WakeModelManager,
+    asr::nemo::NemoBinaries, asr::nemo_server::NemoServer, asr::whisper_server::WhisperServer,
+    audio::AudioService, dictionary::DictionaryEngine, injection::TextInjector,
+    modtap::ModTapWatcher, plugins::loader::PluginLoader, telemetry::TelemetryService,
+    vad::SileroModel, wake::WakeModelManager,
 };
 
 /// Shared application state — stored in Tauri's managed state.
@@ -25,6 +26,9 @@ pub struct AppState {
     /// The resident whisper.cpp model. Shared so switching models or
     /// engines reuses the same supervised process rather than leaking one.
     pub whisper_server: Arc<WhisperServer>,
+    /// The NeMo-Speech engine: its binaries, and the resident model process.
+    pub nemo_binaries: Arc<NemoBinaries>,
+    pub nemo_server: Arc<NemoServer>,
     /// Loaded Silero VAD model, shared read-only across recording sessions.
     /// `None` if the ONNX model failed to load (falls back to energy VAD).
     pub silero: Option<Arc<SileroModel>>,

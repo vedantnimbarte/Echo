@@ -25,8 +25,9 @@ import os from "node:os";
 const ROOT = path.resolve(import.meta.dirname, "..");
 const BIN_DIR = path.join(ROOT, "src-tauri", "resources", "bin");
 
-// v1.7.4/v1.7.5 shipped no binary assets; v1.7.6 is the nearest tag that does.
-const WHISPER_TAG = "v1.7.6";
+// Not every tag ships binary assets: v1.7.4, v1.7.5, v1.9.3 and v1.9.4 have
+// none. v1.9.2 is the newest that does — check before bumping.
+const WHISPER_TAG = "v1.9.2";
 const WHISPER_WIN_ASSET = "whisper-bin-x64.zip";
 
 async function download(url, dest) {

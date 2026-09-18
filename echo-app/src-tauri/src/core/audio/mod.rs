@@ -60,7 +60,12 @@ enum Mode {
 enum Cmd {
     /// A newly opened device's buffers arrive here.
     Attach(mpsc::Receiver<Vec<f32>>),
+    /// Collect pre-roll, but never interrupt a recording in progress.
     Warm,
+    /// End the recording and collect pre-roll. Unlike [`Cmd::Warm`] this
+    /// *does* apply while active: it is how a finished dictation releases the
+    /// channel the ASR stage is reading.
+    EndCapture,
     Start(mpsc::Sender<Vec<f32>>),
     Stop,
 }
@@ -130,17 +135,25 @@ impl AudioService {
     /// device just has its warm window renewed. Failure is deliberately not an
     /// error the caller has to handle: warming is an optimisation, and a
     /// machine that cannot warm can still record.
-    pub fn warm(&self, device_name: Option<&str>) {
+    pub fn warm(self: &Arc<Self>, device_name: Option<&str>) {
+        self.warm_with(device_name, Cmd::Warm)
+    }
+
+    fn warm_with(self: &Arc<Self>, device_name: Option<&str>, cmd: Cmd) {
         if let Err(e) = self.ensure_stream(device_name) {
             warn!("Could not warm the microphone: {e}");
             return;
         }
-        let _ = self.cmd_tx.send(Cmd::Warm);
+        let _ = self.cmd_tx.send(cmd);
 
         // Release the device if the recording we warmed for never arrives.
         let generation = self.warm_generation.fetch_add(1, Ordering::SeqCst) + 1;
-        let tx = self.cmd_tx.clone();
         let gen_handle = self.warm_generation.clone();
+        // The service itself, because stopping the *router* is not releasing
+        // the *device*: the capture stream has to be dropped, or the OS goes on
+        // showing the microphone as in use for as long as Echo is open — while
+        // this very task logs that it was released.
+        let service = self.clone();
         // Same reasoning as in `new`: `warm` is reachable from a synchronous
         // Tauri command, which does not run inside a Tokio runtime either.
         tauri::async_runtime::spawn(async move {
@@ -150,7 +163,8 @@ impl AudioService {
                 return;
             }
             info!("Warm microphone expired; releasing the device");
-            let _ = tx.send(Cmd::Stop);
+            let _ = service.cmd_tx.send(Cmd::Stop);
+            service.close_stream();
         });
     }
 
@@ -186,8 +200,8 @@ impl AudioService {
     /// This is the common case after a dictation: people dictate in bursts, and
     /// paying the device-open cost between every sentence is the difference
     /// between Echo feeling instant and feeling sluggish.
-    pub fn stop_capture_warm(&self, device_name: Option<&str>) {
-        self.warm(device_name);
+    pub fn stop_capture_warm(self: &Arc<Self>, device_name: Option<&str>) {
+        self.warm_with(device_name, Cmd::EndCapture);
     }
 
     /// Ensure a healthy stream is open on `device_name`, reopening if the
@@ -327,6 +341,13 @@ async fn route(mut cmd_rx: mpsc::UnboundedReceiver<Cmd>) {
                         mode = Mode::Warm(VecDeque::with_capacity(PRE_ROLL_SAMPLES));
                     }
                 }
+                // Dropping the `Active` sender here is the point: it closes the
+                // channel the ASR stage reads, which is what tells it the
+                // utterance is over. Leaving the recording open until the warm
+                // window expired delayed every transcript by `WARM_TIMEOUT`.
+                Some(Cmd::EndCapture) => {
+                    mode = Mode::Warm(VecDeque::with_capacity(PRE_ROLL_SAMPLES))
+                }
                 Some(Cmd::Start(tx)) => {
                     // Hand over the pre-roll first so the utterance includes
                     // the moment before the key press.
@@ -356,12 +377,18 @@ async fn route(mut cmd_rx: mpsc::UnboundedReceiver<Cmd>) {
                             push_pre_roll(ring, &chunk);
                         }
                     }
-                    Mode::Active(tx) => {
-                        if tx.try_send(chunk).is_err() {
-                            // Receiver gone: the recording ended without a Stop.
-                            mode = Mode::Idle;
+                    Mode::Active(tx) => match tx.try_send(chunk) {
+                        Ok(()) => {}
+                        // Backlog, not an ending: the ASR stage blocks while it
+                        // decodes, and a slow decode used to look exactly like
+                        // a finished recording — capture stopped mid-sentence
+                        // and the user went on talking into nothing.
+                        Err(mpsc::error::TrySendError::Full(_)) => {
+                            warn!("Audio backlog: dropped a chunk while the decoder caught up")
                         }
-                    }
+                        // Receiver gone: the recording ended without a Stop.
+                        Err(mpsc::error::TrySendError::Closed(_)) => mode = Mode::Idle,
+                    },
                 }
             }
         }
@@ -380,6 +407,71 @@ fn push_pre_roll(ring: &mut VecDeque<f32>, chunk: &[f32]) {
     let overflow = (ring.len() + chunk.len()).saturating_sub(PRE_ROLL_SAMPLES);
     ring.drain(..overflow);
     ring.extend(chunk);
+}
+
+/// Chunk RMS the gain control aims for: ordinary speech into a well-set
+/// microphone.
+const AGC_TARGET_RMS: f32 = 0.05;
+
+/// Most the gain control will amplify (20 dB). Enough to bring a line-level or
+/// unamplified input up to a normal level, and low enough that a room's noise
+/// floor stays well under what [`crate::core::vad::gate`] calls speech.
+///
+/// ponytail: one fixed ceiling for every microphone. Per-device calibration is
+/// the upgrade if a very quiet input still needs more.
+const AGC_MAX_GAIN: f32 = 10.0;
+
+/// How fast the level estimate follows audio louder than it (per chunk).
+const AGC_ATTACK: f32 = 0.5;
+/// …and quieter than it. Slower, so the gain does not pump between syllables,
+/// but quick enough to be settled by the time the pre-roll gives way to speech.
+const AGC_RELEASE: f32 = 0.05;
+
+/// Automatic gain control over captured audio.
+///
+/// Speech into a quiet input arrives 30-40 dB below full scale, where the
+/// meter looks dead, the neural VAD is working near its limits, and whisper
+/// loses accuracy. Browser-based dictation gets this for free from WebRTC's
+/// AGC; Echo captures raw, so it does its own — once, in the capture path, so
+/// the meter, speech detection and the decoder all see the same lifted audio.
+///
+/// Only ever amplifies: audio already at a healthy level passes through
+/// untouched.
+pub(crate) struct Agc {
+    /// Running estimate of the input's level, in RMS.
+    envelope: f32,
+}
+
+impl Agc {
+    pub(crate) fn new() -> Self {
+        // Start at unity. The first chunks of pre-roll settle it before the
+        // speaker reaches a word.
+        Self {
+            envelope: AGC_TARGET_RMS,
+        }
+    }
+
+    /// Amplify one chunk in place and return the gain applied.
+    pub(crate) fn apply(&mut self, samples: &mut [f32]) -> f32 {
+        if samples.is_empty() {
+            return 1.0;
+        }
+        let rms = (samples.iter().map(|s| s * s).sum::<f32>() / samples.len() as f32).sqrt();
+        let k = if rms > self.envelope {
+            AGC_ATTACK
+        } else {
+            AGC_RELEASE
+        };
+        self.envelope += (rms - self.envelope) * k;
+
+        let gain = (AGC_TARGET_RMS / self.envelope.max(f32::EPSILON)).clamp(1.0, AGC_MAX_GAIN);
+        if gain > 1.0 {
+            for s in samples.iter_mut() {
+                *s = (*s * gain).clamp(-1.0, 1.0);
+            }
+        }
+        gain
+    }
 }
 
 /// A channel this far (20 dB) below the loudest one in a buffer is treated as
@@ -523,6 +615,32 @@ mod tests {
         push_pre_roll(&mut ring, &huge);
         assert_eq!(ring.len(), PRE_ROLL_SAMPLES);
         assert_eq!(*ring.back().unwrap(), (PRE_ROLL_SAMPLES * 3 - 1) as f32);
+    }
+
+    /// Ending a recording has to close the channel the ASR stage reads. While
+    /// `Cmd::Warm` was used for this it was ignored as long as a recording was
+    /// active, so every transcript waited out the whole warm window.
+    #[tokio::test]
+    async fn ending_capture_closes_the_recording_channel_at_once() {
+        let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
+        tokio::spawn(route(cmd_rx));
+
+        let (raw_tx, raw_rx) = mpsc::channel::<Vec<f32>>(8);
+        cmd_tx.send(Cmd::Attach(raw_rx)).unwrap();
+        let (rec_tx, mut rec_rx) = mpsc::channel::<Vec<f32>>(8);
+        cmd_tx.send(Cmd::Start(rec_tx)).unwrap();
+
+        raw_tx.send(vec![0.5; 160]).await.unwrap();
+        assert_eq!(rec_rx.recv().await, Some(vec![0.5; 160]));
+
+        cmd_tx.send(Cmd::EndCapture).unwrap();
+        // Keep the device delivering: only the recording ends, not capture.
+        raw_tx.send(vec![0.5; 160]).await.unwrap();
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(5), rec_rx.recv()).await,
+            Ok(None),
+            "the recording channel must close when capture ends"
+        );
     }
 
     #[test]
