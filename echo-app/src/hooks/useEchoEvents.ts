@@ -29,6 +29,7 @@ export function useEchoEvents({ controlHotkey = false }: Options = {}) {
   }, [setMode]);
 
   useEffect(() => {
+    const report = (e: unknown) => setError(String(e));
     const unlisten = Promise.all([
       echoEvents.onRecordingStarted(() => {
         setRecording(true);
@@ -64,18 +65,23 @@ export function useEchoEvents({ controlHotkey = false }: Options = {}) {
       echoEvents.onHotkeyToggle(() => {
         if (!controlHotkey) return;
         const { isRecording } = useRecordingStore.getState();
-        if (isRecording) void commands.stopRecording();
-        else void commands.startRecording();
+        // Failures here were dropped on the floor: a microphone that will not
+        // open left the hotkey doing nothing, silently, for the rest of the
+        // session. The pill's own button has always reported this.
+        if (isRecording) void commands.stopRecording().catch(report);
+        else void commands.startRecording().catch(report);
       }),
       // Hold-to-talk. Guarded on the current state either way: the key can be
       // released after a stop has already happened some other way.
       echoEvents.onHotkeyPress(() => {
         if (!controlHotkey) return;
-        if (!useRecordingStore.getState().isRecording) void commands.startRecording();
+        if (!useRecordingStore.getState().isRecording)
+          void commands.startRecording().catch(report);
       }),
       echoEvents.onHotkeyRelease(() => {
         if (!controlHotkey) return;
-        if (useRecordingStore.getState().isRecording) void commands.stopRecording();
+        if (useRecordingStore.getState().isRecording)
+          void commands.stopRecording().catch(report);
       }),
     ]);
 

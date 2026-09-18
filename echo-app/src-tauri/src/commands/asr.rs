@@ -236,11 +236,6 @@ pub async fn set_asr_provider(state: State<'_, AppState>, name: String) -> Resul
         crate::storage::repositories::set_setting(&conn, "asr_provider", &name)?;
     }
 
-    // "none" disables transcription; leave the manager's active provider as-is.
-    if name == "none" {
-        return Ok(());
-    }
-
     if name == "local" {
         register_local_provider(state.inner()).await?;
     }
@@ -253,7 +248,11 @@ pub async fn set_asr_provider(state: State<'_, AppState>, name: String) -> Resul
     match name.as_str() {
         "local" => state.nemo_server.shutdown().await,
         "nemo" => state.whisper_server.shutdown().await,
-        _ => {}
+        // Transcription off: neither engine should keep holding a model.
+        _ => {
+            state.whisper_server.shutdown().await;
+            state.nemo_server.shutdown().await;
+        }
     }
 
     state.asr.set_active(&name).await

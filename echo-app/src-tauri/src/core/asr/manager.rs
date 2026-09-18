@@ -14,6 +14,9 @@ pub struct AsrManager {
     on_fallback: RwLock<Option<FallbackNotify>>,
 }
 
+/// The `asr_provider` value that means "do not transcribe at all".
+pub const NONE: &str = "none";
+
 impl AsrManager {
     pub fn new(default_provider: String) -> Self {
         Self {
@@ -48,6 +51,15 @@ impl AsrManager {
     }
 
     pub async fn set_active(&self, name: &str) -> Result<()> {
+        // "Transcription off" is a real choice, not a provider: it has nothing
+        // registered and must still be settable. Refusing it here left the
+        // manager pointed at the *previous* engine, so a user who turned
+        // transcription off went on having their audio transcribed — and, on a
+        // cloud engine, uploaded.
+        if name == NONE {
+            *self.active_provider.write().await = name.to_string();
+            return Ok(());
+        }
         let providers = self.providers.read().await;
         if !providers.contains_key(name) {
             return Err(EchoError::NotFound(format!(
@@ -155,6 +167,11 @@ impl AsrManager {
     /// engine may have finished downloading since the last utterance.
     async fn active(&self) -> Result<Arc<dyn AsrProvider>> {
         let name = self.active_provider.read().await.clone();
+        if name == NONE {
+            return Err(EchoError::Config(
+                "Transcription is turned off. Pick an engine in Settings.".into(),
+            ));
+        }
         let providers = self.providers.read().await;
         let provider = providers
             .get(&name)
@@ -167,5 +184,56 @@ impl AsrManager {
         Ok(super::fallback::FallbackProvider::wrap(
             provider, local, notify,
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::asr::TranscriptSegment;
+    use async_trait::async_trait;
+
+    struct Stub;
+
+    #[async_trait]
+    impl AsrProvider for Stub {
+        fn name(&self) -> &str {
+            "stub"
+        }
+        async fn transcribe(&self, _: Vec<f32>, _: Option<&str>) -> Result<TranscriptSegment> {
+            Ok(TranscriptSegment {
+                text: "heard you".into(),
+                is_final: true,
+                language: None,
+                confidence: None,
+            })
+        }
+    }
+
+    /// "Transcription off" has to reach the manager. Refusing it left the
+    /// active provider pointed at the previous engine, so audio went on being
+    /// transcribed — and on a cloud engine, uploaded — by an app whose screen
+    /// said it was recording nothing.
+    #[tokio::test]
+    async fn turning_transcription_off_stops_transcribing() {
+        let manager = AsrManager::new("stub".into());
+        manager.register(Arc::new(Stub)).await;
+        assert!(manager.transcribe(vec![0.1; 16], None).await.is_ok());
+
+        manager.set_active(NONE).await.expect("'none' is settable");
+        assert_eq!(manager.active_provider_name().await, NONE);
+
+        let err = manager
+            .transcribe(vec![0.1; 16], None)
+            .await
+            .expect_err("nothing may be transcribed while it is off");
+        assert!(format!("{err}").contains("turned off"), "{err}");
+    }
+
+    /// An engine that was never registered is still an error, not silence.
+    #[tokio::test]
+    async fn an_unregistered_engine_cannot_be_made_active() {
+        let manager = AsrManager::new("stub".into());
+        assert!(manager.set_active("nemo").await.is_err());
     }
 }

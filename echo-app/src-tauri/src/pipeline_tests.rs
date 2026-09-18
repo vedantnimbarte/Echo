@@ -156,9 +156,10 @@ async fn run_vad_gate(
         end_on_pause,
         move |e| {
             let label = match e {
-                VadEvent::Level(_) => "level",
+                VadEvent::Level(_) | VadEvent::RawLevel(_) => "level",
                 VadEvent::SpeechStarted => "started",
                 VadEvent::SpeechEnded => "ended",
+                VadEvent::DeviceError => "device-error",
             };
             // Levels fire per chunk and would drown the assertions.
             if label != "level" {
@@ -309,6 +310,68 @@ async fn vad_gate_flushes_a_trailing_utterance_when_capture_stops() {
         downstream.last().is_some_and(|c| c.is_empty()),
         "closing capture must flush a sentinel so the buffered audio is transcribed"
     );
+}
+
+/// Fails the first utterance, then works. Standing in for a model still
+/// loading, a network blip, or a cloud provider rate-limiting one request.
+struct FlakyAsr {
+    calls: Mutex<usize>,
+}
+
+#[async_trait]
+impl AsrProvider for FlakyAsr {
+    fn name(&self) -> &str {
+        "flaky"
+    }
+
+    async fn transcribe(&self, _: Vec<f32>, _: Option<&str>) -> Result<TranscriptSegment> {
+        let mut calls = self.calls.lock().unwrap();
+        *calls += 1;
+        if *calls == 1 {
+            return Err(crate::error::EchoError::AsrProvider(
+                "first one failed".into(),
+            ));
+        }
+        Ok(TranscriptSegment {
+            text: "second one worked".into(),
+            is_final: true,
+            language: None,
+            confidence: None,
+        })
+    }
+}
+
+/// One failed utterance used to end the whole stream, so in voice-activated
+/// mode every sentence after a single blip was lost without a word on screen.
+#[tokio::test]
+async fn a_failed_utterance_does_not_end_the_session() {
+    use crate::core::asr::default_transcribe_stream;
+
+    let (audio_tx, audio_rx) = mpsc::channel::<Vec<f32>>(64);
+    let (text_tx, mut text_rx) = mpsc::channel::<TranscriptSegment>(16);
+
+    // Two utterances, each closed by the VAD's empty-chunk sentinel.
+    for chunk in [loud(), Vec::new(), loud(), Vec::new()] {
+        audio_tx.send(chunk).await.unwrap();
+    }
+    drop(audio_tx);
+
+    let provider = FlakyAsr {
+        calls: Mutex::new(0),
+    };
+    let result = default_transcribe_stream(&provider, audio_rx, text_tx, None).await;
+
+    let mut texts = Vec::new();
+    while let Ok(seg) = text_rx.try_recv() {
+        texts.push(seg.text);
+    }
+    assert_eq!(
+        texts,
+        vec!["second one worked"],
+        "the utterance after the failure must still be transcribed"
+    );
+    // And the failure is still reported, so the pill can say what went wrong.
+    assert!(result.is_err(), "the session should report the failure");
 }
 
 // ── Reporting a session that produced nothing ────────────────────────────────

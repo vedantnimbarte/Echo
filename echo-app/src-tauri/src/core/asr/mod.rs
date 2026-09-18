@@ -148,20 +148,42 @@ where
     P: AsrProvider + ?Sized,
 {
     let mut buffer: Vec<f32> = Vec::new();
+    // The last failure, reported once the session ends. A failure mid-session
+    // used to end the stream outright, which in voice-activated mode meant one
+    // bad utterance — a network blip, a model still loading — silently took
+    // every sentence after it as well.
+    let mut last_error = None;
     while let Some(chunk) = audio_rx.recv().await {
         if chunk.is_empty() {
             let utterance = std::mem::take(&mut buffer);
-            if let Some(seg) = transcribe_utterance(provider, utterance, language).await? {
-                let _ = tx.send(seg).await;
+            match transcribe_utterance(provider, utterance, language).await {
+                Ok(Some(seg)) => {
+                    let _ = tx.send(seg).await;
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    tracing::warn!("Utterance failed to transcribe: {e}");
+                    last_error = Some(e);
+                }
             }
             continue;
         }
         buffer.extend_from_slice(&chunk);
     }
-    if let Some(seg) = transcribe_utterance(provider, buffer, language).await? {
-        let _ = tx.send(seg).await;
+    match transcribe_utterance(provider, buffer, language).await {
+        Ok(Some(seg)) => {
+            let _ = tx.send(seg).await;
+        }
+        Ok(None) => {}
+        Err(e) => last_error = Some(e),
     }
-    Ok(())
+    // Reported at the end rather than swallowed: the caller turns this into the
+    // message on screen, which is the only thing that distinguishes a failed
+    // dictation from one where nobody spoke.
+    match last_error {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
 }
 
 /// Transcribe one buffered utterance, or `None` if it should not be sent to the

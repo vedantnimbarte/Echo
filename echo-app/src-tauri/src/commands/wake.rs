@@ -135,7 +135,15 @@ async fn listen(
 
     while let Some(chunk) = audio_rx.recv().await {
         if chunk.is_empty() {
-            break;
+            // The device faulted. Exiting quietly left the wake word dead for
+            // the rest of the session while Settings still showed it enabled,
+            // so rearm instead — `rearm` reopens the device.
+            warn!("Wake listener lost the audio device; rearming");
+            app.state::<AppState>()
+                .wake_active
+                .store(false, Ordering::SeqCst);
+            rearm(&app);
+            return;
         }
         if !vad.is_speech(&chunk) {
             continue;
