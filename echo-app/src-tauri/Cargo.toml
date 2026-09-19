@@ -126,6 +126,9 @@ echo-sdk = { path = "echo-sdk" }
 
 # Local Whisper (optional — see [features].whisper above).
 whisper-rs = { version = "0.13", optional = true }
+specta = { version = "2.0.0-rc.22", features = ["derive"] }
+specta-typescript = "0.0.9"
+tauri-specta = { version = "2.0.0-rc.21", features = ["derive", "typescript"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = [
