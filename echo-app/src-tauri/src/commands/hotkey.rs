@@ -1,3 +1,4 @@
+use tauri::Manager;
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
@@ -250,4 +251,52 @@ pub fn set_recording_mode(app: AppHandle, state: State<'_, AppState>, mode: Stri
         repositories::set_setting(&conn, "recording_mode", &mode)?;
     }
     apply(&app, state.inner())
+}
+
+/**
+ * SOURCE OF TRUTH KEYWORDS: arm_escape, disarm_escape, cancel, Escape
+ * WHAT:  Binds and unbinds Escape as the cancel key, for the length of one
+ *        dictation.
+ * WHY:   BOUND ONLY WHILE DICTATING, and that is the whole design of it. Escape
+ *        is the most overloaded key on the machine — it closes dialogs, leaves
+ *        full screen, exits insert mode. A global binding that lived for the
+ *        life of the app would take it from every other program on the
+ *        computer, to serve a feature that can only ever apply during the
+ *        seconds a recording is running.
+ *
+ *        So it is claimed when a dictation starts and given back when one ends.
+ *        The cost is that a failure to unbind leaves it held, which is why
+ *        `disarm` is called on every exit from a dictation rather than only the
+ *        ordinary one.
+ * WHERE: Called by commands/recording.rs as a dictation begins and ends.
+ */
+pub fn arm_escape(app: &AppHandle) {
+    let handle = app.clone();
+    let result = app
+        .global_shortcut()
+        .on_shortcut("Escape", move |_app, _shortcut, event| {
+            if event.state != ShortcutState::Pressed {
+                return;
+            }
+            let handle = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Some(state) = handle.try_state::<AppState>() {
+                    if let Err(e) =
+                        crate::commands::recording::cancel_recording(handle.clone(), state).await
+                    {
+                        tracing::error!("Escape failed: {e}");
+                    }
+                }
+            });
+        });
+    if let Err(e) = result {
+        // Not fatal and not worth interrupting a dictation over: the recording
+        // works, it just cannot be cancelled with the keyboard. Something else
+        // on the machine already holds Escape globally.
+        tracing::debug!("Could not claim Escape for cancelling: {e}");
+    }
+}
+
+pub fn disarm_escape(app: &AppHandle) {
+    let _ = app.global_shortcut().unregister("Escape");
 }

@@ -42,7 +42,19 @@ pub struct AppState {
     pub telemetry: TelemetryService,
     pub plugins: Mutex<PluginLoader>,
     pub plugins_dir: PathBuf,
-    pub recording: Mutex<bool>,
+    /// The dictation state machine. THE ONLY PLACE RECORDING STATE LIVES — see
+    /// [`crate::core::dictation::machine`]. It replaced a bare `Mutex<bool>`
+    /// that every caller had to remember to claim and hand back in the right
+    /// order, and that a capture failure could leave set, killing the hotkey
+    /// until restart.
+    pub dictation: Mutex<crate::core::dictation::DictationMachine>,
+    /// Bumped every time a cancel countdown is armed or called off.
+    ///
+    /// A timer that wakes holding a stale generation does nothing. That is what
+    /// stops a countdown armed during one dictation from discarding the next
+    /// one, which is a real sequence: Escape, Escape, stop, start again, all
+    /// inside three seconds.
+    pub cancel_generation: std::sync::atomic::AtomicU64,
     /// What Echo last typed into another app, so it can be taken back or
     /// re-transcribed. Cleared once used — see [`crate::core::undo`].
     pub last_delivery: Mutex<Option<crate::core::undo::LastDelivery>>,
@@ -67,3 +79,26 @@ pub struct AppState {
 // guarantee single-threaded access via the lock.
 unsafe impl Send for AppState {}
 unsafe impl Sync for AppState {}
+
+impl AppState {
+    /// Whether audio is flowing right now.
+    ///
+    /// True in CancelArmed as well as Recording, because capture genuinely is
+    /// still running there — that is what makes a second Escape able to resume
+    /// with nothing lost. A caller asking "is the microphone busy" must get
+    /// yes.
+    pub fn is_capturing(&self) -> bool {
+        use crate::core::dictation::DictationState as S;
+        matches!(
+            self.dictation_state(),
+            S::Arming | S::Recording | S::CancelArmed
+        )
+    }
+
+    pub fn dictation_state(&self) -> crate::core::dictation::DictationState {
+        self.dictation
+            .lock()
+            .map(|m| m.state())
+            .unwrap_or(crate::core::dictation::DictationState::Idle)
+    }
+}

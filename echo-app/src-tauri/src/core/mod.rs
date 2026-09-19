@@ -3,6 +3,7 @@ pub mod asr;
 pub mod audio;
 pub mod command;
 pub mod cues;
+pub mod dictation;
 pub mod dictionary;
 pub mod download;
 pub mod egress;

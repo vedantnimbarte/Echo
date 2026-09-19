@@ -16,6 +16,7 @@ interface Options {
 export function useEchoEvents({ controlHotkey = false }: Options = {}) {
   const {
     setRecording,
+    setDictation,
     setSpeaking,
     setTranscribing,
     setMode,
@@ -32,6 +33,12 @@ export function useEchoEvents({ controlHotkey = false }: Options = {}) {
   useEffect(() => {
     const report = (e: unknown) => setError(errorMessage(e));
     const unlisten = Promise.all([
+      echoEvents.onDictationState(({ payload }) => {
+        setDictation(
+          payload.state as import("../store/recordingStore").DictationState,
+          payload.cancel_countdown_ms,
+        );
+      }),
       echoEvents.onRecordingStarted(() => {
         setRecording(true);
         setTranscribing(false);

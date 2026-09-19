@@ -83,7 +83,7 @@ pub async fn test_input_level(
     state: State<'_, AppState>,
     device: Option<String>,
 ) -> Result<InputTest> {
-    if *state.recording.lock().unwrap() {
+    if state.is_capturing() {
         return Err(crate::error::EchoError::AudioDevice(
             "Echo is recording right now. Stop the dictation and test again.".into(),
         ));

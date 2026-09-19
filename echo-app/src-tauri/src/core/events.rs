@@ -30,6 +30,14 @@ pub enum AppEvent {
         phrase: String,
         score: f32,
     },
+    /// The dictation state machine moved. Carries the countdown length so the
+    /// pill animates the draining line over exactly the window the backend will
+    /// wait — a duration hardcoded in the webview would drift from the one that
+    /// actually expires.
+    DictationState {
+        state: crate::core::dictation::DictationState,
+        cancel_countdown_ms: u64,
+    },
 }
 
 impl AppEvent {
@@ -44,6 +52,7 @@ impl AppEvent {
             AppEvent::ModelDownloadProgress { .. } => "echo://model-download-progress",
             AppEvent::ModelDownloadComplete { .. } => "echo://model-download-complete",
             AppEvent::WakeDetected { .. } => "echo://wake-detected",
+            AppEvent::DictationState { .. } => "echo://dictation-state",
         }
     }
 }

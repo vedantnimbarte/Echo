@@ -57,7 +57,7 @@ pub fn rearm(app: &AppHandle) {
     if !enabled {
         return;
     }
-    if *state.recording.lock().unwrap() {
+    if state.is_capturing() {
         return;
     }
     if !state.wake_models.is_ready(&phrase) {
