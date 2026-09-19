@@ -3,9 +3,11 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
+pub mod assembler;
 pub mod binary_manager;
 pub mod blocklist;
 pub mod catalog;
+pub mod chunker;
 pub mod decode_opts;
 pub mod fallback;
 pub mod hallucination;

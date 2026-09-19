@@ -149,6 +149,14 @@ impl AsrProvider for LocalWhisperProvider {
     ) -> Result<()> {
         if self.partials_wanted.load(Ordering::Relaxed) {
             self.stream_with_partials(audio_rx, tx, language).await
+        } else if self.binaries.resolve_server().is_some() {
+            // Chunked decoding needs a RESIDENT model: the whole point is that
+            // chunks decode in the background while the user keeps talking, and
+            // spawning a whisper-cli process per chunk would pay the model load
+            // several times over and lose more than the overlap gains. So this
+            // path is the server's alone; a CLI-only install keeps the single
+            // decode at the end, which is correct there.
+            self.stream_chunked(audio_rx, tx, language).await
         } else {
             super::default_transcribe_stream(self, audio_rx, tx, language).await
         }
@@ -593,4 +601,117 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&base);
     }
+}
+
+impl LocalWhisperProvider {
+    /**
+     * SOURCE OF TRUTH KEYWORDS: stream_chunked, Chunker, Assembler
+     * WHAT:  Decodes an utterance in pieces as it is spoken, so only the
+     *        trailing fragment is on the critical path when the user stops.
+     * WHY:   The buffered path decodes the whole utterance after the user stops,
+     *        so finishing a five-minute monologue costs five minutes' worth of
+     *        decode while they wait. Here the long middle is already decoded by
+     *        the time they stop, and what remains is at most a few seconds of
+     *        tail.
+     *
+     *        Decodes are SPAWNED AND COLLECTED AT THE END rather than awaited in
+     *        the receive loop. Awaiting one would stop reading audio for the
+     *        length of a decode, and the capture layer would start dropping
+     *        buffers — losing the user's words to make the pipeline tidier,
+     *        which is the wrong trade in every case.
+     * WHERE: Chosen by transcribe_stream when a resident server is available.
+     *        Chunk policy lives in core/asr/chunker.rs, the seam removal in
+     *        core/asr/assembler.rs.
+     */
+    async fn stream_chunked(
+        &self,
+        mut audio_rx: tokio::sync::mpsc::Receiver<Vec<f32>>,
+        tx: tokio::sync::mpsc::Sender<TranscriptSegment>,
+        language: Option<&str>,
+    ) -> Result<()> {
+        use crate::core::asr::assembler::Assembler;
+        use crate::core::asr::chunker::Chunker;
+
+        let mut chunker = Chunker::new();
+        // (start_ms, handle). Collected in order once capture ends.
+        let mut pending: Vec<(u64, tokio::task::JoinHandle<Result<String>>)> = Vec::new();
+
+        while let Some(buffer) = audio_rx.recv().await {
+            if buffer.is_empty() {
+                // Utterance boundary: close the tail and finish this one.
+                if let Some(chunk) = chunker.close_tail() {
+                    let job = self.partial_job(language).await;
+                    pending.push((chunk.start_ms, tokio::spawn(job.run(chunk.samples))));
+                }
+                if let Some(segment) = collect_chunks(&mut pending, language).await {
+                    let _ = tx.send(segment).await;
+                }
+                chunker = Chunker::new();
+                continue;
+            }
+
+            let quiet = is_quiet(&buffer);
+            if let Some(chunk) = chunker.push(&buffer, quiet) {
+                let job = self.partial_job(language).await;
+                pending.push((chunk.start_ms, tokio::spawn(job.run(chunk.samples))));
+            }
+        }
+
+        // Capture closed mid-utterance: what was said still deserves a
+        // transcript.
+        if let Some(chunk) = chunker.close_tail() {
+            let job = self.partial_job(language).await;
+            pending.push((chunk.start_ms, tokio::spawn(job.run(chunk.samples))));
+        }
+        if let Some(segment) = collect_chunks(&mut pending, language).await {
+            let _ = tx.send(segment).await;
+        }
+        Ok(())
+    }
+}
+
+/// Whether a buffer is quiet enough to be a pause rather than speech.
+///
+/// Measured against the same scale the whole-utterance gate uses: audio here
+/// has been through the AGC, which puts speech near 0.05 RMS whatever the
+/// microphone. A pause between sentences sits an order of magnitude below.
+fn is_quiet(buffer: &[f32]) -> bool {
+    if buffer.is_empty() {
+        return true;
+    }
+    let sum: f64 = buffer.iter().map(|s| (*s as f64) * (*s as f64)).sum();
+    ((sum / buffer.len() as f64).sqrt() as f32) < 0.004
+}
+
+/// Awaits every spawned decode and joins the results into one transcript.
+///
+/// A chunk that FAILED is skipped rather than abandoning the utterance: losing
+/// eight seconds out of the middle is bad, and losing all of it because one
+/// decode timed out is worse.
+async fn collect_chunks(
+    pending: &mut Vec<(u64, tokio::task::JoinHandle<Result<String>>)>,
+    language: Option<&str>,
+) -> Option<TranscriptSegment> {
+    use crate::core::asr::assembler::Assembler;
+
+    if pending.is_empty() {
+        return None;
+    }
+
+    let mut assembler = Assembler::new();
+    for (start_ms, handle) in pending.drain(..) {
+        match handle.await {
+            Ok(Ok(text)) => assembler.push_chunk(start_ms, &text),
+            Ok(Err(e)) => tracing::warn!(start_ms, "A chunk failed to decode: {e}"),
+            Err(e) => tracing::warn!(start_ms, "A chunk decode panicked: {e}"),
+        }
+    }
+
+    let text = assembler.finish();
+    (!text.is_empty()).then(|| TranscriptSegment {
+        text,
+        is_final: true,
+        language: language.map(str::to_owned),
+        confidence: None,
+    })
 }
