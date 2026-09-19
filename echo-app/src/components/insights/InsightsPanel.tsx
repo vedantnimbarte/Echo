@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { commands, type DayWords, type Tally } from "../../ipc/commands";
 import { Page, Group } from "../common/Page";
+import { LatencyPanel } from "./LatencyPanel";
 
 /**
  * What dictation has added up to.
@@ -567,6 +568,11 @@ export function InsightsPanel() {
           <HourStrip hours={data.hours} />
         </Card>
       </Group>
+
+      {/* Last, because it is the only section measured rather than counted:
+          everything above is drawn from your history, this is drawn from
+          Echo's own clock. */}
+      <LatencyPanel />
     </Page>
   );
 }

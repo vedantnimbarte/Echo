@@ -55,6 +55,14 @@ pub struct AppState {
     /// one, which is a real sequence: Escape, Escape, stop, start again, all
     /// inside three seconds.
     pub cancel_generation: std::sync::atomic::AtomicU64,
+    /// When the user last stopped talking.
+    ///
+    /// The start of the one measurement the product is judged on — stop to text
+    /// on screen. It lives on the shared state rather than in the delivery task
+    /// because the two ends are set in different functions: `end_recording`
+    /// knows when the user stopped, and the delivery task knows when the text
+    /// landed, and neither can see the other's locals.
+    pub last_stop_at: Mutex<Option<std::time::Instant>>,
     /// What Echo last typed into another app, so it can be taken back or
     /// re-transcribed. Cleared once used — see [`crate::core::undo`].
     pub last_delivery: Mutex<Option<crate::core::undo::LastDelivery>>,

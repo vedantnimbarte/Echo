@@ -168,26 +168,16 @@ fn every_metric_is_recorded() {
 /**
  * SOURCE OF TRUTH KEYWORDS: KNOWN_UNREACHABLE
  * WHAT:  Stages declared ahead of the code that will record them.
- * WHY:   THIS LIST IS A DEBT, NOT AN EXEMPTION. The latency recorder is being
- *        built; the registry declares the stages first so that the recorder has
- *        something to be checked against rather than inventing its own names as
- *        it goes. Every entry here is a stage the insights panel will read as
- *        empty until its recording site lands, and each one is deleted from
- *        this list by the commit that adds that site.
- *
- *        If this list stops shrinking, the feature stopped being built, and the
- *        honest move is to delete the undelivered stages from the registry
- *        rather than leave them declared.
+ * WHY:   THIS LIST IS A DEBT, NOT AN EXEMPTION, and it is EMPTY — which is the
+ *        state it is supposed to be in. It was briefly populated while the
+ *        latency recorder was being built, and the stages that still had no
+ *        recording site when it landed were deleted from the registry rather
+ *        than parked here. That is the rule: if this list stops shrinking, the
+ *        feature stopped being built, and the honest move is to remove the
+ *        undelivered stages.
  * WHERE: Consulted by every_metric_is_recorded.
  */
-const KNOWN_UNREACHABLE: &[LatencyStage] = &[
-    LatencyStage::CaptureStart,
-    LatencyStage::ChunkDecode,
-    LatencyStage::TailDecode,
-    LatencyStage::Assemble,
-    LatencyStage::Inject,
-    LatencyStage::TotalFinalize,
-];
+const KNOWN_UNREACHABLE: &[LatencyStage] = &[];
 
 /// The scan is only meaningful if it is actually reading files. A typo in a
 /// root, a moved crate, a renamed directory — any of those would empty the

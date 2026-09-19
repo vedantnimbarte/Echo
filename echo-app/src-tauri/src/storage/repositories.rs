@@ -730,3 +730,79 @@ mod streak_tests {
         assert_eq!(streaks(&[5, 6, 7], 10), (0, 3));
     }
 }
+
+/**
+ * SOURCE OF TRUTH KEYWORDS: insert_latency_samples, latency_values,
+ *   LATENCY_WINDOW, trim_latency_samples
+ * WHAT:  Writing a dictation's timings, and reading raw values back.
+ * WHY:   STAGES ARE STRINGS HERE, not the LatencyStage enum, and that is not
+ *        laziness — this layer sits below `core` and `registry`, so naming
+ *        their types would be an upward import that layering.rs fails the build
+ *        over. Storage stores what it is given; deciding which stages exist and
+ *        what they are called is a decision that belongs above it.
+ *
+ *        Percentiles are computed by the caller for the same reason: turning
+ *        values into a p50/p95 pair needs the registry's list of user-facing
+ *        stages, which this layer must not know about.
+ *
+ *        One transaction per dictation, not per stage — see
+ *        core::telemetry::latency for why the measuring must not itself be
+ *        measurable.
+ * WHERE: Written by commands/recording.rs, read by commands/history.rs.
+ */
+pub fn insert_latency_samples(
+    conn: &Connection,
+    samples: &[(&str, u64)],
+    engine: Option<&str>,
+) -> Result<()> {
+    if samples.is_empty() {
+        return Ok(());
+    }
+    let tx = conn.unchecked_transaction()?;
+    {
+        let mut stmt =
+            tx.prepare("INSERT INTO latency_samples (stage, ms, engine) VALUES (?1, ?2, ?3)")?;
+        for (stage, ms) in samples {
+            stmt.execute(params![stage, *ms as i64, engine])?;
+        }
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// How many recent measurements a percentile is drawn from.
+///
+/// Bounded on purpose: the useful question is "how fast is this NOW", and a
+/// lifetime percentile is dominated by whatever model was in use six months
+/// ago. It also keeps the table from growing without limit on a machine that
+/// dictates all day.
+pub const LATENCY_WINDOW: usize = 200;
+
+/// The most recent measurements for one stage, ascending, ready to have a
+/// percentile taken from them.
+pub fn latency_values(conn: &Connection, stage: &str) -> Result<Vec<u64>> {
+    let mut stmt =
+        conn.prepare("SELECT ms FROM latency_samples WHERE stage = ?1 ORDER BY id DESC LIMIT ?2")?;
+    let mut values: Vec<u64> = stmt
+        .query_map(params![stage, LATENCY_WINDOW as i64], |r| {
+            r.get::<_, i64>(0).map(|v| v.max(0) as u64)
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+    values.sort_unstable();
+    Ok(values)
+}
+
+/// Keeps the table to the window the summary reads, per stage.
+pub fn trim_latency_samples(conn: &Connection) -> Result<()> {
+    conn.execute(
+        "DELETE FROM latency_samples
+         WHERE id NOT IN (
+             SELECT id FROM latency_samples t
+             WHERE (SELECT COUNT(*) FROM latency_samples u
+                    WHERE u.stage = t.stage AND u.id >= t.id) <= ?1
+         )",
+        params![LATENCY_WINDOW as i64],
+    )?;
+    Ok(())
+}

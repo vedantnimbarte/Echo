@@ -452,6 +452,7 @@ pub fn run() {
                 plugins_dir,
                 dictation: Mutex::new(Default::default()),
                 cancel_generation: Default::default(),
+                last_stop_at: Mutex::new(None),
                 last_delivery: Mutex::new(None),
                 last_utterance: Arc::new(Mutex::new(None)),
                 modtap: Mutex::new(None),

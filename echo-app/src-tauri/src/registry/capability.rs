@@ -104,53 +104,10 @@ impl OsPermission {
     }
 }
 
-/**
- * SOURCE OF TRUTH KEYWORDS: LatencyStage
- * WHAT:  One measured leg of the path from keypress to text on screen.
- * WHY:   Recorded against this enum, never a free string, so the insights
- *        panel cannot end up querying a stage nothing writes — which is the
- *        failure the reachability test exists to catch, expressed as a type.
- *
- *        The stages are cut at the boundaries a user would recognise, not at
- *        the ones the code happens to have: everything before the first sample
- *        is Capture, everything the model owns is Decode, everything after the
- *        last token is Deliver. TotalFinalize is the one the product promises —
- *        stop talking to text arriving — and it is deliberately measured
- *        end-to-end rather than summed from the others, so a stage nobody
- *        thought to time cannot hide inside it.
- * WHERE: Written by core/telemetry/latency.rs, declared by registry entries,
- *        read by the insights panel.
- */
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Type)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum LatencyStage {
-    /// Hotkey press to the first audio sample reaching the pipeline.
-    CaptureStart,
-    /// One chunk handed to the engine, to its transcript coming back.
-    ChunkDecode,
-    /// The trailing fragment after the user stops — the only decode on the
-    /// critical path once chunking is on.
-    TailDecode,
-    /// Joining chunk transcripts and running the formatting rules.
-    Assemble,
-    /// Text handed to the OS, to it landing in the focused app.
-    Inject,
-    /// Stop to delivered, measured end to end. The number the product promises.
-    TotalFinalize,
-}
-
-impl LatencyStage {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            LatencyStage::CaptureStart => "capture_start",
-            LatencyStage::ChunkDecode => "chunk_decode",
-            LatencyStage::TailDecode => "tail_decode",
-            LatencyStage::Assemble => "assemble",
-            LatencyStage::Inject => "inject",
-            LatencyStage::TotalFinalize => "total_finalize",
-        }
-    }
-}
+// LatencyStage lives in core::telemetry::latency, not here. The registry
+// DECLARES which stages a capability emits; the stages themselves are a fact
+// about the pipeline, and core sits below this layer — see layering.rs.
+pub use crate::core::telemetry::latency::LatencyStage;
 
 /**
  * SOURCE OF TRUTH KEYWORDS: SettingSection

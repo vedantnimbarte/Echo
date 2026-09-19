@@ -83,6 +83,10 @@ pub async fn begin_recording(
     language: Option<String>,
     end_on_pause: bool,
 ) -> Result<()> {
+    // Marked before anything is claimed, so the capture-start measurement
+    // covers the whole path the user waits through.
+    let armed_at = Instant::now();
+
     // The machine decides whether this start is real. A second Start while one
     // is already running returns no effects rather than an error — a hotkey
     // that fires twice is a fact of life, not a fault.
@@ -472,7 +476,19 @@ pub async fn begin_recording(
     let app_clone = app.clone();
     let quiet_app = app.clone();
     let peak_for_report = peak_level.clone();
+    // One recorder per dictation. Drained and written once at the end — see
+    // core::telemetry::latency for why this is not a write per stage.
+    let latency = std::sync::Arc::new(crate::core::telemetry::latency::LatencyRecorder::new());
+    // Hotkey to first audio. The number that answers "why did it miss my first
+    // word", which on a cold microphone is most of the answer.
+    latency.record(
+        crate::registry::LatencyStage::CaptureStart,
+        armed_at.elapsed().as_millis() as u64,
+    );
+    let latency_for_task = latency.clone();
+
     tokio::spawn(async move {
+        let latency = latency_for_task;
         let session_started = Instant::now();
         // Whether anything was actually delivered. A session that ends with
         // this false and a silent microphone is the failure this whole pipeline
@@ -769,6 +785,7 @@ pub async fn begin_recording(
                     let typed = std::mem::take(&mut shown);
                     stream_live = stream_partials;
                     let text = to_inject.clone();
+                    let inject_timer = latency.start(crate::registry::LatencyStage::Inject);
                     let result = tokio::task::spawn_blocking(move || {
                         if typed.is_empty() || force_paste {
                             // Streamed partials of the trigger are on screen
@@ -789,6 +806,11 @@ pub async fn begin_recording(
                         }
                     })
                     .await;
+                    // Stopped only on success: a failed injection's duration is
+                    // not an injection time.
+                    if matches!(result, Ok(Ok(()))) {
+                        inject_timer.stop();
+                    }
                     match result {
                         Ok(Err(e)) => {
                             error!("Text injection failed: {e}");
@@ -797,6 +819,13 @@ pub async fn begin_recording(
                         Err(e) => error!("Injection task panicked: {e}"),
                         Ok(Ok(())) => {
                             info!("Transcript injected");
+                            let stopped = *app_clone.state::<AppState>().last_stop_at.lock_live();
+                            if let Some(stopped) = stopped {
+                                latency.record(
+                                    crate::registry::LatencyStage::TotalFinalize,
+                                    stopped.elapsed().as_millis() as u64,
+                                );
+                            }
                             let state = app_clone.state::<AppState>();
                             *state.last_delivery.lock_live() =
                                 Some(crate::core::undo::LastDelivery {
@@ -871,6 +900,29 @@ pub async fn begin_recording(
             f32::from_bits(peak_for_report.load(Ordering::Relaxed)),
             session_started.elapsed(),
         );
+
+        // One write for the whole dictation, on the way out, when nobody is
+        // waiting for anything. Failures are swallowed: a latency panel is
+        // never worth failing a dictation over.
+        let samples = latency.take_samples();
+        if !samples.is_empty() {
+            let state = quiet_app.state::<AppState>();
+            let engine = state.asr.active_provider_name().await;
+            let conn = state.db.lock_live();
+            // Flattened to (name, ms) here: storage takes strings, because it
+            // sits below the layer that owns the stage enum.
+            let rows: Vec<(&str, u64)> = samples.iter().map(|s| (s.stage.as_str(), s.ms)).collect();
+            if let Err(e) = crate::storage::repositories::insert_latency_samples(
+                &conn,
+                &rows,
+                Some(engine.as_str()),
+            ) {
+                tracing::debug!("Could not store latency samples: {e}");
+            }
+            if let Err(e) = crate::storage::repositories::trim_latency_samples(&conn) {
+                tracing::debug!("Could not trim latency samples: {e}");
+            }
+        }
     });
 
     Ok(())
@@ -896,6 +948,9 @@ pub async fn end_recording(app: AppHandle, state: &AppState) -> Result<()> {
             return Ok(());
         }
         let _ = machine.handle(crate::core::dictation::DictationEvent::Stop);
+        // The clock for "stop to text on screen" starts here, which is the
+        // moment the user stopped talking as far as they are concerned.
+        *state.last_stop_at.lock_live() = Some(Instant::now());
     }
 
     // People dictate in bursts. Keeping the device open for a few seconds

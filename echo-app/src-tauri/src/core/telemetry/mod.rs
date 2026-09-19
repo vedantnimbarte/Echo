@@ -1,3 +1,5 @@
+pub mod latency;
+
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use rusqlite::{params, Connection};

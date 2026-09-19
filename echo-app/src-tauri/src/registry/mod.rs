@@ -195,16 +195,6 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                 MetricDef {
                     stage: LatencyStage::CaptureStart,
                     label: "Microphone ready".into(),
-                    user_facing: false,
-                },
-                MetricDef {
-                    stage: LatencyStage::ChunkDecode,
-                    label: "Chunk decode".into(),
-                    user_facing: false,
-                },
-                MetricDef {
-                    stage: LatencyStage::TailDecode,
-                    label: "Final decode".into(),
                     user_facing: true,
                 },
                 MetricDef {
@@ -425,18 +415,11 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                 order: 50,
             }),
             hotkey: None,
-            metrics: vec![
-                MetricDef {
-                    stage: LatencyStage::Assemble,
-                    label: "Formatting".into(),
-                    user_facing: false,
-                },
-                MetricDef {
-                    stage: LatencyStage::Inject,
-                    label: "Typing it in".into(),
-                    user_facing: true,
-                },
-            ],
+            metrics: vec![MetricDef {
+                stage: LatencyStage::Inject,
+                label: "Typing it in".into(),
+                user_facing: true,
+            }],
             settings: vec![
                 needs(
                     toggle(
