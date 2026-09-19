@@ -10,7 +10,10 @@
     "tauri": "tauri",
     "i18n:check": "node scripts/check-i18n.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "sot": "node scripts/sot.mjs",
+    "sot:show": "node scripts/sot.mjs --show",
+    "sot:missing": "node scripts/sot.mjs --missing"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.0",

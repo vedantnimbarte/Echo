@@ -184,3 +184,45 @@ wrappers in `ipc/`.
 
 Conventional commits (`feat:`, `fix:`, `docs:`, `build:`, `ci:`), small and
 focused.
+
+## Finding things: the SOT header
+
+Files carry a `SOURCE OF TRUTH KEYWORDS:` line at the top, followed by WHAT, WHY
+and WHERE. The point is not documentation for its own sake — it is so that
+"where does this live" can be answered by a keyword search instead of by reading
+the tree:
+
+```bash
+npm run sot SettingDef          # files whose header claims that symbol
+npm run sot:show SettingDef     # the same, printing each header
+npm run sot:missing             # files that have no header yet
+```
+
+WHAT is one sentence on inputs and outputs. WHY is the gotcha, the constraint or
+the non-obvious choice — if something forced the decision, say what forced it;
+this is the line that saves the next person a day. WHERE names who calls this and
+what it calls, so a reader can follow the thread without searching.
+
+**Add one when you next work in a file that has none.** Not in bulk: a header
+written to satisfy a counter restates the filename and costs a reader the time it
+takes to discover it says nothing. `sot:missing` reports the coverage as a number
+to watch going down, and deliberately does not fail the build.
+
+## The guardrail tests
+
+Three tests check things a reviewer would have to notice by hand, and each fails
+with a message you can verify in about ten seconds:
+
+- `nothing_imports_upward` (`src-tauri/src/layering.rs`) — the dependency
+  direction. When something low needs a value that lives high, move the value
+  down; `core/hotkeys.rs` is the worked example of doing that rather than
+  reaching up.
+- `every_setting_is_consumed` (`src-tauri/src/registry/reachability.rs`) — every
+  declared setting is actually read by something, in either the Rust or the
+  frontend tree. A setting nothing reads is a control that lies: the user says
+  yes, the app agrees, and nothing happens.
+- `every_metric_is_recorded` — every declared latency stage is actually written.
+
+Their exception lists are both empty and are meant to stay that way. An entry is
+a debt with a name on it; if you cannot avoid adding one, say in the comment what
+removes it again.
