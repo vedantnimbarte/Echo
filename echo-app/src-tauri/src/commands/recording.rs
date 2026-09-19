@@ -1546,7 +1546,7 @@ mod word_edit_tests {
 #[tauri::command]
 #[specta::specta]
 pub async fn cancel_recording(app: AppHandle, state: State<'_, AppState>) -> Result<()> {
-    use crate::core::dictation::{DictationEvent, DictationState, Effect};
+    use crate::core::dictation::{DictationEvent, Effect};
 
     let state = state.inner();
     let transition = {

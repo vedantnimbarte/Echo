@@ -11,7 +11,9 @@
 
 pub mod machine;
 
+// Only what is used outside this module. CueKind, Transition and
+// TransitionError are part of the machine's own vocabulary and are reached for
+// as `machine::X` on the rare occasion something outside needs them.
 pub use machine::{
-    CueKind, DictationEvent, DictationMachine, DictationState, Effect, Transition, TransitionError,
-    CANCEL_COUNTDOWN_MS,
+    DictationEvent, DictationMachine, DictationState, Effect, CANCEL_COUNTDOWN_MS,
 };

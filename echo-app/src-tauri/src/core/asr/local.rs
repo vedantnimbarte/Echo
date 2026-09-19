@@ -629,7 +629,6 @@ impl LocalWhisperProvider {
         tx: tokio::sync::mpsc::Sender<TranscriptSegment>,
         language: Option<&str>,
     ) -> Result<()> {
-        use crate::core::asr::assembler::Assembler;
         use crate::core::asr::chunker::Chunker;
 
         let mut chunker = Chunker::new();
