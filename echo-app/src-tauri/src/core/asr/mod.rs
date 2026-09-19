@@ -4,9 +4,11 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
 pub mod binary_manager;
+pub mod blocklist;
 pub mod catalog;
 pub mod decode_opts;
 pub mod fallback;
+pub mod hallucination;
 pub mod http;
 pub mod languages;
 pub mod local;
@@ -219,6 +221,35 @@ where
         return Ok(None);
     }
 
+    // Kept for the hallucination guard below, which measures the audio rather
+    // than trusting a per-engine confidence field. Only the statistics are
+    // needed, so they are taken before the buffer is handed over rather than
+    // the buffer being cloned.
+    let was_digital_silence = crate::core::asr::hallucination::is_digital_silence(&audio);
+    let rms_dbfs = crate::core::asr::hallucination::rms_dbfs(&audio);
+
     let seg = provider.transcribe(audio, language).await?;
-    Ok((!seg.text.is_empty()).then_some(seg))
+    if seg.text.is_empty() {
+        return Ok(None);
+    }
+
+    // The VAD gate above refuses to send silence to the decoder. This catches
+    // what it cannot: a buffer that really did contain speech, which the
+    // decoder answered with training-data boilerplate anyway.
+    let spoken = seg.language.as_deref().or(language);
+    if crate::core::asr::hallucination::is_invented(
+        &seg.text,
+        spoken,
+        was_digital_silence,
+        rms_dbfs,
+    ) {
+        tracing::debug!(
+            text = %seg.text,
+            rms_dbfs,
+            "Dropped an invented transcript"
+        );
+        return Ok(None);
+    }
+
+    Ok(Some(seg))
 }

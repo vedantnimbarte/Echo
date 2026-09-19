@@ -228,3 +228,42 @@ fn send_ctrl_chord(vk: u16, label: &str) -> Result<()> {
         ))
     }
 }
+
+/**
+ * SOURCE OF TRUTH KEYWORDS: play_system_sound, PlaySoundW, SND_ALIAS
+ * WHAT:  Plays one of Windows' own notification sounds, by its event alias.
+ * WHY:   `PlaySoundW` with `SND_ALIAS` names an entry in the user's sound
+ *        scheme rather than a file, so Echo plays whatever they have chosen in
+ *        Sound settings — including nothing, if they have set that event to
+ *        "(None)". That is the correct behaviour and the reason the alias form
+ *        is used rather than shipping a .wav: a dictation cue that ignored the
+ *        system scheme would be the one sound on the machine that does.
+ *
+ *        `SND_ASYNC` so the call returns before the sound finishes; the calling
+ *        thread is already detached (see core/cues.rs) but a synchronous play
+ *        would still hold it for the length of the sound.
+ * WHERE: core/cues.rs on Windows.
+ */
+#[cfg(target_os = "windows")]
+pub fn play_system_sound(alias: &str) -> std::io::Result<()> {
+    use windows::core::PCWSTR;
+    use windows::Win32::Media::Audio::{PlaySoundW, SND_ALIAS, SND_ASYNC, SND_NODEFAULT};
+
+    let wide: Vec<u16> = alias.encode_utf16().chain(std::iter::once(0)).collect();
+    // SND_NODEFAULT: when the user has silenced this event, play nothing rather
+    // than falling back to the generic beep.
+    let played = unsafe {
+        PlaySoundW(
+            PCWSTR(wide.as_ptr()),
+            None,
+            SND_ALIAS | SND_ASYNC | SND_NODEFAULT,
+        )
+    };
+    if played.as_bool() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other(format!(
+            "the system declined to play {alias}"
+        )))
+    }
+}

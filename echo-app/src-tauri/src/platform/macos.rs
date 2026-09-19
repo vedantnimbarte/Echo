@@ -149,3 +149,26 @@ fn send_command_chord(keycode: u16, label: &str) -> Result<()> {
     }
     Ok(())
 }
+
+/**
+ * SOURCE OF TRUTH KEYWORDS: play_system_sound, NSSound
+ * WHAT:  Plays one of macOS's named system sounds.
+ * WHY:   `NSSound(named:)` resolves against /System/Library/Sounds, so these
+ *        are the sounds the machine already makes and they follow the system
+ *        alert volume. Nothing is bundled and nothing can be missing.
+ * WHERE: core/cues.rs on macOS.
+ */
+#[cfg(target_os = "macos")]
+pub fn play_system_sound(name: &str) -> std::io::Result<()> {
+    use objc2_app_kit::NSSound;
+    use objc2_foundation::NSString;
+
+    let played =
+        unsafe { NSSound::soundNamed(&NSString::from_str(name)).map(|sound| sound.play()) };
+    match played {
+        Some(true) => Ok(()),
+        _ => Err(std::io::Error::other(format!(
+            "no system sound named {name}"
+        ))),
+    }
+}

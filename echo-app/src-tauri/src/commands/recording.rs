@@ -48,6 +48,34 @@ pub async fn start_recording(
 ///
 /// `end_on_pause` decides whether a long pause closes the utterance (see
 /// [`vad_gate`]) or only the end of capture does.
+
+/**
+ * SOURCE OF TRUTH KEYWORDS: cue, sound_cues
+ * WHAT:  Plays one of the three feedback sounds, if the user wants them.
+ * WHY:   Read from the database per event rather than cached, because the
+ *        setting lives in another window and a cached copy would go stale the
+ *        moment it is changed — and this is the one feature whose whole job is
+ *        to be correct in the first second after a keypress.
+ *
+ *        The read is a single indexed SQLite lookup on a connection already
+ *        open, which is cheaper than the thread `cues::play` is about to spawn.
+ * WHERE: Called on start, stop and failure in this file.
+ */
+fn cue(state: &AppState, cue: crate::core::cues::Cue) {
+    let wanted = {
+        let conn = state.db.lock_live();
+        crate::storage::repositories::get_setting(&conn, "sound_cues")
+            .unwrap_or(None)
+            .unwrap_or_else(|| {
+                crate::registry::default_for("sound_cues").unwrap_or_else(|| "false".into())
+            })
+            == "true"
+    };
+    if wanted {
+        crate::core::cues::play(cue);
+    }
+}
+
 pub async fn begin_recording(
     app: AppHandle,
     state: &AppState,
@@ -68,6 +96,10 @@ pub async fn begin_recording(
         AppEvent::RecordingStarted,
     )
     .map_err(|e| EchoError::Plugin(e.to_string()))?;
+    // Before the capture stream is opened, deliberately: this sound is the
+    // answer to "did my keypress register", and opening the device can take
+    // long enough on a cold microphone that a later cue would not be one.
+    cue(state, crate::core::cues::Cue::Start);
     info!("Recording started");
 
     let provider = state.asr.active_provider_name().await;
@@ -114,6 +146,9 @@ pub async fn begin_recording(
                 message: e.to_string(),
             };
             let _ = app.emit(event.event_name(), &event);
+            // The start cue has already sounded, so silence here would read as
+            // a recording that is running.
+            cue(state, crate::core::cues::Cue::Failed);
             return Err(e);
         }
     };
@@ -865,6 +900,7 @@ pub async fn end_recording(app: AppHandle, state: &AppState) -> Result<()> {
         AppEvent::RecordingStopped,
     )
     .map_err(|e| EchoError::Plugin(e.to_string()))?;
+    cue(state, crate::core::cues::Cue::Stop);
     info!("Recording stopped");
 
     crate::commands::wake::rearm(&app);

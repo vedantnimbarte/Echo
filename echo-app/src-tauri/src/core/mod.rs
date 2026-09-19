@@ -2,6 +2,7 @@ pub mod appcontext;
 pub mod asr;
 pub mod audio;
 pub mod command;
+pub mod cues;
 pub mod dictionary;
 pub mod download;
 pub mod egress;

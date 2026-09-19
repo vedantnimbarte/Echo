@@ -133,6 +133,9 @@ tauri-specta = { version = "2.0.0-rc.21", features = ["derive", "typescript"] }
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = [
     "Win32_UI_Input_KeyboardAndMouse",
+    # PlaySoundW, for the start/stop/failed cues. The alias form plays the
+    # user's own sound scheme rather than a bundled file (platform::windows).
+    "Win32_Media_Audio",
     # Foreground-window lookup for per-app profiles (core::appcontext).
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_Threading",
