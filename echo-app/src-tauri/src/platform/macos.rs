@@ -163,11 +163,15 @@ pub fn play_system_sound(name: &str) -> std::io::Result<()> {
     use objc2_app_kit::NSSound;
     use objc2_foundation::NSString;
 
-    let played =
-        unsafe { NSSound::soundNamed(&NSString::from_str(name)).map(|sound| sound.play()) };
-    match played {
-        Some(true) => Ok(()),
-        _ => Err(std::io::Error::other(format!(
+    // Safe bindings in objc2 0.3 — no unsafe block needed, and `play()` reports
+    // whether playback started rather than returning a Result. Playback is
+    // asynchronous inside AppKit, so this returns immediately.
+    match NSSound::soundNamed(&NSString::from_str(name)) {
+        Some(sound) => {
+            sound.play();
+            Ok(())
+        }
+        None => Err(std::io::Error::other(format!(
             "no system sound named {name}"
         ))),
     }

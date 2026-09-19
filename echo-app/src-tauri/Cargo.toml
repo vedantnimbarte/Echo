@@ -176,3 +176,8 @@ zbus = "5"
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = { version = "0.24", features = ["highsierra"] }
 core-foundation = "0.10"
+# NSSound, for the start/stop/failed cues. Named system sounds resolve against
+# /System/Library/Sounds, so nothing is bundled and the system alert volume is
+# respected (platform::macos::play_system_sound).
+objc2-app-kit = "0.3.2"
+objc2-foundation = "0.3.2"
