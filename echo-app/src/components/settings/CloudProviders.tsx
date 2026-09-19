@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { commands, type CloudProvider, type ProviderField } from "../../ipc/commands";
 import { echoEvents } from "../../ipc/events";
 import { Field } from "../common/Page";
+import { errorMessage } from "../../lib/errors";
 
 /**
  * Cloud providers: the list you choose your engine from, and the keys that let
@@ -59,7 +60,7 @@ function ProviderBody({
   const runTest = useMutation({
     mutationFn: () => commands.testApiKey(provider.id),
     onSuccess: () => setTest({ ok: true, message: "Key works" }),
-    onError: (e) => setTest({ ok: false, message: String(e) }),
+    onError: (e) => setTest({ ok: false, message: errorMessage(e) }),
   });
 
   async function save() {

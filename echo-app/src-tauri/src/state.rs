@@ -57,6 +57,10 @@ pub struct AppState {
     /// global-shortcut plugin cannot express. Exactly one of the two
     /// mechanisms is bound at a time; dropping this one unbinds it.
     pub modtap: Mutex<Option<ModTapWatcher>>,
+    /// Which capabilities are mid-way through an exclusive command. Claimed and
+    /// released by the command factory, never by a handler — see
+    /// [`crate::ipc::factory`].
+    pub exclusive: crate::ipc::factory::ExclusiveRegistry,
 }
 
 // rusqlite::Connection is not Send by default; we wrap it in Mutex<> and

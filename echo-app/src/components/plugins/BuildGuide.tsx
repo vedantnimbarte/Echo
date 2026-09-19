@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 
 import { commands } from "../../ipc/commands";
 import { Group } from "../common/Page";
+import { errorMessage } from "../../lib/errors";
 
 /**
  * How to write an Echo plugin, in the app rather than in a file on GitHub.
@@ -234,7 +235,7 @@ function Scaffold() {
     try {
       setCreated(await commands.scaffoldPlugin(parent, name));
     } catch (e) {
-      setError(String(e));
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }

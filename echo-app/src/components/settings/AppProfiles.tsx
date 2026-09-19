@@ -3,6 +3,7 @@ import { Plus, Trash2, Crosshair } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { commands, type AppProfile } from "../../ipc/commands";
 import { Hint } from "../common/Hint";
+import { errorMessage } from "../../lib/errors";
 
 /**
  * Per-app overrides. Each field can be left on "Global", which inherits the
@@ -51,7 +52,7 @@ export function AppProfiles() {
     try {
       await fn();
     } catch (e) {
-      setError(String(e));
+      setError(errorMessage(e));
     }
     refresh();
   }

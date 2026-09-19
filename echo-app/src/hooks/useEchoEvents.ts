@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { echoEvents } from "../ipc/events";
 import { commands } from "../ipc/commands";
 import { normalizeMode, useRecordingStore } from "../store/recordingStore";
+import { errorMessage } from "../lib/errors";
 
 interface Options {
   /**
@@ -29,7 +30,7 @@ export function useEchoEvents({ controlHotkey = false }: Options = {}) {
   }, [setMode]);
 
   useEffect(() => {
-    const report = (e: unknown) => setError(String(e));
+    const report = (e: unknown) => setError(errorMessage(e));
     const unlisten = Promise.all([
       echoEvents.onRecordingStarted(() => {
         setRecording(true);

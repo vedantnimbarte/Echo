@@ -3,7 +3,9 @@ mod cli;
 mod commands;
 mod core;
 mod error;
+mod ipc;
 mod platform;
+mod registry;
 mod selftest;
 mod state;
 mod storage;
@@ -410,6 +412,7 @@ pub fn run() {
             }
 
             let app_state = AppState {
+                exclusive: Default::default(),
                 db: Mutex::new(conn),
                 audio: Arc::new(AudioService::new().expect("Failed to initialize audio")),
                 asr: asr_manager,
@@ -659,6 +662,7 @@ pub fn run() {
             commands::egress::clear_egress_log,
             commands::egress::get_egress_status,
             commands::settings::get_setting,
+            commands::settings::settings_snapshot,
             commands::settings::set_setting,
             commands::settings::spoken_punctuation_languages,
             commands::settings::number_languages,

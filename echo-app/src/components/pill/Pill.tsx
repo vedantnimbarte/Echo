@@ -12,6 +12,7 @@ import type { SettingsPage } from "../settings/SettingsPanel";
 import { EngineTag, useEngineStatus } from "../common/EngineTag";
 import { Waveform, type WaveMode } from "./Waveform";
 import { RingMeter } from "./RingMeter";
+import { errorMessage } from "../../lib/errors";
 
 /**
  * `"line"` is the Minimal variant. The stored value keeps its original name so
@@ -138,7 +139,7 @@ function usePillState() {
       void commands.stopRecording();
     } else {
       // Surface capture failures (no mic, permission denied) in the pill.
-      void commands.startRecording().catch((e) => setError(String(e)));
+      void commands.startRecording().catch((e) => setError(errorMessage(e)));
     }
   }
 

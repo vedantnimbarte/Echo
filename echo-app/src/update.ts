@@ -2,6 +2,7 @@ import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { getVersion } from "@tauri-apps/api/app";
 import { ask, message } from "@tauri-apps/plugin-dialog";
+import { errorMessage } from "./lib/errors";
 
 /** Settings key for the launch-time check. Absent means on. */
 export const CHECK_ON_START = "check_updates_on_start";
@@ -60,7 +61,7 @@ export async function checkForUpdate({ silent = false } = {}): Promise<UpdateOut
     // Always loud: a half-installed update is the one outcome the user has to
     // know about, whoever asked for the check.
     await message(`Update failed: ${e}`, { title: "Update", kind: "error" });
-    return { kind: "failed", message: String(e) };
+    return { kind: "failed", message: errorMessage(e) };
   }
 }
 
