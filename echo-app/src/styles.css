@@ -90,6 +90,28 @@ body,
   background: transparent;
 }
 
+/*
+  The settings window's own surface.
+
+  Its window is transparent so a native material can sit behind the glass, which
+  means something has to paint. When src-tauri managed to apply one it sets
+  `data-material="native"` on <html> and the page stays translucent, letting the
+  OS material through. When it could not — Windows 10, most Linux desktops —
+  this opaque surface is what stops the app being literally see-through.
+
+  Scoped to `#root:has(...)`? No: the pill shares this stylesheet and must stay
+  transparent, so this keys off a class the settings shell sets on itself.
+*/
+.app-surface {
+  background: var(--surface-opaque);
+}
+
+html[data-material="native"] .app-surface {
+  background: var(--material-panel-surface);
+  -webkit-backdrop-filter: blur(var(--glass-backdrop-blur)) saturate(140%);
+  backdrop-filter: blur(var(--glass-backdrop-blur)) saturate(140%);
+}
+
 body {
   font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;

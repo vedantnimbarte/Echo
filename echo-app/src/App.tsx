@@ -261,7 +261,11 @@ export default function App() {
   }
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-[var(--surface-0)] text-[var(--ink)] select-none">
+    // `app-surface` rather than a background utility: the window is transparent
+    // so a native material can sit behind the glass, and whether one actually
+    // applied is only knowable in src-tauri. The class resolves to an opaque
+    // surface when it did not — see styles.css.
+    <div className="app-surface relative flex h-screen flex-col overflow-hidden text-[var(--ink)] select-none">
       {/* Ambient top light — the source the glass edges are lit by. */}
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-64"

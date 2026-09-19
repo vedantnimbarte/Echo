@@ -580,6 +580,49 @@ pub fn run() {
                 let _ = win.set_decorations(false);
             }
 
+            // The native material behind the glass.
+            //
+            // The web layer only ever contributes the tint, the hairline and
+            // the inner highlight — see src/styles/tokens.css §Materials. This
+            // is the part it is drawn ON, and it is the difference between
+            // real glass and a CSS imitation of it.
+            //
+            // Failure is ignored on purpose, per platform: Mica needs Windows
+            // 11 and returns an error on 10, and there is no compositor
+            // material to ask for on most Linux desktops. In both cases
+            // `backdrop-filter` in the stylesheet is already the fallback, so
+            // the window is correct either way and an error here would be
+            // noise about a feature the user cannot act on.
+            if let Some(win) = app.get_webview_window("main") {
+                #[cfg(target_os = "windows")]
+                let applied = window_vibrancy::apply_mica(&win, None).is_ok();
+                #[cfg(target_os = "macos")]
+                let applied = window_vibrancy::apply_vibrancy(
+                    &win,
+                    window_vibrancy::NSVisualEffectMaterial::Sidebar,
+                    None,
+                    None,
+                )
+                .is_ok();
+                #[cfg(target_os = "linux")]
+                let applied = false;
+
+                // THE WINDOW IS TRANSPARENT, so something has to be behind the
+                // content. When the material took, that something is the OS and
+                // the page stays translucent; when it did not — Windows 10, most
+                // Linux desktops — the page must paint an opaque surface itself
+                // or the app is literally see-through.
+                //
+                // Told to the page rather than guessed by it: whether Mica
+                // applied is knowable only here, and a stylesheet that assumed
+                // either answer would be wrong on half the machines Echo runs
+                // on.
+                if applied {
+                    let _ = win
+                        .eval("document.documentElement.setAttribute('data-material', 'native')");
+                }
+            }
+
             // Surface the settings window on first launch so onboarding can run.
             if !onboarding_done {
                 if let Some(win) = app.get_webview_window("main") {
