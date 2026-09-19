@@ -22,6 +22,7 @@ use crate::{
 };
 
 #[tauri::command]
+#[specta::specta]
 pub async fn start_recording(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -810,6 +811,7 @@ pub async fn begin_recording(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn stop_recording(app: AppHandle, state: State<'_, AppState>) -> Result<()> {
     end_recording(app, state.inner()).await
 }
@@ -871,6 +873,7 @@ pub async fn end_recording(app: AppHandle, state: &AppState) -> Result<()> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn is_recording(state: State<'_, AppState>) -> bool {
     *state.recording.lock_live()
 }
@@ -883,6 +886,7 @@ pub fn is_recording(state: State<'_, AppState>) -> bool {
 /// silently, because a failed warm-up must never stop a recording from starting
 /// the ordinary way.
 #[tauri::command]
+#[specta::specta]
 pub fn warm_microphone(state: State<'_, AppState>) {
     let (enabled, device) = {
         let conn = state.db.lock_live();

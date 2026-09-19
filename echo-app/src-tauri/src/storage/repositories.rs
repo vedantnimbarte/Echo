@@ -348,7 +348,7 @@ pub fn delete_app_profile(conn: &Connection, id: i64) -> Result<()> {
 /// Derived rather than counted separately: History already is the record, and a
 /// second tally would be one more thing to keep in step with it. The cost is
 /// that turning History off turns these off too, which the UI says.
-#[derive(Debug, Clone, Default, serde::Serialize)]
+#[derive(Debug, Clone, Default, serde::Serialize, specta::Type)]
 pub struct DictationStats {
     pub transcripts: i64,
     pub words: i64,
@@ -397,7 +397,7 @@ pub fn dictation_stats(conn: &Connection) -> Result<DictationStats> {
 
 /// One row of a "how much of it was X" breakdown — an app, a provider, a
 /// language. Three questions with the same shape, so they share one answer.
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, specta::Type)]
 pub struct Tally {
     pub key: String,
     pub transcripts: i64,
@@ -405,7 +405,7 @@ pub struct Tally {
 }
 
 /// A single day's dictation, for the calendar.
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, specta::Type)]
 pub struct DayWords {
     /// ISO `YYYY-MM-DD`, local to whatever SQLite considers "now".
     pub date: String,
@@ -418,7 +418,7 @@ pub struct DayWords {
 /// Same source as [`dictation_stats`] — History — and the same consequence:
 /// with History off there is nothing to count, and the page says so rather
 /// than inventing numbers from a second tally nobody can inspect or delete.
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, specta::Type)]
 pub struct Insights {
     pub transcripts: i64,
     pub words: i64,

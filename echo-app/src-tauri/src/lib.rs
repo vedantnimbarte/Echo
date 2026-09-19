@@ -12,6 +12,9 @@ mod storage;
 mod tray;
 
 #[cfg(test)]
+mod layering;
+
+#[cfg(test)]
 mod pipeline_tests;
 
 use std::sync::{Arc, Mutex};
@@ -83,6 +86,23 @@ pub fn mark_start() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let builder = ipc_builder();
+
+    // Regenerate the TypeScript bindings on every debug run. This is the
+    // upstream pattern and it is here rather than in a test for a concrete
+    // reason: a test binary gets no side-by-side manifest, so it loads
+    // comctl32 v5 while Wry's Windows paths need v6, and the process dies at
+    // load with STATUS_ENTRYPOINT_NOT_FOUND before any test runs.
+    // `bindings_export::every_command_is_in_the_bindings` is the guard that
+    // catches a command added without a dev run since.
+    #[cfg(debug_assertions)]
+    builder
+        .export(
+            specta_typescript::Typescript::default(),
+            "../src/lib/bindings.ts",
+        )
+        .expect("failed to write src/lib/bindings.ts");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(
@@ -568,7 +588,45 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![
+        .invoke_handler(builder.invoke_handler())
+        .build(tauri::generate_context!())
+        .expect("error while building echo")
+        .run(|app, event| {
+            // The resident whisper model is a child process holding a few
+            // hundred megabytes. `AppHandle::exit` — which the Quit button
+            // calls — ends the process without running destructors, so
+            // `kill_on_drop` never fires and the server is orphaned: it
+            // outlives Echo, keeps the model in RAM, and accumulates one copy
+            // per launch.
+            //
+            // This covers an orderly exit. A crash or a force-kill runs none of
+            // it; that case is handled where the server is spawned, by the OS
+            // (see `whisper_server::spawn_contained`). This stays regardless:
+            // macOS has no such mechanism, and there a clean exit is the only
+            // thing that stops the server before Echo's next launch sweeps it.
+            if matches!(event, tauri::RunEvent::Exit) {
+                if let Some(state) = app.try_state::<AppState>() {
+                    tauri::async_runtime::block_on(state.whisper_server.shutdown());
+                }
+            }
+        });
+}
+
+/**
+ * SOURCE OF TRUTH KEYWORDS: ipc_builder, collect_commands, export_bindings
+ * WHAT:  Every command Echo exposes, collected once so both the runtime handler
+ *        and the generated TypeScript come from the same list.
+ * WHY:   THE BINDINGS USED TO BE HAND-WRITTEN. `src/ipc/commands.ts` was 565
+ *        lines of interfaces mirroring Rust types with nothing enforcing that
+ *        they still matched — rename a field in Rust and the only thing that
+ *        noticed was a user, at runtime, with an undefined where a value
+ *        should be. One list means the drift is not possible rather than
+ *        merely unlikely.
+ * WHERE: Consumed by `run` for the invoke handler, and by the export test in
+ *        this file that writes src/lib/bindings.ts.
+ */
+fn ipc_builder() -> tauri_specta::Builder<tauri::Wry> {
+    tauri_specta::Builder::<tauri::Wry>::new().commands(tauri_specta::collect_commands![
             commands::app::quit,
             commands::app::get_autostart,
             commands::app::set_autostart,
@@ -673,26 +731,72 @@ pub fn run() {
             commands::app::recovered_recordings,
             commands::app::discard_recovered,
             commands::audio::silero_available,
-        ])
-        .build(tauri::generate_context!())
-        .expect("error while building echo")
-        .run(|app, event| {
-            // The resident whisper model is a child process holding a few
-            // hundred megabytes. `AppHandle::exit` — which the Quit button
-            // calls — ends the process without running destructors, so
-            // `kill_on_drop` never fires and the server is orphaned: it
-            // outlives Echo, keeps the model in RAM, and accumulates one copy
-            // per launch.
-            //
-            // This covers an orderly exit. A crash or a force-kill runs none of
-            // it; that case is handled where the server is spawned, by the OS
-            // (see `whisper_server::spawn_contained`). This stays regardless:
-            // macOS has no such mechanism, and there a clean exit is the only
-            // thing that stops the server before Echo's next launch sweeps it.
-            if matches!(event, tauri::RunEvent::Exit) {
-                if let Some(state) = app.try_state::<AppState>() {
-                    tauri::async_runtime::block_on(state.whisper_server.shutdown());
-                }
-            }
-        });
+    ])
+}
+
+#[cfg(test)]
+mod bindings_export {
+    /*!
+     * SOURCE OF TRUTH KEYWORDS: every_command_is_in_the_bindings, bindings.ts
+     * WHAT:  Checks the committed src/lib/bindings.ts still names every command
+     *        the crate registers.
+     * WHY:   The bindings are WRITTEN by a debug run (see `run`), not by this
+     *        test, because instantiating Wry in a test binary kills the process
+     *        at load — see the comment there. So this is the half that CAN run
+     *        without a runtime: it reads the command list out of this file's own
+     *        source and asserts each name appears in the generated output.
+     *
+     *        Crude, and crude is the point. It cannot check types, but it
+     *        catches the failure that actually happens — someone adds a command
+     *        and commits without running the app — and it fails for a reason
+     *        anyone can check in ten seconds.
+     */
+
+    /// Command names, read out of the `collect_commands!` block in this file.
+    fn registered_commands() -> Vec<String> {
+        let source = include_str!("lib.rs");
+        let start = source
+            .find("collect_commands![")
+            .expect("the collect_commands block moved");
+        let end = source[start..].find("])").expect("unterminated block") + start;
+        source[start..end]
+            .lines()
+            .filter_map(|line| {
+                let line = line.trim().trim_end_matches(',');
+                line.strip_prefix("commands::")
+                    .and_then(|rest| rest.split("::").nth(1))
+                    .map(str::to_string)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn every_command_is_in_the_bindings() {
+        let commands = registered_commands();
+        assert!(
+            commands.len() > 50,
+            "only found {} commands; the parser above has stopped matching the              collect_commands block rather than the app having shrunk",
+            commands.len()
+        );
+
+        let bindings = match std::fs::read_to_string("../src/lib/bindings.ts") {
+            Ok(text) => text,
+            // A fresh checkout has not run the app yet. Not a failure — there is
+            // nothing stale to catch.
+            Err(_) => return,
+        };
+
+        let missing: Vec<_> = commands
+            .iter()
+            .filter(|name| !bindings.contains(name.as_str()))
+            .collect();
+
+        assert!(
+            missing.is_empty(),
+            "these commands are registered but absent from the generated bindings:
+  {:?}
+             Run the app once in debug (`npm run tauri dev`) to regenerate              src/lib/bindings.ts, and commit the result.",
+            missing
+        );
+    }
 }

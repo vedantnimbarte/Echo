@@ -7,6 +7,7 @@ use crate::{
 };
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_history(
     state: State<'_, AppState>,
     limit: Option<i64>,
@@ -21,6 +22,7 @@ pub fn get_history(
 /// honest outcome: there is nothing to count, rather than a number invented
 /// from somewhere else.
 #[tauri::command]
+#[specta::specta]
 pub fn get_dictation_stats(
     state: State<'_, AppState>,
 ) -> Result<crate::storage::repositories::DictationStats> {
@@ -33,12 +35,14 @@ pub fn get_dictation_stats(
 /// Same source and the same caveat as [`get_dictation_stats`]: it is History,
 /// so it is empty when History is off.
 #[tauri::command]
+#[specta::specta]
 pub fn get_insights(state: State<'_, AppState>) -> Result<crate::storage::repositories::Insights> {
     let conn = state.db.lock().unwrap();
     crate::storage::repositories::insights(&conn)
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn clear_history(state: State<'_, AppState>) -> Result<()> {
     let conn = state.db.lock().unwrap();
     repositories::clear_history(&conn)
@@ -49,6 +53,7 @@ pub fn clear_history(state: State<'_, AppState>) -> Result<()> {
 /// Exports everything, not the 100-row window the UI shows — an export the user
 /// has to paginate is not an export.
 #[tauri::command]
+#[specta::specta]
 pub async fn export_history(state: State<'_, AppState>, path: String) -> Result<()> {
     let records = {
         let conn = state.db.lock().unwrap();

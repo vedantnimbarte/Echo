@@ -122,11 +122,11 @@ arboard = "3"
 
 # Shared plugin API — the trait/manifest definitions plugin authors compile
 # against. The host must use the same definitions for the FFI to be sound.
-echo-sdk = { path = "echo-sdk" }
+echo-sdk = { path = "echo-sdk", features = ["specta"] }
 
 # Local Whisper (optional — see [features].whisper above).
 whisper-rs = { version = "0.13", optional = true }
-specta = { version = "2.0.0-rc.22", features = ["derive"] }
+specta = { version = "2.0.0-rc.22", features = ["derive", "chrono", "serde_json"] }
 specta-typescript = "0.0.9"
 tauri-specta = { version = "2.0.0-rc.21", features = ["derive", "typescript"] }
 
@@ -172,4 +172,3 @@ zbus = "5"
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = { version = "0.24", features = ["highsierra"] }
 core-foundation = "0.10"
-

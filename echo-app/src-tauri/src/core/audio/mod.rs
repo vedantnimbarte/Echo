@@ -41,7 +41,7 @@ const PRE_ROLL_SAMPLES: usize = (16_000 * PRE_ROLL.as_millis() as usize) / 1000;
 /// indefinitely because the user *might* dictate later would be indefensible.
 const WARM_TIMEOUT: Duration = Duration::from_secs(10);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct AudioDevice {
     pub name: String,
     pub is_default: bool,

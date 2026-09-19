@@ -45,6 +45,7 @@ const SUPPORTED_EXTENSIONS: [&str; 4] = ["wav", "mp3", "ogg", "flac"];
 /// The dictionary is applied to the result exactly as it is for dictation, so
 /// an imported transcript spells names the same way a dictated one does.
 #[tauri::command]
+#[specta::specta]
 pub async fn transcribe_file(
     state: State<'_, AppState>,
     path: String,
@@ -260,6 +261,7 @@ fn mime_for(path: &Path) -> &'static str {
 
 /// The formats this can accept, for a file-picker filter.
 #[tauri::command]
+#[specta::specta]
 pub fn supported_import_formats() -> Vec<String> {
     SUPPORTED_EXTENSIONS.iter().map(|s| s.to_string()).collect()
 }

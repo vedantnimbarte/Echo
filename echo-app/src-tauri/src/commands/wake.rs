@@ -233,6 +233,7 @@ pub fn disarm(state: &AppState) {
 
 /// Turn wake-word listening on or off, persisting the choice.
 #[tauri::command]
+#[specta::specta]
 pub async fn set_wake_word_enabled(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -256,18 +257,21 @@ pub async fn set_wake_word_enabled(
 
 /// Whether wake-word listening is currently armed.
 #[tauri::command]
+#[specta::specta]
 pub fn wake_word_active(state: State<'_, AppState>) -> bool {
     state.wake_active.load(Ordering::SeqCst)
 }
 
 /// The wake phrase catalog with local download status.
 #[tauri::command]
+#[specta::specta]
 pub fn list_wake_words(state: State<'_, AppState>) -> Vec<WakePhraseInfo> {
     state.wake_models.list()
 }
 
 /// Whether the selected phrase can actually be loaded right now.
 #[tauri::command]
+#[specta::specta]
 pub fn wake_word_ready(state: State<'_, AppState>) -> bool {
     let (_, phrase, _) = wake_settings(state.inner());
     state.wake_models.is_ready(&phrase)
@@ -276,6 +280,7 @@ pub fn wake_word_ready(state: State<'_, AppState>) -> bool {
 /// Download a wake phrase (and the shared feature models on first use),
 /// emitting `echo://wake-model-progress` (bare f32, 0..1).
 #[tauri::command]
+#[specta::specta]
 pub async fn download_wake_model(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -297,6 +302,7 @@ pub async fn download_wake_model(
 /// Select the wake phrase, restarting the listener so the change takes effect
 /// without a relaunch.
 #[tauri::command]
+#[specta::specta]
 pub async fn set_wake_word_model(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -313,6 +319,7 @@ pub async fn set_wake_word_model(
 /// Set the detection threshold (0.05..0.99 — lower catches more and misfires
 /// more) and restart the listener with it.
 #[tauri::command]
+#[specta::specta]
 pub async fn set_wake_word_sensitivity(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -333,6 +340,7 @@ pub async fn set_wake_word_sensitivity(
 /// Import a user-trained `.onnx` classifier and select it. The shared feature
 /// models are fetched first if this is the user's first wake model.
 #[tauri::command]
+#[specta::specta]
 pub async fn import_wake_model(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -383,6 +391,7 @@ fn restart(app: &AppHandle, state: &AppState) {
 
 /// Report why the wake word cannot run, for the settings UI to display.
 #[tauri::command]
+#[specta::specta]
 pub fn wake_word_status(state: State<'_, AppState>) -> Result<String> {
     let (enabled, phrase, _) = wake_settings(state.inner());
     Ok(if !enabled {

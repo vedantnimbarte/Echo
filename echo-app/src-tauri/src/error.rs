@@ -174,6 +174,35 @@ impl serde::Serialize for EchoError {
     }
 }
 
+/**
+ * SOURCE OF TRUTH KEYWORDS: Type for EchoError
+ * WHAT:  Tells specta that an EchoError crosses the wire as a SerializedError.
+ * WHY:   Hand-written rather than derived, because the enum holds
+ *        `rusqlite::Error` and `serde_json::Error` — foreign types with no
+ *        TypeScript meaning, and no business appearing in a generated binding.
+ *        What the frontend actually receives is whatever the Serialize impl
+ *        above produces, so that is the shape declared here. The two are one
+ *        fact and must be changed together; `serialises_with_a_code_the_
+ *        frontend_can_branch_on` below is the test that notices if they
+ *        are not.
+ * WHERE: Required by tauri-specta for every command returning Result<_, EchoError>.
+ */
+impl specta::Type for EchoError {
+    fn inline(
+        type_map: &mut specta::TypeCollection,
+        generics: specta::Generics,
+    ) -> specta::datatype::DataType {
+        <SerializedError as specta::Type>::inline(type_map, generics)
+    }
+
+    fn reference(
+        type_map: &mut specta::TypeCollection,
+        generics: &[specta::datatype::DataType],
+    ) -> specta::datatype::reference::Reference {
+        <SerializedError as specta::Type>::reference(type_map, generics)
+    }
+}
+
 pub type Result<T> = std::result::Result<T, EchoError>;
 
 #[cfg(test)]

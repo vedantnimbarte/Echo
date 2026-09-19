@@ -76,7 +76,7 @@ impl FieldKind {
 ///
 /// Surfaced in Settings beside the toggle, because the failure it describes is
 /// silent: the guard is on, and where detection is missing it never fires.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum Detection {
     /// Every app that publishes an accessibility tree can be asked.

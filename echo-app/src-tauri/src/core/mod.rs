@@ -9,6 +9,7 @@ pub mod events;
 pub mod field;
 pub mod format;
 pub mod gpu;
+pub mod hotkeys;
 pub mod injection;
 pub mod lock;
 pub mod modtap;

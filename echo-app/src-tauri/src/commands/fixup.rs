@@ -22,6 +22,7 @@ use crate::{
 /// Returns whether there was anything to undo, so the caller can stay quiet
 /// rather than reporting a failure when the answer is simply "nothing yet".
 #[tauri::command]
+#[specta::specta]
 pub async fn undo_last_insert(app: AppHandle) -> Result<bool> {
     undo_delivery(&app).await
 }
@@ -58,6 +59,7 @@ pub(crate) async fn undo_delivery(app: &AppHandle) -> Result<bool> {
 /// What changes is the decoder: [`retry_target`] picks a stronger local model
 /// by default, and a cloud provider only if the user chose one.
 #[tauri::command]
+#[specta::specta]
 pub async fn retry_last(app: AppHandle) -> Result<Option<String>> {
     let (audio, injector, language) = {
         let state = app.state::<AppState>();
@@ -265,6 +267,7 @@ async fn retry_locally(
 /// What the retry can be pointed at: every registered provider, plus every
 /// local model that is actually downloaded.
 #[tauri::command]
+#[specta::specta]
 pub async fn retry_targets(state: State<'_, AppState>) -> Result<Vec<String>> {
     let mut targets: Vec<String> = state
         .models

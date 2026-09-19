@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 pub mod learn;
 pub mod sync;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct DictionaryEntry {
     pub id: Option<i64>,
     pub phrase: String,

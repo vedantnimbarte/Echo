@@ -39,7 +39,9 @@ pub use capability::{
     OsPermission, SettingChoice, SettingDef, SettingKind, SettingSection, SettingValue,
 };
 
-use crate::commands::hotkey::{DEFAULT_HOTKEY, DEFAULT_RETRY_HOTKEY, DEFAULT_UNDO_HOTKEY};
+use crate::core::hotkeys::{
+    DEFAULT_HOTKEY, DEFAULT_MODE, DEFAULT_RETRY_HOTKEY, DEFAULT_UNDO_HOTKEY,
+};
 use crate::core::asr::model_manager::{DEFAULT_MODEL, DEFAULT_NEMO_MODEL};
 use crate::core::injection::DEFAULT_SETTLE_MS;
 use crate::core::wake::DEFAULT_THRESHOLD;
@@ -211,20 +213,27 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                 ),
                 choice(
                     "recording_mode",
-                    "How the hotkey behaves",
-                    "Tap to start and tap again to stop, hold the key down for as long as you \
-                     are speaking, or let Echo decide from how long you held it.",
+                    "How recording ends",
+                    "The hotkey always starts it. What stops it is the choice.",
                     SettingSection::Recording,
                     vec![
                         SettingChoice::described(
-                            "auto",
-                            "Decide from the press",
-                            "A tap toggles; a long press holds.",
+                            "toggle",
+                            "Tap the hotkey again",
+                            "The recording runs until you say so.",
                         ),
-                        SettingChoice::new("hotkey", "Tap to start, tap to stop"),
-                        SettingChoice::new("hold", "Hold while speaking"),
+                        SettingChoice::described(
+                            "hold",
+                            "Hold while speaking",
+                            "Releasing the key ends it.",
+                        ),
+                        SettingChoice::described(
+                            "auto",
+                            "Stop when you stop talking",
+                            "Ends on a pause, with no second keypress.",
+                        ),
                     ],
-                    "auto",
+                    DEFAULT_MODE,
                 ),
                 needs(
                     dynamic(

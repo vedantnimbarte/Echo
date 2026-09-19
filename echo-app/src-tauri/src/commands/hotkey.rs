@@ -8,30 +8,17 @@ use crate::{
     storage::repositories,
 };
 
-/// Default global hotkey used when none is configured.
-pub const DEFAULT_HOTKEY: &str = "CommandOrControl+Shift+Space";
-
-/// Default recording mode. Historically `"manual"`, which meant this.
-pub const DEFAULT_MODE: &str = "toggle";
-
-/// Take back the last insert. Global, because by the time you notice the
-/// mistake the focus is in the app that received the text.
-///
-/// Alt rather than Shift: `Ctrl+Shift+Z` is *redo* in most editors, and a
-/// global binding would take it away from every app on the machine.
-pub const DEFAULT_UNDO_HOTKEY: &str = "CommandOrControl+Alt+Z";
-
-/// Re-decode the last utterance on a stronger model.
-pub const DEFAULT_RETRY_HOTKEY: &str = "CommandOrControl+Alt+R";
-
-/// Stored in place of an accelerator to leave a fix-up unbound. A global
-/// shortcut is taken from every other app on the machine, so being able to give
-/// one back matters more here than for the dictation hotkey.
-pub const UNBOUND: &str = "off";
 
 /// Tap the hotkey: start if idle, stop if recording.
 const TOGGLE: &str = "echo://hotkey-toggle";
 /// Hold the hotkey: these bracket a single utterance.
+// The accelerators themselves live in core/hotkeys.rs, because the registry
+// declares them as setting defaults and sits below this module. Re-exported so
+// the existing `commands::hotkey::DEFAULT_HOTKEY` call sites keep working.
+pub use crate::core::hotkeys::{
+    DEFAULT_HOTKEY, DEFAULT_MODE, DEFAULT_RETRY_HOTKEY, DEFAULT_UNDO_HOTKEY, UNBOUND,
+};
+
 const PRESS: &str = "echo://hotkey-press";
 const RELEASE: &str = "echo://hotkey-release";
 
@@ -55,6 +42,7 @@ fn setting(state: &AppState, key: &str, fallback: &str) -> String {
 
 /// The currently configured global hotkey (or the default).
 #[tauri::command]
+#[specta::specta]
 pub fn get_hotkey(state: State<'_, AppState>) -> Result<String> {
     Ok(setting(state.inner(), "hotkey", DEFAULT_HOTKEY))
 }
@@ -66,6 +54,7 @@ pub fn get_hotkey(state: State<'_, AppState>) -> Result<String> {
 /// describes is silent: on Wayland the shortcut registers without complaint and
 /// then never fires.
 #[tauri::command]
+#[specta::specta]
 pub fn hotkey_support() -> crate::core::session::HotkeySupport {
     crate::core::session::hotkey_support()
 }
@@ -199,6 +188,7 @@ pub fn apply(app: &AppHandle, state: &AppState) -> Result<()> {
 /// system refuses is reported by [`bind_fixups`] and leaves the rest working.
 /// Pass [`UNBOUND`] to turn one off.
 #[tauri::command]
+#[specta::specta]
 pub fn set_fixup_hotkey(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -222,6 +212,7 @@ pub fn set_fixup_hotkey(
 
 /// The fix-up shortcuts as currently configured.
 #[tauri::command]
+#[specta::specta]
 pub fn get_fixup_hotkeys(state: State<'_, AppState>) -> (String, String) {
     (
         setting(state.inner(), "undo_hotkey", DEFAULT_UNDO_HOTKEY),
@@ -237,6 +228,7 @@ pub fn get_fixup_hotkeys(state: State<'_, AppState>) -> (String, String) {
 /// bindings are vetted, and rejecting an old one here would only strand the
 /// user with a hotkey they cannot change.
 #[tauri::command]
+#[specta::specta]
 pub fn register_hotkey(app: AppHandle, state: State<'_, AppState>, shortcut: String) -> Result<()> {
     let mode = setting(state.inner(), "recording_mode", DEFAULT_MODE);
     bind(&app, state.inner(), &shortcut, &mode)?;
@@ -252,6 +244,7 @@ pub fn register_hotkey(app: AppHandle, state: State<'_, AppState>, shortcut: Str
 /// modifier it also needs a different rule for telling a hold from a chord — so
 /// the binding is not independent of the mode.
 #[tauri::command]
+#[specta::specta]
 pub fn set_recording_mode(app: AppHandle, state: State<'_, AppState>, mode: String) -> Result<()> {
     {
         let conn = state.db.lock().unwrap();

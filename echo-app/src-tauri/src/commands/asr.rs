@@ -18,6 +18,7 @@ use crate::{
 
 /// List the Whisper model catalog with local download status.
 #[tauri::command]
+#[specta::specta]
 pub fn list_models(state: State<'_, AppState>) -> Vec<ModelInfo> {
     state.models.list()
 }
@@ -25,6 +26,7 @@ pub fn list_models(state: State<'_, AppState>) -> Vec<ModelInfo> {
 /// Download a model, emitting `echo://model-download-progress` updates and a
 /// final `echo://model-download-complete` event.
 #[tauri::command]
+#[specta::specta]
 pub async fn download_model(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -175,6 +177,7 @@ pub async fn register_nemo_provider(state: &AppState) -> Result<()> {
 
 /// Download the NeMo-Speech binaries for this machine.
 #[tauri::command]
+#[specta::specta]
 pub async fn download_nemo_engine(app: AppHandle, state: State<'_, AppState>) -> Result<()> {
     let pack = NemoPack::for_gpu(state.binaries.gpu());
     let binaries = state.nemo_binaries.clone();
@@ -200,7 +203,7 @@ pub async fn download_nemo_engine(app: AppHandle, state: State<'_, AppState>) ->
 
 /// What the UI needs to offer the NeMo engine: whether each half is present,
 /// and what installing the missing half would cost.
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, specta::Type)]
 pub struct NemoStatus {
     /// Binaries and the selected model are both present.
     pub ready: bool,
@@ -214,6 +217,7 @@ pub struct NemoStatus {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn nemo_status(state: State<'_, AppState>) -> NemoStatus {
     let model = current_nemo_model(&state);
     let pack = NemoPack::for_gpu(state.binaries.gpu());
@@ -230,6 +234,7 @@ pub fn nemo_status(state: State<'_, AppState>) -> NemoStatus {
 /// Switch the active ASR provider, persisting the choice. Selecting `"local"`
 /// (re)builds the Whisper provider from the bundled binary + selected model.
 #[tauri::command]
+#[specta::specta]
 pub async fn set_asr_provider(state: State<'_, AppState>, name: String) -> Result<()> {
     {
         let conn = state.db.lock().unwrap();
@@ -264,6 +269,7 @@ pub async fn set_asr_provider(state: State<'_, AppState>, name: String) -> Resul
 /// says which engine a model belongs to, so choosing a NeMo model switches the
 /// engine rather than asking the user to do it in two places.
 #[tauri::command]
+#[specta::specta]
 pub async fn set_whisper_model(state: State<'_, AppState>, name: String) -> Result<()> {
     let engine = crate::core::asr::model_manager::ModelManager::engine_of(&name);
     {
@@ -287,6 +293,7 @@ pub async fn set_whisper_model(state: State<'_, AppState>, name: String) -> Resu
 /// Refuses to remove the model the local engine is set to use: that would leave
 /// transcription silently broken with nothing on screen explaining why.
 #[tauri::command]
+#[specta::specta]
 pub fn delete_model(state: State<'_, AppState>, name: String) -> Result<()> {
     if current_whisper_model(state.inner()) == name {
         return Err(EchoError::Config(format!(
@@ -299,6 +306,7 @@ pub fn delete_model(state: State<'_, AppState>, name: String) -> Result<()> {
 /// Whether the local engine is ready to transcribe (binary + selected model
 /// both present). Used by onboarding and settings to gate the local option.
 #[tauri::command]
+#[specta::specta]
 pub fn whisper_ready(state: State<'_, AppState>) -> bool {
     let model = current_whisper_model(state.inner());
     state.binaries.is_installed() && state.models.is_downloaded(&model)
@@ -308,6 +316,7 @@ pub fn whisper_ready(state: State<'_, AppState>) -> bool {
 /// `echo://whisper-binary-progress` (bare f32, 0..1). On platforms without a
 /// prebuilt release this errors with guidance to install one on PATH.
 #[tauri::command]
+#[specta::specta]
 pub async fn download_whisper_binary(app: AppHandle, state: State<'_, AppState>) -> Result<()> {
     let binaries = state.binaries.clone();
     let (tx, mut rx) = mpsc::channel::<f32>(32);
@@ -344,7 +353,7 @@ pub fn local_decode_settings(conn: &rusqlite::Connection) -> (usize, bool) {
 
 /// What the settings UI needs to show about compute: what was detected, what is
 /// installed, and what is actually in use right now.
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, specta::Type)]
 pub struct GpuStatus {
     /// Human-readable detected backend, e.g. "NVIDIA CUDA 12.x".
     pub detected: String,
@@ -364,6 +373,7 @@ pub struct GpuStatus {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn gpu_status(state: State<'_, AppState>) -> GpuStatus {
     let (threads, enabled) = {
         let conn = state.db.lock().unwrap();
@@ -387,6 +397,7 @@ pub fn gpu_status(state: State<'_, AppState>) -> GpuStatus {
 /// Download the accelerated whisper.cpp build this machine can run, emitting
 /// `echo://whisper-binary-progress` (bare f32, 0..1).
 #[tauri::command]
+#[specta::specta]
 pub async fn download_gpu_pack(app: AppHandle, state: State<'_, AppState>) -> Result<()> {
     let pack = state.binaries.available_gpu_pack().ok_or_else(|| {
         EchoError::NotFound("No accelerated whisper build is available for this machine".into())
@@ -416,6 +427,7 @@ pub async fn download_gpu_pack(app: AppHandle, state: State<'_, AppState>) -> Re
 /// Turn GPU decoding on or off. Also clears a latched failure, so this doubles
 /// as the "try the GPU again" control after fixing a driver.
 #[tauri::command]
+#[specta::specta]
 pub async fn set_gpu_enabled(state: State<'_, AppState>, enabled: bool) -> Result<()> {
     {
         let conn = state.db.lock().unwrap();
@@ -434,6 +446,7 @@ pub async fn set_gpu_enabled(state: State<'_, AppState>, enabled: bool) -> Resul
 
 /// Pin the decode thread count, or pass "auto" to let Echo choose.
 #[tauri::command]
+#[specta::specta]
 pub async fn set_whisper_threads(state: State<'_, AppState>, threads: String) -> Result<()> {
     {
         let conn = state.db.lock().unwrap();
@@ -449,6 +462,7 @@ pub async fn set_whisper_threads(state: State<'_, AppState>, threads: String) ->
 /// Ids of every binary pack currently installed on disk. Lets the settings UI
 /// offer to reclaim the disk a superseded pack is using.
 #[tauri::command]
+#[specta::specta]
 pub fn installed_packs(state: State<'_, AppState>) -> Vec<String> {
     [Pack::Cpu, Pack::Cuda11, Pack::Cuda12]
         .into_iter()

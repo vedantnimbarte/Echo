@@ -9,3 +9,12 @@ readme = "README.md"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
+# Optional, and off by default ON PURPOSE. This crate is the public API plugin
+# authors compile against, so every dependency it carries is one they inherit.
+# Echo itself turns this on to generate TypeScript bindings for the plugin types
+# it shows in its own UI; a plugin author never needs it.
+specta = { version = "2.0.0-rc.22", features = ["derive"], optional = true }
+
+[features]
+default = []
+specta = ["dep:specta"]

@@ -87,6 +87,7 @@ pub type SettingsAccessor = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
 /// implementing it without declaring it still does. The list is what the user
 /// is shown before installing, so keep the two in agreement.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 #[serde(rename_all = "lowercase")]
 pub enum PluginPermission {
     Asr,
@@ -97,6 +98,7 @@ pub enum PluginPermission {
 
 /// Manifest shipped alongside a plugin as `plugin.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct PluginManifest {
     pub name: String,
     pub version: String,
@@ -112,6 +114,7 @@ pub struct PluginManifest {
 
 /// Summary of an installed plugin returned to the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
 pub struct PluginInfo {
     pub name: String,
     pub version: String,
