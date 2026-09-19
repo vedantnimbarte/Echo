@@ -6,6 +6,7 @@ use crate::{
 
 /// Counts of locally stored telemetry events, grouped by type.
 #[tauri::command]
+#[specta::specta]
 pub fn get_telemetry_summary(state: State<'_, AppState>) -> Result<Vec<TelemetrySummaryItem>> {
     let conn = state.db.lock().unwrap();
     Ok(state.telemetry.summary(&conn)?)
@@ -13,6 +14,7 @@ pub fn get_telemetry_summary(state: State<'_, AppState>) -> Result<Vec<Telemetry
 
 /// Delete all locally stored telemetry events.
 #[tauri::command]
+#[specta::specta]
 pub fn clear_telemetry(state: State<'_, AppState>) -> Result<()> {
     let conn = state.db.lock().unwrap();
     Ok(state.telemetry.clear(&conn)?)
@@ -20,6 +22,7 @@ pub fn clear_telemetry(state: State<'_, AppState>) -> Result<()> {
 
 /// Enable or disable telemetry collection (persists the choice).
 #[tauri::command]
+#[specta::specta]
 pub fn set_telemetry_enabled(state: State<'_, AppState>, enabled: bool) -> Result<()> {
     {
         let conn = state.db.lock().unwrap();
@@ -36,6 +39,7 @@ pub fn set_telemetry_enabled(state: State<'_, AppState>, enabled: bool) -> Resul
 /// Record a usage event from the frontend (e.g. transcription_complete). Only
 /// non-sensitive metadata should be passed — never transcript text or audio.
 #[tauri::command]
+#[specta::specta]
 pub fn record_telemetry_event(
     state: State<'_, AppState>,
     event_type: String,

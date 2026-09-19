@@ -23,7 +23,7 @@ import { TitleBar } from "./components/common/TitleBar";
 import { DictionaryPanel } from "./components/dictionary/DictionaryPanel";
 import { HistoryPanel } from "./components/history/HistoryPanel";
 import { InsightsPanel } from "./components/insights/InsightsPanel";
-import { SettingsPanel, type SettingsPage } from "./components/settings/SettingsPanel";
+import { SettingsView, type SettingsPage } from "./components/settings/SettingsView";
 import { PluginsPanel } from "./components/plugins/PluginsPanel";
 import { Onboarding } from "./components/onboarding/Onboarding";
 
@@ -261,7 +261,11 @@ export default function App() {
   }
 
   return (
-    <div className="relative flex h-screen flex-col overflow-hidden bg-[var(--surface-0)] text-[var(--ink)] select-none">
+    // `app-surface` rather than a background utility: the window is transparent
+    // so a native material can sit behind the glass, and whether one actually
+    // applied is only knowable in src-tauri. The class resolves to an opaque
+    // surface when it did not — see styles.css.
+    <div className="app-surface relative flex h-screen flex-col overflow-hidden text-[var(--ink)] select-none">
       {/* Ambient top light — the source the glass edges are lit by. */}
       <div
         className="pointer-events-none absolute inset-x-0 top-0 h-64"
@@ -331,7 +335,7 @@ export default function App() {
         </nav>
 
         <main className="min-w-0 flex-1 overflow-y-auto">
-          {isSettingsPage(page) && <SettingsPanel page={page} />}
+          {isSettingsPage(page) && <SettingsView page={page} />}
           {page === "insights" && <InsightsPanel />}
           {page === "dictionary" && <DictionaryPanel />}
           {page === "dictation" && (

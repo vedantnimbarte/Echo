@@ -5,6 +5,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { commands, type PluginManifest } from "../../ipc/commands";
 import { Page, Tabs, Group } from "../common/Page";
 import { BuildGuide } from "./BuildGuide";
+import { errorMessage } from "../../lib/errors";
 
 /**
  * Two things happen on this page and only one of them is a list: managing what
@@ -38,7 +39,7 @@ export function PluginsPanel() {
     // install, or one built against an older echo-sdk. The reason is the
     // whole fix ("rebuild it"), so it goes on screen, not only in the log.
     onError: (e) => {
-      setError(String(e));
+      setError(errorMessage(e));
       invalidate();
     },
   });
@@ -53,7 +54,7 @@ export function PluginsPanel() {
   const useEngineMutation = useMutation({
     mutationFn: (name: string) => commands.setAsrProvider(`plugin:${name}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["setting", "asr_provider"] }),
-    onError: (e) => setError(String(e)),
+    onError: (e) => setError(errorMessage(e)),
   });
 
   const uninstallMutation = useMutation({
@@ -80,7 +81,7 @@ export function PluginsPanel() {
       const manifest = await commands.inspectPlugin(selected);
       setPending({ path: selected, manifest });
     } catch (e) {
-      setError(String(e));
+      setError(errorMessage(e));
     }
   }
 
@@ -91,7 +92,7 @@ export function PluginsPanel() {
       invalidate();
       setPending(null);
     } catch (e) {
-      setError(String(e));
+      setError(errorMessage(e));
     }
   }
 

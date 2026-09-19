@@ -1,34 +1,19 @@
 @import "tailwindcss";
+@import "./styles/tokens.css";
 
-/* Bundled, not fetched. Both faces ship inside the app, so a machine that has
-   never touched the internet renders the same page as one that has and the
-   strict CSP stays closed.
-
-   Garamond is latin-only on purpose: it sets page titles and nothing else, and
-   Echo ships English, Spanish, German and French — every glyph those need is in
-   the latin subset. Adding latin-ext would cost 148 KB to cover languages the
-   app has no catalogue for. Add it back the day a locale needs it. */
-@import "@fontsource/eb-garamond/latin-500.css";
-@import "@fontsource-variable/figtree/wght.css";
 
 /*
-  Echo — "Monolith" design language, warm cast.
+  SOURCE OF TRUTH KEYWORDS: styles.css, glass, glass-strong, field, display,
+    compatibility aliases, layer components
 
-  Hierarchy comes from elevation rather than hue: each surface is a translucent
-  wash over the near-black base, lit along its top edge and dropped onto a
-  layered shadow, so stacking them reads as glass on glass. One accent survives
-  — the record red — because a live microphone is the single state that must be
-  unmistakable across a room. It is spent on the record dot and nothing else:
-  one small solid mark, not a glow over everything near it.
+  Echo's global stylesheet. Every literal value lives in styles/tokens.css;
+  this file holds only the element defaults, the shared surface classes and the
+  compatibility aliases that carry the old component CSS onto the new palette.
 
-  Echo turns speech into set text, so the window that configures it is set like
-  a page. EB Garamond, a face cut for books, carries the title of each page and
-  nothing else; Figtree does every job that involves operating rather than
-  reading — labels, controls, numbers. Two families, no overlap.
-
-  The base is warm brown-black rather than the old blue-black and the white is
-  paper-white rather than screen-white, because a serif on a cold ground reads
-  clinical.
+  The design is ported from murmur's docs/04-DESIGN-SYSTEM.md: real material
+  rather than CSS glass, one elevated surface per view, depth from layering
+  rather than from colour, and no accent hue at all — state is carried by form,
+  and `--danger` is the only colour in the app.
 
   Explanation does not sit on the page. Every "why" lives behind an info icon
   and appears on hover or keyboard focus, so a page shows what you can change
@@ -36,69 +21,63 @@
 */
 
 :root {
-  /* Opt the whole document into dark UA rendering. Native controls we don't
-     paint ourselves — the <select> popup, number-input spinners, form control
-     defaults — are drawn by the OS, and without this it draws them for a light
-     page: a white dropdown behind our near-white option text.
+  /* ── Compatibility aliases ─────────────────────────────────────────────
+     Echo's components were written against the "Monolith" token names. The
+     palette they resolve to is now murmur's (see styles/tokens.css); these
+     aliases are what let that swap land in one file instead of in every
+     component at once.
+
+     They are SCAFFOLDING, not design. Each one disappears as its components
+     are rewritten onto the real token names during the settings work, and the
+     block is meant to reach zero entries and be deleted. A new component must
+     never reach for a name in here — there is a real token behind every one of
+     them, and that is the one to use. */
+
+  /* Opt the whole document into the right UA rendering. Native controls we
+     don't paint ourselves — the <select> popup, number-input spinners — are
+     drawn by the OS, and without this it draws a light popup behind near-white
+     option text. `light dark` rather than `dark`, because the app now follows
+     the system scheme.
 
      Safe for the frameless pill: html/body set `background: transparent`
      explicitly, so this does not paint the canvas. */
-  color-scheme: dark;
+  color-scheme: light dark;
 
-  /* Two families, sharply divided by role. Nothing is set in both. */
-  --font-display: "EB Garamond", "Iowan Old Style", Palatino, Georgia, serif;
-  --font-ui: "Figtree Variable", Figtree, "Segoe UI Variable Text", "Segoe UI",
-    system-ui, -apple-system, sans-serif;
+  /* Type. Both roles now resolve to the one system stack: the two-family split
+     went with the Monolith palette, because a serif page title was that
+     design's idea and this is not that design. */
+  --font-display: var(--font-system);
+  --font-ui: var(--font-system);
 
-  /* The only chromatic value in the app. */
-  --rec: #ff453a;
+  /* Surfaces. The old scale was three translucent washes over an opaque base;
+     the new materials are glass over whatever is behind the window, so the
+     base is the panel material and the steps above it are the sunken/elevated
+     pair rather than three tints of one colour. */
+  --surface-0: var(--surface-opaque);
+  --surface-1: var(--surface-sunken);
+  --surface-2: var(--surface-sunken-strong);
+  --surface-3: var(--surface-elevated);
 
-  /* Window base. Warm brown-black: it gives the glass something to tint and
-     keeps the serif from reading like a hospital chart. */
-  --surface-0: #100e0c;
+  --glass: var(--material-panel-surface);
+  --glass-strong: var(--material-elevated-surface);
+  --glass-base: var(--material-panel-surface);
+  --popup: var(--surface-opaque-elevated);
 
-  /* Elevation scale: a translucent warm wash over the base. Higher = closer to
-     you. Tinted rather than pure white, so stacked surfaces warm as they rise
-     instead of going grey. */
-  --surface-1: rgba(255, 246, 235, 0.035);
-  --surface-2: rgba(255, 246, 235, 0.065);
-  --surface-3: rgba(255, 246, 235, 0.105);
+  --hairline: var(--border-hairline);
+  --hairline-strong: var(--border-highlight);
 
-  /* Glass panes float over the desktop rather than over the window base, so
-     they carry their own darkness instead of relying on what's behind them. */
-  --glass: rgba(22, 19, 16, 0.64);
-  --glass-strong: rgba(26, 23, 19, 0.82);
+  --ink: var(--text-primary);
+  --ink-muted: var(--text-secondary);
+  --ink-faint: var(--text-tertiary);
 
-  /* The page header, which floats over the window base rather than over the
-     desktop — so it tints `--surface-0` rather than carrying its own darkness
-     the way `--glass` does. Opaque enough that a 30px serif title stays clean
-     over whatever is passing underneath, sheer enough that you can see it pass. */
-  --glass-base: rgba(16, 14, 12, 0.78);
+  --shadow-sm: var(--shadow-card);
+  --shadow-md: var(--shadow-card);
+  --shadow-lg: var(--shadow-panel);
 
-  /* The dropdown popup can't be translucent — it's an OS window with nothing
-     of ours behind it — so it needs a solid stand-in for the glass surfaces. */
-  --popup: #1c1916;
-
-  --hairline: rgba(255, 246, 235, 0.09);
-  --hairline-strong: rgba(255, 246, 235, 0.24);
-
-  /* Paper white, not screen white. */
-  --ink: #f6f2ec;
-  --ink-muted: #a9a199;
-  /* Kept at ≥4.5:1 on the surfaces it actually sits on, which matters because
-     it sets the smallest text in the app. */
-  --ink-faint: #8b8279;
-
-  /* Each shadow is a pair: a tight contact shadow that anchors the edge, and a
-     wide ambient one that gives it depth. A single blur reads flat. */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px -2px rgba(0, 0, 0, 0.35);
-  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.45), 0 10px 28px -8px rgba(0, 0, 0, 0.55);
-  --shadow-lg: 0 4px 10px rgba(0, 0, 0, 0.5), 0 26px 64px -14px rgba(0, 0, 0, 0.75);
-
-  /* The lit top edge. This one line is what makes a flat panel read as a slab
-     of glass catching light from above. */
-  --edge-light: inset 0 1px 0 rgba(255, 246, 235, 0.09);
-  --edge-light-strong: inset 0 1px 0 rgba(255, 246, 235, 0.16);
+  /* The lit top edge — the one line that makes a flat panel read as a slab of
+     glass catching light from above. */
+  --edge-light: inset 0 1px 0 var(--border-highlight);
+  --edge-light-strong: inset 0 1px 0 var(--border-highlight);
 }
 
 /* Both webview windows share one bundle. Keep the canvas transparent so the
@@ -109,6 +88,28 @@ body,
   height: 100%;
   margin: 0;
   background: transparent;
+}
+
+/*
+  The settings window's own surface.
+
+  Its window is transparent so a native material can sit behind the glass, which
+  means something has to paint. When src-tauri managed to apply one it sets
+  `data-material="native"` on <html> and the page stays translucent, letting the
+  OS material through. When it could not — Windows 10, most Linux desktops —
+  this opaque surface is what stops the app being literally see-through.
+
+  Scoped to `#root:has(...)`? No: the pill shares this stylesheet and must stay
+  transparent, so this keys off a class the settings shell sets on itself.
+*/
+.app-surface {
+  background: var(--surface-opaque);
+}
+
+html[data-material="native"] .app-surface {
+  background: var(--material-panel-surface);
+  -webkit-backdrop-filter: blur(var(--glass-backdrop-blur)) saturate(140%);
+  backdrop-filter: blur(var(--glass-backdrop-blur)) saturate(140%);
 }
 
 body {
@@ -123,15 +124,15 @@ body {
   font-feature-settings: "tnum" 1;
 }
 
-/* Page and step titles — the only thing Garamond is allowed to set. Its small
-   x-height means a size that looks right for the sans looks timid here, so
-   display type starts where the sans would already have stopped. A hair of
-   negative tracking is what a serif at this size both needs and can carry. */
+/* Page and step titles. The face is the system one now — the serif went with
+   the Monolith palette — so this class carries weight and tracking only, and
+   exists so a title is declared once rather than assembled per page. */
 .display {
   font-family: var(--font-display);
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 1.15;
+  font-size: var(--text-title-size);
+  line-height: var(--text-title-line);
+  font-weight: var(--text-title-weight);
+  letter-spacing: var(--text-title-tracking);
 }
 
 /* ---- Shared surfaces ------------------------------------------------------ */
@@ -140,6 +141,105 @@ body {
   `class="field pl-8"` and get the field treatment with its own padding.
 */
 @layer components {
+  /* ── The three materials (docs/04 §3) ─────────────────────────────────
+     Every glass surface gets the same three-part treatment: the surface tint,
+     a hairline, and an inner highlight along the top edge. The NATIVE effect
+     view behind the window is the actual material — NSVisualEffectView on
+     macOS, Mica on Windows 11 — and this is the web layer's whole
+     contribution.
+
+     `backdrop-filter` is the fallback, not the primary. On Linux there is no
+     compositor material to ask for and it is the entire effect; everywhere
+     else it sits on top of the real one and mostly does nothing, which is the
+     correct amount. */
+  .material {
+    position: relative;
+    border: var(--border-width-hairline) solid var(--border-hairline);
+    box-shadow: inset 0 var(--border-width-hairline) 0 var(--border-highlight);
+    -webkit-backdrop-filter: blur(var(--glass-backdrop-blur)) saturate(140%);
+    backdrop-filter: blur(var(--glass-backdrop-blur)) saturate(140%);
+    isolation: isolate;
+  }
+
+  /* Noise at 3% is what stops a large glass area reading as flat plastic. */
+  .material::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background-image: var(--noise-image);
+    opacity: var(--noise-opacity);
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .material-panel {
+    background: var(--material-panel-surface);
+    box-shadow:
+      inset 0 var(--border-width-hairline) 0 var(--border-highlight),
+      var(--material-panel-shadow);
+  }
+
+  .material-elevated {
+    background: var(--material-elevated-surface);
+    border-radius: var(--radius-card);
+    box-shadow:
+      inset 0 var(--border-width-hairline) 0 var(--border-highlight),
+      var(--material-elevated-shadow);
+  }
+
+  .material-pill {
+    background: var(--material-pill-surface);
+    border-radius: var(--radius-pill);
+    box-shadow:
+      inset 0 var(--border-width-hairline) 0 var(--border-highlight),
+      var(--material-pill-shadow);
+  }
+
+  /* ── Rows and sections ────────────────────────────────────────────────
+     Secondary content is grouped by SPACING AND A HAIRLINE, never by giving it
+     a surface of its own. A grid of cards on glass is what makes an interface
+     look like a widget shelf: repeat the surface and none of them is elevated
+     any more, they are just boxes. */
+  .setting-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-5);
+    padding: var(--space-4) 0;
+    border-bottom: var(--border-width-hairline) solid var(--border-hairline);
+  }
+
+  .setting-row:last-child {
+    border-bottom: none;
+  }
+
+  /* The interaction feedback for the whole app, and the reason it is two steps
+     rather than nine: before these existed every button hovered to its own
+     idea of a highlight, which is how an interface reads as jarring while each
+     component looks defensible on its own. */
+  .interactive {
+    transition:
+      background-color var(--motion-duration-fast) var(--motion-ease-standard),
+      border-color var(--motion-duration-fast) var(--motion-ease-standard);
+  }
+
+  .interactive:hover {
+    background: var(--surface-sunken);
+  }
+
+  .interactive:active,
+  .interactive[data-selected="true"] {
+    background: var(--surface-sunken-strong);
+  }
+
+  /* One ring, everywhere, and it is ink — see tokens.css on why there is no
+     accent hue to make it out of. */
+  .focus-ring:focus-visible {
+    outline: var(--focus-ring-width) solid var(--accent);
+    outline-offset: var(--focus-ring-offset);
+  }
+
   /* A panel sitting on the window base — no blur needed, nothing behind it. */
   .glass {
     background: var(--surface-1);

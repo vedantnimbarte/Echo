@@ -13,7 +13,7 @@ use crate::{
 
 /// Portable representation of a dictionary entry for import/export (no ids or
 /// timestamps so files move cleanly between machines).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct DictionaryExportEntry {
     pub phrase: String,
     pub replacement: String,
@@ -92,12 +92,14 @@ async fn load_engine(state: &AppState, raw: Vec<DictionaryEntry>) {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn list_dictionary(state: State<'_, AppState>) -> Result<Vec<DictionaryEntry>> {
     let conn = state.db.lock().unwrap();
     repositories::list_dictionary_entries(&conn)
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn add_dictionary_entry(
     state: State<'_, AppState>,
     phrase: String,
@@ -125,6 +127,7 @@ pub async fn add_dictionary_entry(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn delete_dictionary_entry(state: State<'_, AppState>, id: i64) -> Result<()> {
     let raw = {
         let conn = state.db.lock().unwrap();
@@ -137,6 +140,7 @@ pub async fn delete_dictionary_entry(state: State<'_, AppState>, id: i64) -> Res
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn toggle_dictionary_entry(
     state: State<'_, AppState>,
     id: i64,
@@ -154,6 +158,7 @@ pub async fn toggle_dictionary_entry(
 
 /// Serialize all entries and snippets to a JSON file at the user-chosen path.
 #[tauri::command]
+#[specta::specta]
 pub async fn export_dictionary(state: State<'_, AppState>, path: String) -> Result<()> {
     let (raw, snippets) = {
         let conn = state.db.lock().unwrap();
@@ -191,6 +196,7 @@ pub async fn export_dictionary(state: State<'_, AppState>, path: String) -> Resu
 /// (case-insensitive), and snippets whose trigger isn't. Returns the number of
 /// entries and snippets added.
 #[tauri::command]
+#[specta::specta]
 pub async fn import_dictionary(state: State<'_, AppState>, path: String) -> Result<usize> {
     let contents = std::fs::read_to_string(&path).map_err(|e| EchoError::Config(e.to_string()))?;
     let (imported, snippets) = match serde_json::from_str(&contents)? {
@@ -265,6 +271,7 @@ pub async fn import_dictionary(state: State<'_, AppState>, path: String) -> Resu
 /// [`crate::core::dictionary::learn`]: anything it gets wrong is one click away
 /// from being removed, rather than an invisible rule the user cannot find.
 #[tauri::command]
+#[specta::specta]
 pub async fn learn_from_correction(
     state: State<'_, AppState>,
     original: String,
@@ -354,7 +361,7 @@ const SYNC_POLL: std::time::Duration = std::time::Duration::from_secs(30);
 const KEY_STATUS: &str = "dictionary_sync_status";
 
 /// What the Sync section shows. Persisted, so "last synced" survives a restart.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
 pub struct DictionarySyncStatus {
     pub last_synced_at: Option<chrono::DateTime<chrono::Utc>>,
     pub last_error: Option<String>,
@@ -472,11 +479,13 @@ pub fn start_sync(app: tauri::AppHandle) {
 /// Sync now, from the button. The window also calls this after the folder or
 /// the switch changes, so the result shows at once rather than on the next poll.
 #[tauri::command]
+#[specta::specta]
 pub async fn sync_dictionary_now(app: tauri::AppHandle) -> Result<DictionarySyncStatus> {
     Ok(run_sync(&app).await)
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_dictionary_sync_status(state: State<'_, AppState>) -> DictionarySyncStatus {
     load_status(&state)
 }
@@ -488,6 +497,7 @@ pub fn get_dictionary_sync_status(state: State<'_, AppState>) -> DictionarySyncS
 // the per-app lookup, and it means an edit applies to the very next sentence.
 
 #[tauri::command]
+#[specta::specta]
 pub fn list_snippets(state: State<'_, AppState>) -> Result<Vec<Snippet>> {
     let conn = state.db.lock().unwrap();
     repositories::list_snippets(&conn)
@@ -495,6 +505,7 @@ pub fn list_snippets(state: State<'_, AppState>) -> Result<Vec<Snippet>> {
 
 /// Create a snippet (`id: None`) or update one. Returns its id.
 #[tauri::command]
+#[specta::specta]
 pub fn save_snippet(state: State<'_, AppState>, snippet: Snippet) -> Result<i64> {
     // A trigger with no words in it can never match, and a snippet that
     // expands to nothing would silently eat the utterance that triggered it.
@@ -513,6 +524,7 @@ pub fn save_snippet(state: State<'_, AppState>, snippet: Snippet) -> Result<i64>
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn delete_snippet(state: State<'_, AppState>, id: i64) -> Result<()> {
     let conn = state.db.lock().unwrap();
     repositories::delete_snippet(&conn, id)

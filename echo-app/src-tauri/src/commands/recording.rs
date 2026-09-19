@@ -22,6 +22,7 @@ use crate::{
 };
 
 #[tauri::command]
+#[specta::specta]
 pub async fn start_recording(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -47,6 +48,34 @@ pub async fn start_recording(
 ///
 /// `end_on_pause` decides whether a long pause closes the utterance (see
 /// [`vad_gate`]) or only the end of capture does.
+
+/**
+ * SOURCE OF TRUTH KEYWORDS: cue, sound_cues
+ * WHAT:  Plays one of the three feedback sounds, if the user wants them.
+ * WHY:   Read from the database per event rather than cached, because the
+ *        setting lives in another window and a cached copy would go stale the
+ *        moment it is changed — and this is the one feature whose whole job is
+ *        to be correct in the first second after a keypress.
+ *
+ *        The read is a single indexed SQLite lookup on a connection already
+ *        open, which is cheaper than the thread `cues::play` is about to spawn.
+ * WHERE: Called on start, stop and failure in this file.
+ */
+fn cue(state: &AppState, cue: crate::core::cues::Cue) {
+    let wanted = {
+        let conn = state.db.lock_live();
+        crate::storage::repositories::get_setting(&conn, "sound_cues")
+            .unwrap_or(None)
+            .unwrap_or_else(|| {
+                crate::registry::default_for("sound_cues").unwrap_or_else(|| "false".into())
+            })
+            == "true"
+    };
+    if wanted {
+        crate::core::cues::play(cue);
+    }
+}
+
 pub async fn begin_recording(
     app: AppHandle,
     state: &AppState,
@@ -54,12 +83,23 @@ pub async fn begin_recording(
     language: Option<String>,
     end_on_pause: bool,
 ) -> Result<()> {
-    {
-        let mut recording = state.recording.lock_live();
-        if *recording {
-            return Ok(());
-        }
-        *recording = true;
+    // Marked before anything is claimed, so the capture-start measurement
+    // covers the whole path the user waits through.
+    let armed_at = Instant::now();
+
+    // The machine decides whether this start is real. A second Start while one
+    // is already running returns no effects rather than an error — a hotkey
+    // that fires twice is a fact of life, not a fault.
+    let started = {
+        let mut machine = state.dictation.lock_live();
+        let before = machine.state();
+        let transition = machine
+            .handle(crate::core::dictation::DictationEvent::Start)
+            .map_err(|e| EchoError::Config(e.to_string()))?;
+        before != transition.state
+    };
+    if !started {
+        return Ok(());
     }
 
     app.emit(
@@ -67,6 +107,14 @@ pub async fn begin_recording(
         AppEvent::RecordingStarted,
     )
     .map_err(|e| EchoError::Plugin(e.to_string()))?;
+    // Before the capture stream is opened, deliberately: this sound is the
+    // answer to "did my keypress register", and opening the device can take
+    // long enough on a cold microphone that a later cue would not be one.
+    cue(state, crate::core::cues::Cue::Start);
+    // Escape becomes the cancel key for the length of this dictation, and is
+    // given back at the end of it — see commands/hotkey.rs::arm_escape.
+    crate::commands::hotkey::arm_escape(&app);
+    notify_state(&app, state.dictation_state());
     info!("Recording started");
 
     let provider = state.asr.active_provider_name().await;
@@ -104,7 +152,13 @@ pub async fn begin_recording(
         // recording. Leaving both set meant the hotkey silently did nothing
         // from then on — and the frontend's hotkey path discards this error.
         Err(e) => {
-            *state.recording.lock_live() = false;
+            // CaptureFailed always lands back at Idle, whichever state we were
+            // in. This is the path that used to leave the flag set and the
+            // hotkey silently dead for the rest of the session.
+            let _ = state
+                .dictation
+                .lock_live()
+                .handle(crate::core::dictation::DictationEvent::CaptureFailed);
             let _ = app.emit(
                 AppEvent::RecordingStopped.event_name(),
                 AppEvent::RecordingStopped,
@@ -113,9 +167,26 @@ pub async fn begin_recording(
                 message: e.to_string(),
             };
             let _ = app.emit(event.event_name(), &event);
+            // The start cue has already sounded, so silence here would read as
+            // a recording that is running.
+            cue(state, crate::core::cues::Cue::Failed);
+            crate::commands::hotkey::disarm_escape(&app);
+            notify_state(&app, state.dictation_state());
             return Err(e);
         }
     };
+    // The device is open and delivering, so the machine leaves Arming. Anything
+    // that fails before this point lands back at Idle through CaptureFailed.
+    {
+        let transition = state
+            .dictation
+            .lock_live()
+            .handle(crate::core::dictation::DictationEvent::CaptureReady);
+        if let Ok(transition) = transition {
+            notify_state(&app, transition.state);
+        }
+    }
+
     let (transcript_tx, mut transcript_rx) = mpsc::channel::<TranscriptSegment>(32);
 
     // Plugins, read once for the session: which capabilities anyone offers
@@ -405,7 +476,19 @@ pub async fn begin_recording(
     let app_clone = app.clone();
     let quiet_app = app.clone();
     let peak_for_report = peak_level.clone();
+    // One recorder per dictation. Drained and written once at the end — see
+    // core::telemetry::latency for why this is not a write per stage.
+    let latency = std::sync::Arc::new(crate::core::telemetry::latency::LatencyRecorder::new());
+    // Hotkey to first audio. The number that answers "why did it miss my first
+    // word", which on a cold microphone is most of the answer.
+    latency.record(
+        crate::registry::LatencyStage::CaptureStart,
+        armed_at.elapsed().as_millis() as u64,
+    );
+    let latency_for_task = latency.clone();
+
     tokio::spawn(async move {
+        let latency = latency_for_task;
         let session_started = Instant::now();
         // Whether anything was actually delivered. A session that ends with
         // this false and a silent microphone is the failure this whole pipeline
@@ -702,6 +785,7 @@ pub async fn begin_recording(
                     let typed = std::mem::take(&mut shown);
                     stream_live = stream_partials;
                     let text = to_inject.clone();
+                    let inject_timer = latency.start(crate::registry::LatencyStage::Inject);
                     let result = tokio::task::spawn_blocking(move || {
                         if typed.is_empty() || force_paste {
                             // Streamed partials of the trigger are on screen
@@ -722,6 +806,11 @@ pub async fn begin_recording(
                         }
                     })
                     .await;
+                    // Stopped only on success: a failed injection's duration is
+                    // not an injection time.
+                    if matches!(result, Ok(Ok(()))) {
+                        inject_timer.stop();
+                    }
                     match result {
                         Ok(Err(e)) => {
                             error!("Text injection failed: {e}");
@@ -730,6 +819,13 @@ pub async fn begin_recording(
                         Err(e) => error!("Injection task panicked: {e}"),
                         Ok(Ok(())) => {
                             info!("Transcript injected");
+                            let stopped = *app_clone.state::<AppState>().last_stop_at.lock_live();
+                            if let Some(stopped) = stopped {
+                                latency.record(
+                                    crate::registry::LatencyStage::TotalFinalize,
+                                    stopped.elapsed().as_millis() as u64,
+                                );
+                            }
                             let state = app_clone.state::<AppState>();
                             *state.last_delivery.lock_live() =
                                 Some(crate::core::undo::LastDelivery {
@@ -804,12 +900,36 @@ pub async fn begin_recording(
             f32::from_bits(peak_for_report.load(Ordering::Relaxed)),
             session_started.elapsed(),
         );
+
+        // One write for the whole dictation, on the way out, when nobody is
+        // waiting for anything. Failures are swallowed: a latency panel is
+        // never worth failing a dictation over.
+        let samples = latency.take_samples();
+        if !samples.is_empty() {
+            let state = quiet_app.state::<AppState>();
+            let engine = state.asr.active_provider_name().await;
+            let conn = state.db.lock_live();
+            // Flattened to (name, ms) here: storage takes strings, because it
+            // sits below the layer that owns the stage enum.
+            let rows: Vec<(&str, u64)> = samples.iter().map(|s| (s.stage.as_str(), s.ms)).collect();
+            if let Err(e) = crate::storage::repositories::insert_latency_samples(
+                &conn,
+                &rows,
+                Some(engine.as_str()),
+            ) {
+                tracing::debug!("Could not store latency samples: {e}");
+            }
+            if let Err(e) = crate::storage::repositories::trim_latency_samples(&conn) {
+                tracing::debug!("Could not trim latency samples: {e}");
+            }
+        }
     });
 
     Ok(())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn stop_recording(app: AppHandle, state: State<'_, AppState>) -> Result<()> {
     end_recording(app, state.inner()).await
 }
@@ -818,11 +938,19 @@ pub async fn stop_recording(app: AppHandle, state: State<'_, AppState>) -> Resul
 /// microphone back to the listener so the next phrase is heard.
 pub async fn end_recording(app: AppHandle, state: &AppState) -> Result<()> {
     {
-        let mut recording = state.recording.lock_live();
-        if !*recording {
+        let mut machine = state.dictation.lock_live();
+        if !matches!(
+            machine.state(),
+            crate::core::dictation::DictationState::Arming
+                | crate::core::dictation::DictationState::Recording
+                | crate::core::dictation::DictationState::CancelArmed
+        ) {
             return Ok(());
         }
-        *recording = false;
+        let _ = machine.handle(crate::core::dictation::DictationEvent::Stop);
+        // The clock for "stop to text on screen" starts here, which is the
+        // moment the user stopped talking as far as they are concerned.
+        *state.last_stop_at.lock_live() = Some(Instant::now());
     }
 
     // People dictate in bursts. Keeping the device open for a few seconds
@@ -863,6 +991,20 @@ pub async fn end_recording(app: AppHandle, state: &AppState) -> Result<()> {
         AppEvent::RecordingStopped,
     )
     .map_err(|e| EchoError::Plugin(e.to_string()))?;
+    cue(state, crate::core::cues::Cue::Stop);
+    crate::commands::hotkey::disarm_escape(&app);
+    // Finalizing -> Idle. Delivery continues on its own task; the machine's job
+    // ends when capture does, which is what lets the next dictation start
+    // without waiting for this one's transcript.
+    {
+        let transition = state
+            .dictation
+            .lock_live()
+            .handle(crate::core::dictation::DictationEvent::Finalized);
+        if let Ok(transition) = transition {
+            notify_state(&app, transition.state);
+        }
+    }
     info!("Recording stopped");
 
     crate::commands::wake::rearm(&app);
@@ -871,8 +1013,9 @@ pub async fn end_recording(app: AppHandle, state: &AppState) -> Result<()> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn is_recording(state: State<'_, AppState>) -> bool {
-    *state.recording.lock_live()
+    state.is_capturing()
 }
 
 /// Open the microphone before it is needed, so the recording that follows
@@ -883,6 +1026,7 @@ pub fn is_recording(state: State<'_, AppState>) -> bool {
 /// silently, because a failed warm-up must never stop a recording from starting
 /// the ordinary way.
 #[tauri::command]
+#[specta::specta]
 pub fn warm_microphone(state: State<'_, AppState>) {
     let (enabled, device) = {
         let conn = state.db.lock_live();
@@ -890,7 +1034,7 @@ pub fn warm_microphone(state: State<'_, AppState>) {
         let enabled = get("warm_mic").map(|v| v != "false").unwrap_or(true);
         (enabled, get("audio_device").filter(|s| !s.is_empty()))
     };
-    if !enabled || *state.recording.lock_live() {
+    if !enabled || state.is_capturing() {
         return;
     }
     state.audio.warm(device.as_deref());
@@ -1374,4 +1518,114 @@ mod word_edit_tests {
         assert_eq!(word_edits("um so we ship", "so we ship"), 4);
         assert_eq!(word_edits("ship it", "Ship it."), 2);
     }
+}
+
+/**
+ * SOURCE OF TRUTH KEYWORDS: cancel_recording, Escape, countdown, resume
+ * WHAT:  Escape, while dictating. The first press arms a countdown; a second
+ *        press within it resumes as though nothing happened.
+ * WHY:   Before this, the only way out of a mis-started dictation was to let it
+ *        transcribe and then undo — which means the words land in whatever had
+ *        focus first. A cancel that takes effect before anything is typed is a
+ *        different feature from an undo that takes it back afterwards.
+ *
+ *        THE COUNTDOWN IS NOT A CONFIRMATION DIALOG. It exists because the
+ *        common mistake is pressing Escape by reflex on a recording you did
+ *        want, and three seconds is long enough to notice the pill has changed
+ *        and press it again. The resume is only possible because the machine
+ *        does not stop capture on the first press — see
+ *        core/dictation/machine.rs.
+ *
+ *        The timer lives here rather than in the pill because a countdown owned
+ *        by a webview keeps running in a window that has been closed, and stops
+ *        when the webview is suspended. It is spawned per arming and checks the
+ *        state again when it fires, so a stale timer from an earlier cancel
+ *        cannot discard a later recording.
+ * WHERE: Bound to Escape while a dictation is live.
+ */
+#[tauri::command]
+#[specta::specta]
+pub async fn cancel_recording(app: AppHandle, state: State<'_, AppState>) -> Result<()> {
+    use crate::core::dictation::{DictationEvent, Effect};
+
+    let state = state.inner();
+    let transition = {
+        let mut machine = state.dictation.lock_live();
+        match machine.handle(DictationEvent::Escape) {
+            Ok(transition) => transition,
+            // Escape with nothing running is the user pressing Escape at their
+            // editor, which reaches us only because the binding is global.
+            Err(_) => return Ok(()),
+        }
+    };
+
+    for effect in &transition.effects {
+        match effect {
+            Effect::StartCountdown => {
+                let app = app.clone();
+                let generation = state.cancel_generation.fetch_add(1, Ordering::SeqCst) + 1;
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        crate::core::dictation::CANCEL_COUNTDOWN_MS,
+                    ))
+                    .await;
+                    expire_cancel(app, generation).await;
+                });
+            }
+            Effect::CancelCountdown => {
+                // Bumping the generation is what makes the in-flight timer a
+                // no-op when it wakes. Nothing is cancelled directly, because a
+                // JoinHandle held across the await would have to be stored and
+                // cleaned up on every other exit from this state too.
+                state.cancel_generation.fetch_add(1, Ordering::SeqCst);
+            }
+            _ => {}
+        }
+    }
+
+    notify_state(&app, transition.state);
+    Ok(())
+}
+
+/// The countdown reaching zero, if it is still the countdown that was armed.
+async fn expire_cancel(app: AppHandle, generation: u64) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    // A second Escape, a stop, or another dictation entirely has happened since
+    // this timer was armed.
+    if state.cancel_generation.load(Ordering::SeqCst) != generation {
+        return;
+    }
+
+    let transition = {
+        let mut machine = state.dictation.lock_live();
+        match machine.handle(crate::core::dictation::DictationEvent::CancelExpired) {
+            Ok(transition) => transition,
+            Err(_) => return,
+        }
+    };
+    if transition.state != crate::core::dictation::DictationState::Idle {
+        return;
+    }
+
+    // The audio is dropped by stopping capture without transcribing: nothing
+    // downstream is handed the buffer, so there is nothing to un-deliver.
+    state.audio.stop_capture();
+    crate::commands::hotkey::disarm_escape(&app);
+    let _ = app.emit(
+        AppEvent::RecordingStopped.event_name(),
+        AppEvent::RecordingStopped,
+    );
+    notify_state(&app, crate::core::dictation::DictationState::Idle);
+    info!("Dictation cancelled");
+}
+
+/// Push the dictation state to the pill.
+pub(crate) fn notify_state(app: &AppHandle, state: crate::core::dictation::DictationState) {
+    let event = AppEvent::DictationState {
+        state,
+        cancel_countdown_ms: crate::core::dictation::CANCEL_COUNTDOWN_MS,
+    };
+    let _ = app.emit(event.event_name(), &event);
 }

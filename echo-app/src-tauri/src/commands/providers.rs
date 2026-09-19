@@ -151,10 +151,14 @@ pub fn build_provider(
 
 /// A provider as the settings UI needs it: shape, plus whether a key is stored
 /// and what the user has chosen. Never carries the key itself.
-#[derive(Serialize)]
+#[derive(Serialize, specta::Type)]
 pub struct ProviderInfo {
+    /// Flattened by value rather than by reference: specta cannot describe a
+    /// flattened `&'static T` for the generated bindings, and a ProviderSpec is
+    /// a handful of `&'static str` — cloning one costs nothing and the list is
+    /// built once per settings open.
     #[serde(flatten)]
-    pub spec: &'static ProviderSpec,
+    pub spec: ProviderSpec,
     pub key_set: bool,
     pub model: String,
     pub endpoint: String,
@@ -166,6 +170,7 @@ pub struct ProviderInfo {
 /// The provider list the settings UI renders — replacing the arrays that used
 /// to be duplicated in `CloudProviders.tsx` and `SettingsPanel.tsx`.
 #[tauri::command]
+#[specta::specta]
 pub fn list_cloud_providers(state: State<'_, AppState>) -> Result<Vec<ProviderInfo>> {
     let conn = state.db.lock().unwrap();
     Ok(catalog::PROVIDERS
@@ -173,7 +178,7 @@ pub fn list_cloud_providers(state: State<'_, AppState>) -> Result<Vec<ProviderIn
         .map(|spec| {
             let cfg = resolve_config(&conn, spec).ok();
             ProviderInfo {
-                spec,
+                spec: spec.clone(),
                 key_set: keychain::get_api_key(spec.id).unwrap_or(None).is_some(),
                 model: cfg
                     .as_ref()
@@ -196,6 +201,7 @@ pub fn list_cloud_providers(state: State<'_, AppState>) -> Result<Vec<ProviderIn
 /// Store a provider's API key in the OS keychain and register it for immediate
 /// use (no restart needed).
 #[tauri::command]
+#[specta::specta]
 pub async fn set_api_key(state: State<'_, AppState>, provider: String, key: String) -> Result<()> {
     keychain::store_api_key(&provider, &key)?;
     let p = build_provider(state.inner(), &provider, key)?;
@@ -206,6 +212,7 @@ pub async fn set_api_key(state: State<'_, AppState>, provider: String, key: Stri
 /// Save one of a provider's non-secret settings (model, endpoint, region) and
 /// rebuild it so the change takes effect without a restart.
 #[tauri::command]
+#[specta::specta]
 pub async fn set_provider_setting(
     state: State<'_, AppState>,
     provider: String,
@@ -234,12 +241,14 @@ pub async fn set_provider_setting(
 /// Report whether a provider has an API key stored. Never returns the key
 /// itself (architectural rule 5).
 #[tauri::command]
+#[specta::specta]
 pub fn get_api_key_set(provider: String) -> Result<bool> {
     Ok(keychain::get_api_key(&provider)?.is_some())
 }
 
 /// Remove a provider's stored API key from the keychain.
 #[tauri::command]
+#[specta::specta]
 pub fn remove_api_key(provider: String) -> Result<()> {
     keychain::delete_api_key(&provider)
 }
@@ -252,6 +261,7 @@ pub fn remove_api_key(provider: String) -> Result<()> {
 /// that returns empty text for silence has still answered the only question
 /// being asked, so empty is a pass.
 #[tauri::command]
+#[specta::specta]
 pub async fn test_api_key(state: State<'_, AppState>, provider: String) -> Result<String> {
     let key = keychain::get_api_key(&provider)?
         .ok_or_else(|| EchoError::Config("Save an API key first.".into()))?;

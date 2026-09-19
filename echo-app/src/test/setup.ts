@@ -139,10 +139,174 @@ export const ANSWERS: Record<string, unknown> = {
   },
 };
 
+
+/**
+ * A stand-in for the Rust registry's settings_snapshot.
+ *
+ * DELIBERATELY PARTIAL. It carries the settings these tests actually reach for,
+ * not the whole table — the real one lives in src-tauri/src/registry and has
+ * its own tests (validate_registry, every_setting_is_consumed) which are the
+ * things that keep IT honest. Duplicating all forty here would be a second
+ * table to maintain and the first one to go stale.
+ *
+ * Add a row when a test needs a control that is not here yet.
+ */
+type FixtureSetting = {
+  key: string;
+  label: string;
+  description: string;
+  section: string;
+  kind: Record<string, unknown>;
+  default: string;
+  advanced?: boolean;
+  visible_when?: { key: string; any_of: string[] } | null;
+};
+
+const FIXTURE_SETTINGS: FixtureSetting[] = [
+  {
+    key: "ui_language",
+    label: "Language of this window",
+    description: "Separate from the language you dictate in.",
+    section: "SETTINGS_GENERAL",
+    kind: { type: "CHOICE", options: [
+      { value: "auto", label: "Match the system", description: null },
+      { value: "en", label: "English", description: null },
+    ] },
+    default: "auto",
+  },
+  {
+    key: "sound_cues",
+    label: "Play a sound when recording starts and stops",
+    description: "The pill is often not where you are looking.",
+    section: "SETTINGS_GENERAL",
+    kind: { type: "TOGGLE" },
+    default: "false",
+  },
+  {
+    key: "recording_mode",
+    label: "How recording ends",
+    description: "The hotkey always starts it.",
+    section: "SETTINGS_DICTATION",
+    kind: { type: "CHOICE", options: [
+      { value: "toggle", label: "Tap the hotkey again", description: null },
+      { value: "hold", label: "Hold while speaking", description: null },
+      { value: "auto", label: "Stop when you stop talking", description: null },
+    ] },
+    default: "toggle",
+  },
+  {
+    key: "audio_device",
+    label: "Microphone",
+    description: "Empty means whichever device the system is using.",
+    section: "SETTINGS_MICROPHONE",
+    kind: { type: "DYNAMIC_CHOICE", source: "INPUT_DEVICES" },
+    default: "",
+  },
+  {
+    key: "warm_mic",
+    label: "Keep the microphone ready",
+    description: "Opens the input stream before you press the hotkey.",
+    section: "SETTINGS_MICROPHONE",
+    kind: { type: "TOGGLE" },
+    default: "true",
+  },
+  {
+    key: "vad_engine",
+    label: "Speech detection",
+    description: "How Echo decides you have stopped talking.",
+    section: "SETTINGS_MICROPHONE",
+    kind: { type: "CHOICE", options: [
+      { value: "silero", label: "Neural — ignores background noise", description: null },
+      { value: "energy", label: "Simple — loudness only", description: null },
+    ] },
+    default: "silero",
+  },
+  {
+    key: "auto_inject",
+    label: "Insert the transcript as soon as it is ready",
+    description: "Off leaves it on the clipboard for you to paste.",
+    section: "OUTPUT_INSERT",
+    kind: { type: "TOGGLE" },
+    default: "true",
+  },
+  {
+    key: "injection_method",
+    label: "How to insert it",
+    description: "Pasting is instant but borrows the clipboard.",
+    section: "OUTPUT_INSERT",
+    kind: { type: "CHOICE", options: [
+      { value: "auto", label: "Decide per app", description: null },
+      { value: "paste", label: "Always paste", description: null },
+      { value: "type", label: "Always type", description: null },
+    ] },
+    default: "type",
+  },
+  {
+    key: "inject_delay_ms",
+    label: "Insert delay",
+    description: "For an app that needs a moment to take focus back.",
+    section: "OUTPUT_ADVANCED",
+    kind: { type: "NUMBER", min: 0, max: 2000, step: 10, unit: "ms" },
+    default: "0",
+  },
+  {
+    key: "clipboard_settle_ms",
+    label: "Clipboard hold",
+    description: "How long Echo waits before putting your old clipboard back.",
+    section: "OUTPUT_ADVANCED",
+    kind: { type: "NUMBER", min: 0, max: 2000, step: 10, unit: "ms" },
+    default: "180",
+    visible_when: { key: "injection_method", any_of: ["paste", "auto"] },
+  },
+  {
+    key: "history_enabled",
+    label: "Keep a history",
+    description: "Off means the transcript is delivered and then forgotten.",
+    section: "PRIVACY",
+    kind: { type: "TOGGLE" },
+    default: "true",
+  },
+];
+
+/** Builds the snapshot the settings view asks for, from the live settings map. */
+function settingsSnapshot() {
+  return {
+    capabilities: [
+      {
+        key: "SETTINGS",
+        name: "Settings",
+        description: "Fixture capability.",
+        requires: [],
+        nav: null,
+        metrics: [],
+        hotkey: null,
+        settings: FIXTURE_SETTINGS.map((s) => ({
+          key: s.key,
+          label: s.label,
+          description: s.description,
+          section: s.section,
+          kind: s.kind,
+          default: { type: "TEXT", value: s.default },
+          requires_permission: [],
+          advanced: s.advanced ?? false,
+          visible_when: s.visible_when ?? null,
+        })),
+      },
+    ],
+    values: FIXTURE_SETTINGS.map((s) => ({
+      key: s.key,
+      value: settings.get(s.key) ?? s.default,
+      is_set: settings.get(s.key) !== undefined,
+    })),
+    nav: [],
+  };
+}
+
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(async (command: string, args?: Record<string, unknown>) => {
     invoked.push(command);
 
+    if (command === "settings_snapshot") return settingsSnapshot();
     if (command === "get_setting") return settings.get(args?.key as string) ?? null;
     if (command === "set_setting") {
       settings.set(args?.key as string, args?.value as string);

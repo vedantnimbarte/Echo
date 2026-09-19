@@ -1,7 +1,7 @@
 {
   "name": "echo-app",
   "private": true,
-  "version": "0.6.0",
+  "version": "0.7.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,11 +10,12 @@
     "tauri": "tauri",
     "i18n:check": "node scripts/check-i18n.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "sot": "node scripts/sot.mjs",
+    "sot:show": "node scripts/sot.mjs --show",
+    "sot:missing": "node scripts/sot.mjs --missing"
   },
   "dependencies": {
-    "@fontsource-variable/figtree": "^5.3.0",
-    "@fontsource/eb-garamond": "^5.3.0",
     "@tailwindcss/vite": "^4.3.0",
     "@tanstack/react-query": "^5.101.0",
     "@tauri-apps/api": "^2",

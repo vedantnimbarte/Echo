@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Whether the current configuration is capable of reaching the network at all.
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, specta::Type)]
 pub struct EgressStatus {
     /// True when transcription, command mode and wake word are all local and no
     /// cloud key is stored — i.e. normal use makes no requests.
@@ -26,12 +26,14 @@ pub struct EgressStatus {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_egress_log(state: State<'_, AppState>, limit: Option<i64>) -> Result<Vec<EgressRecord>> {
     let conn = state.db.lock().unwrap();
     repositories::list_egress(&conn, limit.unwrap_or(200))
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn clear_egress_log(state: State<'_, AppState>) -> Result<()> {
     let conn = state.db.lock().unwrap();
     repositories::clear_egress(&conn)
@@ -43,6 +45,7 @@ pub fn clear_egress_log(state: State<'_, AppState>) -> Result<()> {
 /// behavioural half. Update checks are listed because the updater plugin makes
 /// its own request that this module cannot instrument.
 #[tauri::command]
+#[specta::specta]
 pub fn get_egress_status(state: State<'_, AppState>) -> Result<EgressStatus> {
     let conn = state.db.lock().unwrap();
     let get = |key: &str| repositories::get_setting(&conn, key).unwrap_or(None);

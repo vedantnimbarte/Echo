@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2 } from "lucide-react";
 import { commands, type Snippet } from "../../ipc/commands";
 import { Group } from "../common/Page";
+import { errorMessage } from "../../lib/errors";
 
 /**
  * Voice snippets: a trigger phrase and the block of text it stands for.
@@ -26,7 +27,7 @@ export function Snippets() {
   const save = useMutation({
     mutationFn: (s: Snippet) => commands.saveSnippet(s),
     onMutate: () => setError(null),
-    onError: (e) => setError(String(e)),
+    onError: (e) => setError(errorMessage(e)),
     onSettled: () => qc.invalidateQueries({ queryKey: ["snippets"] }),
   });
 

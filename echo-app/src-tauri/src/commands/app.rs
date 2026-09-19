@@ -10,6 +10,7 @@ use crate::storage::repositories;
 /// so the frontend needs an explicit way to exit (exposed from Settings, and
 /// from the tray menu — see [`crate::tray`]).
 #[tauri::command]
+#[specta::specta]
 pub fn quit(app: AppHandle) {
     app.exit(0);
 }
@@ -26,12 +27,14 @@ pub fn quit(app: AppHandle) {
 /// Settings renders an honest "off" instead of an error where the feature
 /// simply does not apply.
 #[tauri::command]
+#[specta::specta]
 pub fn get_autostart(app: AppHandle) -> bool {
     app.autolaunch().is_enabled().unwrap_or(false)
 }
 
 /// Register or unregister Echo as a login item.
 #[tauri::command]
+#[specta::specta]
 pub fn set_autostart(app: AppHandle, enabled: bool) -> Result<()> {
     let manager = app.autolaunch();
     let result = if enabled {
@@ -56,6 +59,7 @@ pub fn set_autostart(app: AppHandle, enabled: bool) -> Result<()> {
 /// says "Hey root" or "Hey Administrator" is worse than one with no name in it.
 /// The frontend drops the name and greets anyway.
 #[tauri::command]
+#[specta::specta]
 pub fn account_name() -> Option<String> {
     const NOT_PEOPLE: [&str; 6] = ["root", "administrator", "admin", "user", "guest", "default"];
 
@@ -94,6 +98,7 @@ pub fn account_name() -> Option<String> {
 /// Falls back to the folder when the log is missing, which is what a run that
 /// could not open it looks like (see `init_tracing`: logging is best effort).
 #[tauri::command]
+#[specta::specta]
 pub fn open_log(app: AppHandle) -> Result<()> {
     let dir = app
         .path()
@@ -112,6 +117,7 @@ pub fn open_log(app: AppHandle) -> Result<()> {
 ///
 /// Empty is the normal answer, and the one the UI shows nothing for.
 #[tauri::command]
+#[specta::specta]
 pub fn recovered_recordings(app: AppHandle) -> Vec<String> {
     let Ok(dir) = app.path().app_data_dir() else {
         return Vec::new();
@@ -129,6 +135,7 @@ pub fn recovered_recordings(app: AppHandle) -> Vec<String> {
 /// it would have created it in. A `delete this path` command that took the
 /// caller's word for it would be a gift to anything that could reach the IPC.
 #[tauri::command]
+#[specta::specta]
 pub fn discard_recovered(app: AppHandle, path: String) -> Result<()> {
     let dir = app
         .path()
@@ -161,6 +168,7 @@ pub fn discard_recovered(app: AppHandle, path: String) -> Result<()> {
 /// "Windows 11 26100"). Add `os_info` if a report ever turns on a point
 /// release.
 #[tauri::command]
+#[specta::specta]
 pub fn diagnostics(state: State<'_, AppState>) -> String {
     let (provider, model, language, vad) = {
         let conn = state.db.lock().unwrap();

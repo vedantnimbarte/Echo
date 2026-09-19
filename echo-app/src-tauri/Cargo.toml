@@ -1,6 +1,6 @@
 [package]
 name = "echo"
-version = "0.6.0"
+version = "0.7.0"
 description = "Echo - Universal Voice Keyboard"
 authors = []
 edition = "2021"
@@ -122,14 +122,21 @@ arboard = "3"
 
 # Shared plugin API — the trait/manifest definitions plugin authors compile
 # against. The host must use the same definitions for the FFI to be sound.
-echo-sdk = { path = "echo-sdk" }
+echo-sdk = { path = "echo-sdk", features = ["specta"] }
 
 # Local Whisper (optional — see [features].whisper above).
 whisper-rs = { version = "0.13", optional = true }
+specta = { version = "2.0.0-rc.22", features = ["derive", "chrono", "serde_json"] }
+specta-typescript = "0.0.9"
+tauri-specta = { version = "2.0.0-rc.21", features = ["derive", "typescript"] }
+window-vibrancy = "0.5"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = [
     "Win32_UI_Input_KeyboardAndMouse",
+    # PlaySoundW, for the start/stop/failed cues. The alias form plays the
+    # user's own sound scheme rather than a bundled file (platform::windows).
+    "Win32_Media_Audio",
     # Foreground-window lookup for per-app profiles (core::appcontext).
     "Win32_UI_WindowsAndMessaging",
     "Win32_System_Threading",
@@ -169,4 +176,8 @@ zbus = "5"
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = { version = "0.24", features = ["highsierra"] }
 core-foundation = "0.10"
-
+# NSSound, for the start/stop/failed cues. Named system sounds resolve against
+# /System/Library/Sounds, so nothing is bundled and the system alert volume is
+# respected (platform::macos::play_system_sound).
+objc2-app-kit = "0.3.2"
+objc2-foundation = "0.3.2"

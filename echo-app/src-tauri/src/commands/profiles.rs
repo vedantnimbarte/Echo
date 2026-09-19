@@ -21,6 +21,7 @@ use crate::{
 /// affordance in settings. `None` when the platform can't tell us — Wayland,
 /// or macOS without Automation permission.
 #[tauri::command]
+#[specta::specta]
 pub async fn get_foreground_app() -> Result<Option<String>> {
     // The macOS and Linux lookups shell out, so keep them off the async runtime.
     Ok(tokio::task::spawn_blocking(appcontext::foreground_app)
@@ -32,6 +33,7 @@ pub async fn get_foreground_app() -> Result<Option<String>> {
 // ── Per-app profiles ─────────────────────────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn list_app_profiles(state: State<'_, AppState>) -> Result<Vec<AppProfile>> {
     let conn = state.db.lock().unwrap();
     repositories::list_app_profiles(&conn)
@@ -40,6 +42,7 @@ pub fn list_app_profiles(state: State<'_, AppState>) -> Result<Vec<AppProfile>> 
 /// Create or update the profile for an application. `app_match` is the
 /// identifier [`get_foreground_app`] reports, and is stored lowercased.
 #[tauri::command]
+#[specta::specta]
 pub fn save_app_profile(state: State<'_, AppState>, profile: AppProfile) -> Result<i64> {
     if profile.app_match.trim().is_empty() {
         return Err(crate::error::EchoError::Config(
@@ -51,6 +54,7 @@ pub fn save_app_profile(state: State<'_, AppState>, profile: AppProfile) -> Resu
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn delete_app_profile(state: State<'_, AppState>, id: i64) -> Result<()> {
     let conn = state.db.lock().unwrap();
     repositories::delete_app_profile(&conn, id)
@@ -59,12 +63,14 @@ pub fn delete_app_profile(state: State<'_, AppState>, id: i64) -> Result<()> {
 // ── Dictionary profiles ──────────────────────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn list_profiles(state: State<'_, AppState>) -> Result<Vec<Profile>> {
     let conn = state.db.lock().unwrap();
     repositories::list_profiles(&conn)
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn add_profile(state: State<'_, AppState>, name: String) -> Result<i64> {
     let name = name.trim().to_string();
     if name.is_empty() {
@@ -80,6 +86,7 @@ pub fn add_profile(state: State<'_, AppState>, name: String) -> Result<i64> {
 /// (`ON DELETE CASCADE` is not used here — losing a user's phrases because they
 /// deleted a grouping would be the wrong trade).
 #[tauri::command]
+#[specta::specta]
 pub async fn delete_profile(state: State<'_, AppState>, id: i64) -> Result<()> {
     let raw = {
         let conn = state.db.lock().unwrap();
@@ -96,6 +103,7 @@ pub async fn delete_profile(state: State<'_, AppState>, id: i64) -> Result<()> {
 
 /// Move a dictionary entry into a profile, or back to global with `None`.
 #[tauri::command]
+#[specta::specta]
 pub async fn set_dictionary_entry_profile(
     state: State<'_, AppState>,
     id: i64,

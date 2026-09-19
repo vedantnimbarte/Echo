@@ -4,6 +4,7 @@ use tauri::State;
 use crate::{core::audio::AudioDevice, error::Result, state::AppState};
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_audio_devices(state: State<'_, AppState>) -> Result<Vec<AudioDevice>> {
     state.audio.list_input_devices()
 }
@@ -15,6 +16,7 @@ pub fn get_audio_devices(state: State<'_, AppState>) -> Result<Vec<AudioDevice>>
 /// whatever the setting says. So the picker asks, and says so when the answer
 /// is no, rather than letting someone select a detector that is not running.
 #[tauri::command]
+#[specta::specta]
 pub fn silero_available(state: State<'_, AppState>) -> bool {
     state.silero.is_some()
 }
@@ -23,7 +25,7 @@ pub fn silero_available(state: State<'_, AppState>) -> bool {
 const TEST_DURATION: std::time::Duration = std::time::Duration::from_millis(3_000);
 
 /// What a level test found.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct InputTest {
     /// Loudest sample heard, 0.0..=1.0.
     pub peak: f32,
@@ -76,11 +78,12 @@ fn classify(peak: f32) -> (&'static str, &'static str) {
 /// it: the device is shared, and the words being spoken belong to the
 /// recording, not to a test.
 #[tauri::command]
+#[specta::specta]
 pub async fn test_input_level(
     state: State<'_, AppState>,
     device: Option<String>,
 ) -> Result<InputTest> {
-    if *state.recording.lock().unwrap() {
+    if state.is_capturing() {
         return Err(crate::error::EchoError::AudioDevice(
             "Echo is recording right now. Stop the dictation and test again.".into(),
         ));

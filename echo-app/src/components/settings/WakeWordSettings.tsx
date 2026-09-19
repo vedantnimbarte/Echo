@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { open } from "@tauri-apps/plugin-dialog";
 import { commands } from "../../ipc/commands";
 import { echoEvents } from "../../ipc/events";
+import { errorMessage } from "../../lib/errors";
 
 /**
  * Wake-word settings: turn hands-free listening on, pick or import the phrase
@@ -73,7 +74,7 @@ export function WakeWordSettings() {
     try {
       await fn();
     } catch (e) {
-      setError(String(e));
+      setError(errorMessage(e));
     }
     refresh();
   }

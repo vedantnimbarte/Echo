@@ -6,7 +6,7 @@ pub struct Setting {
     pub value: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct Profile {
     pub id: Option<i64>,
     pub name: String,
@@ -14,7 +14,7 @@ pub struct Profile {
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct DictionaryEntry {
     pub id: Option<i64>,
     pub phrase: String,
@@ -26,7 +26,7 @@ pub struct DictionaryEntry {
 
 /// A voice snippet: say `trigger` as a whole utterance, get `body` verbatim.
 /// See [`crate::core::snippets`] for why this is not a dictionary entry.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct Snippet {
     pub id: Option<i64>,
     pub trigger: String,
@@ -38,7 +38,7 @@ pub struct Snippet {
 
 /// Per-app overrides. `None` on an override field means "inherit the global
 /// setting", so a profile can pin one behaviour without freezing the rest.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct AppProfile {
     pub id: Option<i64>,
     /// Lowercased executable name, bundle id, or window class, matched exactly.
@@ -64,7 +64,7 @@ pub struct AppProfile {
 }
 
 /// One outbound request Echo made.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct EgressRecord {
     pub id: Option<i64>,
     pub host: String,
@@ -72,7 +72,7 @@ pub struct EgressRecord {
     pub created_at: String,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
 pub struct TranscriptionRecord {
     pub id: Option<i64>,
     pub text: String,

@@ -5,6 +5,7 @@ import { save } from "@tauri-apps/plugin-dialog";
 import { commands, type TranscriptionRecord } from "../../ipc/commands";
 import { Page, Group } from "../common/Page";
 import { prettyHotkey } from "../common/HotkeyCapture";
+import { errorMessage } from "../../lib/errors";
 
 /* ---- time helpers --------------------------------------------------------- */
 
@@ -300,7 +301,7 @@ function CorrectionForm({
       qc.invalidateQueries({ queryKey: ["dictionary"] });
       onDone();
     } catch (e) {
-      setError(String(e));
+      setError(errorMessage(e));
     }
   }
 
@@ -509,7 +510,7 @@ function TranscriptFix({
       // looking like it failed.
       if (result.length === 0) onDone();
     } catch (e) {
-      setError(String(e));
+      setError(errorMessage(e));
     }
   }
 

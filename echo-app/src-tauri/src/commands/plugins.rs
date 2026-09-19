@@ -32,6 +32,7 @@ fn installed_lib_path(plugins_dir: &PathBuf, manifest: &PluginManifest) -> PathB
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn list_plugins(state: State<'_, AppState>) -> Result<Vec<PluginInfo>> {
     let conn = state.db.lock().unwrap();
     let rows = repositories::list_plugins(&conn)?;
@@ -64,6 +65,7 @@ pub fn list_plugins(state: State<'_, AppState>) -> Result<Vec<PluginInfo>> {
 /// Read the manifest next to a candidate library **without installing it**, so
 /// the UI can show what the plugin claims it needs before anything is loaded.
 #[tauri::command]
+#[specta::specta]
 pub fn inspect_plugin(path: String) -> Result<PluginManifest> {
     let lib_path = PathBuf::from(&path);
     let src_dir = lib_path
@@ -83,6 +85,7 @@ pub fn inspect_plugin(path: String) -> Result<PluginManifest> {
 /// host privileges. This is a consent gate, not a sandbox — it cannot stop a
 /// malicious plugin, it only stops one being loaded without the user being told.
 #[tauri::command]
+#[specta::specta]
 pub async fn install_plugin(
     state: State<'_, AppState>,
     path: String,
@@ -165,6 +168,7 @@ pub(crate) async fn sync_capabilities(state: &AppState) {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn enable_plugin(state: State<'_, AppState>, name: String) -> Result<()> {
     let manifest = read_installed_manifest(&state.plugins_dir, &name)?;
     {
@@ -212,6 +216,7 @@ pub async fn enable_plugin(state: State<'_, AppState>, name: String) -> Result<(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn disable_plugin(state: State<'_, AppState>, name: String) -> Result<()> {
     {
         let conn = state.db.lock().unwrap();
@@ -229,12 +234,14 @@ pub async fn disable_plugin(state: State<'_, AppState>, name: String) -> Result<
 /// chosen where this lands. `name` is typed, which is why it is validated
 /// rather than trusted: it becomes a path segment underneath that folder.
 #[tauri::command]
+#[specta::specta]
 pub fn scaffold_plugin(parent_dir: String, name: String) -> Result<String> {
     let dir = crate::core::plugins::scaffold::write(&PathBuf::from(parent_dir), &name)?;
     Ok(dir.to_string_lossy().into_owned())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn uninstall_plugin(state: State<'_, AppState>, name: String) -> Result<()> {
     state.plugins.lock_live().unload(&name)?;
     // Before the directory goes: a registered plugin engine holds the library

@@ -1,3 +1,4 @@
+use tauri::Manager;
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
@@ -8,30 +9,16 @@ use crate::{
     storage::repositories,
 };
 
-/// Default global hotkey used when none is configured.
-pub const DEFAULT_HOTKEY: &str = "CommandOrControl+Shift+Space";
-
-/// Default recording mode. Historically `"manual"`, which meant this.
-pub const DEFAULT_MODE: &str = "toggle";
-
-/// Take back the last insert. Global, because by the time you notice the
-/// mistake the focus is in the app that received the text.
-///
-/// Alt rather than Shift: `Ctrl+Shift+Z` is *redo* in most editors, and a
-/// global binding would take it away from every app on the machine.
-pub const DEFAULT_UNDO_HOTKEY: &str = "CommandOrControl+Alt+Z";
-
-/// Re-decode the last utterance on a stronger model.
-pub const DEFAULT_RETRY_HOTKEY: &str = "CommandOrControl+Alt+R";
-
-/// Stored in place of an accelerator to leave a fix-up unbound. A global
-/// shortcut is taken from every other app on the machine, so being able to give
-/// one back matters more here than for the dictation hotkey.
-pub const UNBOUND: &str = "off";
-
 /// Tap the hotkey: start if idle, stop if recording.
 const TOGGLE: &str = "echo://hotkey-toggle";
 /// Hold the hotkey: these bracket a single utterance.
+// The accelerators themselves live in core/hotkeys.rs, because the registry
+// declares them as setting defaults and sits below this module. Re-exported so
+// the existing `commands::hotkey::DEFAULT_HOTKEY` call sites keep working.
+pub use crate::core::hotkeys::{
+    DEFAULT_HOTKEY, DEFAULT_MODE, DEFAULT_RETRY_HOTKEY, DEFAULT_UNDO_HOTKEY, UNBOUND,
+};
+
 const PRESS: &str = "echo://hotkey-press";
 const RELEASE: &str = "echo://hotkey-release";
 
@@ -55,6 +42,7 @@ fn setting(state: &AppState, key: &str, fallback: &str) -> String {
 
 /// The currently configured global hotkey (or the default).
 #[tauri::command]
+#[specta::specta]
 pub fn get_hotkey(state: State<'_, AppState>) -> Result<String> {
     Ok(setting(state.inner(), "hotkey", DEFAULT_HOTKEY))
 }
@@ -66,6 +54,7 @@ pub fn get_hotkey(state: State<'_, AppState>) -> Result<String> {
 /// describes is silent: on Wayland the shortcut registers without complaint and
 /// then never fires.
 #[tauri::command]
+#[specta::specta]
 pub fn hotkey_support() -> crate::core::session::HotkeySupport {
     crate::core::session::hotkey_support()
 }
@@ -199,6 +188,7 @@ pub fn apply(app: &AppHandle, state: &AppState) -> Result<()> {
 /// system refuses is reported by [`bind_fixups`] and leaves the rest working.
 /// Pass [`UNBOUND`] to turn one off.
 #[tauri::command]
+#[specta::specta]
 pub fn set_fixup_hotkey(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -222,6 +212,7 @@ pub fn set_fixup_hotkey(
 
 /// The fix-up shortcuts as currently configured.
 #[tauri::command]
+#[specta::specta]
 pub fn get_fixup_hotkeys(state: State<'_, AppState>) -> (String, String) {
     (
         setting(state.inner(), "undo_hotkey", DEFAULT_UNDO_HOTKEY),
@@ -237,6 +228,7 @@ pub fn get_fixup_hotkeys(state: State<'_, AppState>) -> (String, String) {
 /// bindings are vetted, and rejecting an old one here would only strand the
 /// user with a hotkey they cannot change.
 #[tauri::command]
+#[specta::specta]
 pub fn register_hotkey(app: AppHandle, state: State<'_, AppState>, shortcut: String) -> Result<()> {
     let mode = setting(state.inner(), "recording_mode", DEFAULT_MODE);
     bind(&app, state.inner(), &shortcut, &mode)?;
@@ -252,10 +244,59 @@ pub fn register_hotkey(app: AppHandle, state: State<'_, AppState>, shortcut: Str
 /// modifier it also needs a different rule for telling a hold from a chord — so
 /// the binding is not independent of the mode.
 #[tauri::command]
+#[specta::specta]
 pub fn set_recording_mode(app: AppHandle, state: State<'_, AppState>, mode: String) -> Result<()> {
     {
         let conn = state.db.lock().unwrap();
         repositories::set_setting(&conn, "recording_mode", &mode)?;
     }
     apply(&app, state.inner())
+}
+
+/**
+ * SOURCE OF TRUTH KEYWORDS: arm_escape, disarm_escape, cancel, Escape
+ * WHAT:  Binds and unbinds Escape as the cancel key, for the length of one
+ *        dictation.
+ * WHY:   BOUND ONLY WHILE DICTATING, and that is the whole design of it. Escape
+ *        is the most overloaded key on the machine — it closes dialogs, leaves
+ *        full screen, exits insert mode. A global binding that lived for the
+ *        life of the app would take it from every other program on the
+ *        computer, to serve a feature that can only ever apply during the
+ *        seconds a recording is running.
+ *
+ *        So it is claimed when a dictation starts and given back when one ends.
+ *        The cost is that a failure to unbind leaves it held, which is why
+ *        `disarm` is called on every exit from a dictation rather than only the
+ *        ordinary one.
+ * WHERE: Called by commands/recording.rs as a dictation begins and ends.
+ */
+pub fn arm_escape(app: &AppHandle) {
+    let handle = app.clone();
+    let result = app
+        .global_shortcut()
+        .on_shortcut("Escape", move |_app, _shortcut, event| {
+            if event.state != ShortcutState::Pressed {
+                return;
+            }
+            let handle = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Some(state) = handle.try_state::<AppState>() {
+                    if let Err(e) =
+                        crate::commands::recording::cancel_recording(handle.clone(), state).await
+                    {
+                        tracing::error!("Escape failed: {e}");
+                    }
+                }
+            });
+        });
+    if let Err(e) = result {
+        // Not fatal and not worth interrupting a dictation over: the recording
+        // works, it just cannot be cancelled with the keyboard. Something else
+        // on the machine already holds Escape globally.
+        tracing::debug!("Could not claim Escape for cancelling: {e}");
+    }
+}
+
+pub fn disarm_escape(app: &AppHandle) {
+    let _ = app.global_shortcut().unregister("Escape");
 }

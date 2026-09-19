@@ -20,7 +20,7 @@ use serde::Serialize;
 /// The variants are grouped by request shape rather than by vendor, because
 /// that is what determines whether a vendor costs new code: everything
 /// [`ProviderKind::OpenAiCompatible`] shares one implementation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderKind {
     /// `POST {base}/audio/transcriptions`, multipart, bearer auth.
@@ -42,7 +42,7 @@ pub enum ProviderKind {
 }
 
 /// One provider's shape. Everything here is public, static and non-secret.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct ProviderSpec {
     pub id: &'static str,
     pub label: &'static str,

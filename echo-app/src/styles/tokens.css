@@ -1,0 +1,390 @@
+/**
+ * SOURCE OF TRUTH KEYWORDS: tokens.css, surface-glass, surface-elevated,
+ *   border-hairline, text-primary, accent, danger, shadow-panel, radius-window,
+ *   material-panel-surface, noise-image, space-1, control-height, rail-width,
+ *   row-height, motion-duration-fast, spring-panel-stiffness
+ * WHAT:  Every literal value the frontend is allowed to contain — colour,
+ *        material, geometry, type, motion and component metric — as CSS custom
+ *        properties on :root, redefined for light and for reduced transparency.
+ * WHY:   This is the ONLY file in src/ permitted to hold a raw value. A hex,
+ *        px, ms or spring constant anywhere else is a bug: the moment the same
+ *        number exists twice the two copies start disagreeing and the look has
+ *        to be re-decided per component.
+ *
+ *        The palette is ported from murmur's docs/04-DESIGN-SYSTEM.md §2 and
+ *        keeps its central rule — THE APP HAS NO ACCENT HUE. `--accent` is a
+ *        NAME, not a colour: it is ink, and it still means "the emphasised
+ *        thing", so every call site that asks for it by role keeps working.
+ *        State is carried by FORM, not hue — a moving waveform means
+ *        recording, a draining line means cancelling, a sentence means failed.
+ *
+ *        `--danger` is the ONE surviving colour, because destructive and failed
+ *        are the two cases where losing the distinction is a safety regression
+ *        rather than a style choice: "Clear all history" must not look like
+ *        "Cancel". Used as a MARK — text, icon, dot — never as a wash.
+ *
+ *        WHERE ECHO DIVERGES FROM MURMUR, AND WHY. Two places, both forced by
+ *        Echo running on Windows and Linux where murmur is macOS-only:
+ *
+ *        1. `--font-system` carries the Windows and Linux faces alongside SF.
+ *           Murmur's reason for a system stack rather than a webfont — it costs
+ *           no request and no bundle, and it is most of what makes an app feel
+ *           native — is the same reason Segoe UI Variable belongs here on
+ *           Windows. It is the same rule, not an exception to it.
+ *        2. `--rec` survives from Echo's own palette as a second colour, used
+ *           on the pill's record dot and nothing else. Murmur spends no hue
+ *           there because its pill is on screen beside you; Echo's pill can be
+ *           a 6px dot on a second monitor, and "is the microphone live" is the
+ *           one state a user must be able to answer across a room.
+ * WHERE: Imported by src/styles.css, which maps these into Tailwind utilities
+ *        through @theme and holds the compatibility aliases for the component
+ *        CSS that still asks for Echo's old token names.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* ── Colour — dark (docs/04 §2) ─────────────────────────────────────
+   * Dark is the base rather than the override, which is the one ordering
+   * difference from murmur: Echo shipped dark-only, so every existing
+   * component was written against these values and light is the new arrival. */
+  --surface-glass: rgba(36, 33, 30, 0.58);
+  --surface-elevated: rgba(52, 48, 44, 0.72);
+  --surface-sunken: rgba(252, 250, 247, 0.04);
+  --surface-sunken-strong: rgba(252, 250, 247, 0.08);
+  --surface-opaque: #24211e;
+  --surface-opaque-elevated: #34302c;
+
+  --border-hairline: rgba(252, 250, 247, 0.1);
+  --border-highlight: rgba(252, 250, 247, 0.13);
+
+  --text-primary: rgba(252, 250, 247, 0.92);
+  --text-secondary: rgba(252, 250, 247, 0.56);
+  --text-tertiary: rgba(252, 250, 247, 0.34);
+
+  /* THERE IS NO ACCENT HUE — see the header. These are ink. */
+  --accent: rgba(252, 250, 247, 0.92);
+  --accent-soft: rgba(252, 250, 247, 0.08);
+  --success: rgba(252, 250, 247, 0.92);
+  --success-soft: rgba(252, 250, 247, 0.08);
+  --warning: rgba(252, 250, 247, 0.56);
+  --warning-soft: rgba(252, 250, 247, 0.08);
+  --danger: #e2685c;
+  --danger-soft: rgba(226, 104, 92, 0.14);
+
+  /* The live microphone, and nothing else. See the header for why Echo keeps
+     this where murmur does not. */
+  --rec: #ff453a;
+
+  --shadow-pill: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --shadow-panel: 0 24px 64px rgba(0, 0, 0, 0.46);
+  --shadow-card: 0 8px 24px rgba(0, 0, 0, 0.34);
+
+  /* ── Materials (docs/04 §3) ───────────────────────────────────────────
+   * Three, and only three. The native effect view is the actual material —
+   * NSVisualEffectView on macOS, Mica/Acrylic on Windows 11 — and these
+   * three-part treatments are the web layer's entire contribution: surface
+   * tint, hairline, inner top highlight, shadow.
+   *
+   * On Linux there is no compositor-level material to ask for, so
+   * `--glass-backdrop-blur` is the whole effect there. Murmur's doc calls
+   * backdrop-filter "an imitation of glass" and it is right, but an imitation
+   * is the only option on a platform that offers nothing to imitate. */
+  --material-pill-surface: var(--surface-glass);
+  /* No outer shadow: the pill window is exactly the pill, so a drop shadow has
+     nowhere to fall and is clipped away by the window bounds. The native
+     window shadow is the only layer that can paint outside the frame. */
+  --material-pill-shadow: none;
+  --material-panel-surface: var(--surface-glass);
+  --material-panel-shadow: var(--shadow-panel);
+  --material-elevated-surface: var(--surface-elevated);
+  --material-elevated-shadow: var(--shadow-panel);
+
+  --border-width-hairline: 0.5px;
+  --glass-backdrop-blur: 24px;
+
+  /* Noise at 3% is what stops a large glass area reading as flat plastic.
+     feTurbulence baseFrequency 0.8, inlined because a data URI cannot
+     interpolate a custom property. */
+  --noise-opacity: 0.03;
+  --noise-frequency: 0.8;
+  --noise-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+
+  /* ── Geometry (docs/04 §4) ────────────────────────────────────────── */
+  --radius-pill: 18px;
+  /* The WINDOW's corner radius — the whole app as one rounded object. Read by
+     src-tauri so the native material is cut to the same shape; a CSS-only
+     round here would leave the effect view's square corners poking out past
+     it. */
+  --radius-window: 26px;
+  --radius-panel: 32px;
+  --radius-card: 24px;
+  --radius-input: 12px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-8: 48px;
+
+  /* ── The nav rail (docs/04 §8) ──────────────────────────────────────
+   * Its height is CONTENT-SIZED, so it depends on how many nav entries the
+   * registry declares. Expressed as a formula rather than a number — add a
+   * capability with a nav entry and the rail grows by exactly one item, with
+   * no number to remember to update:
+   *
+   *   height = 2*--rail-padding
+   *          + --mark-size-md + --rail-mark-gap
+   *          + N*--rail-item-size + (N-1)*--rail-item-gap
+   */
+  --rail-width: 56px;
+  --rail-item-size: 36px;
+  --rail-item-gap: 4px;
+  --rail-padding: 12px;
+  --rail-mark-gap: 16px;
+  --control-height: 32px;
+  --control-height-sm: 28px;
+
+  /* ── Typography (docs/04 §5) ──────────────────────────────────────────
+   * The system face on every platform, never a webfont: it costs a request or
+   * a bundle, and the system face is most of what makes an app feel native.
+   * Echo's bundled EB Garamond and Figtree are gone with the palette — a serif
+   * page title was Monolith's idea, and this is not that design. */
+  --font-system: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    "Segoe UI Variable Text", "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
+  --font-mono-stack: "SF Mono", ui-monospace, SFMono-Regular, "Cascadia Mono",
+    Consolas, Menlo, monospace;
+
+  --text-display-size: 40px;
+  --text-display-line: 44px;
+  --text-display-weight: 600;
+  --text-display-tracking: -0.02em;
+
+  --text-title-size: 22px;
+  --text-title-line: 28px;
+  --text-title-weight: 600;
+  --text-title-tracking: -0.01em;
+
+  --text-heading-size: 16px;
+  --text-heading-line: 22px;
+  --text-heading-weight: 600;
+  --text-heading-tracking: -0.01em;
+
+  --text-body-size: 13px;
+  --text-body-line: 18px;
+  --text-body-weight: 400;
+  --text-body-tracking: 0em;
+
+  --text-label-size: 12px;
+  --text-label-line: 16px;
+  --text-label-weight: 500;
+  --text-label-tracking: 0em;
+
+  --text-caption-size: 11px;
+  --text-caption-line: 14px;
+  --text-caption-weight: 400;
+  --text-caption-tracking: 0.01em;
+
+  --text-mono-size: 12px;
+  --text-mono-line: 18px;
+  --text-mono-weight: 400;
+  --text-mono-tracking: 0em;
+
+  /* ── Motion (docs/04 §6) ──────────────────────────────────────────────
+   * Springs are physics and live in JS; the durations below are for hover,
+   * press and focus, which must never cost a JS frame. */
+  --motion-duration-fast: 120ms;
+  --motion-duration-medium: 240ms;
+  --motion-ease-standard: cubic-bezier(0.32, 0.72, 0, 1);
+  --motion-ease-linear: linear;
+
+  --spring-pill-appear-stiffness: 400;
+  --spring-pill-appear-damping: 30;
+  --spring-state-stiffness: 300;
+  --spring-state-damping: 25;
+  --spring-panel-stiffness: 260;
+  --spring-panel-damping: 26;
+
+  /* ── Focus (docs/04 §11) ──────────────────────────────────────────── */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  /* ── The page header and its scroll fades (docs/04 §8) ──────────────
+   * TWO NUMBERS, TWO JOBS. --titlebar-band is ALIGNMENT: the band the window
+   * controls are centred in, and the row the page title sits in so the two
+   * share a centre line. --page-header-height is SPACE: how far down the
+   * page's content begins.
+   *
+   * The fade is a MASK, not a gradient in a background colour: the window is
+   * transparent with a native material behind it, so a painted gradient would
+   * be a grey slab sitting on the glass. */
+  --page-header-height: 52px;
+  --page-padding-x: 32px;
+  --titlebar-band: 28px;
+  --scroll-fade-size: 52px;
+
+  /* What the window controls need beside them. macOS draws its three buttons
+     from the top-left; Windows draws its three from the top-right. The rail
+     absorbs the macOS side, so this is the inset the header needs once the
+     rail is no longer there to do it. */
+  --titlebar-safe-inset: 80px;
+
+  /* ── Window (docs/04 §8) ──────────────────────────────────────────── */
+  --window-width: 960px;
+  --window-height: 640px;
+  --window-min-width: 840px;
+  --window-min-height: 560px;
+
+  /* ── Lists, charts and keycaps (docs/04 §11) ──────────────────────── */
+  --chart-line-width: 1.5px;
+  --chart-ink-opacity: 0.72;
+  --chart-row-height: 32px;
+  --chart-label-gutter: 96px;
+  --chart-height: 96px;
+  --chart-point-size: 3px;
+  --chart-inset: 4px;
+
+  --segment-height: var(--control-height-sm);
+  --segment-radius: var(--radius-input);
+  --segment-padding: 2px;
+
+  --search-debounce: 180ms;
+  --feedback-hold: 1200ms;
+
+  --row-height: 56px;
+  --row-overscan: 6;
+
+  --keycap-height-sm: 18px;
+  --keycap-height-md: 24px;
+  --keycap-min-width-sm: 18px;
+  --keycap-min-width-md: 24px;
+  --keycap-radius: var(--radius-input);
+
+  /* ── The pill (docs/04 §7) ────────────────────────────────────────────
+   * THESE ARE THE WINDOW'S DIMENSIONS. The pill window is sized to them and
+   * its material is given --radius-pill, so the window IS the pill and every
+   * pixel of it is painted glass.
+   *
+   * ONE WIDTH FOR EVERY LIVE STATE. Arming, recording and cancel-armed are all
+   * --pill-width, so nothing resizes during a dictation: a window resize
+   * racing a CSS width morph that is not frame-locked to it shows bare glass
+   * beside the pill on every frame where the two disagree. */
+  --pill-width: 200px;
+  --pill-height: 36px;
+
+  /* Failure is a sentence, not a status. Measured at --text-label, Echo's
+     failure corpus wraps to at most two lines at 340px; 360px is that
+     threshold plus room for the copy to grow by a few words. Content is
+     CENTRED, so a one-line message sits in the middle rather than floating at
+     the top. The radius stays --radius-pill so the failure is visibly the same
+     object, and so the window's material radius is never re-applied at
+     runtime. */
+  --pill-width-failed: 360px;
+  --pill-height-failed: 56px;
+
+  /* The pill's exit is performed by the WINDOW, not the web layer — the glass
+     is a native view sized to the window, so anything CSS moves slides out
+     from under it.
+     There is no matching appear pair, and that asymmetry is the design: the
+     pill APPEARS INSTANTLY, because any fade-in delays the only feedback that
+     the keypress registered. It is the LEAVING that gets a beat, because that
+     beat carries the one bit the screen has left to say — up for committed,
+     down for cancelled. */
+  --pill-exit-duration-ms: 160;
+  --pill-exit-travel: 8;
+
+  /* Starts full and drains to zero — the cancel-armed state. Height only; its
+     width is whatever the middle slot gives it, because a line that is always
+     the same length as the waveform it replaces is what makes the swap read as
+     one object changing mode. */
+  --countdown-line-height: 3px;
+
+  /* Reserved, not measured, so a minute rolling over cannot steal width from
+     the waveform mid-recording. Fits M:SS and MM:SS in tabular figures. */
+  --pill-timer-width: 32px;
+
+  --pill-offset-bottom: 96px;
+  --pill-dot-size: 8px;
+  --pill-pulse-duration: 2s;
+  --pill-pulse-opacity-min: 0.6;
+
+  --waveform-bars: 20;
+  --waveform-bar-width: 2px;
+  --waveform-bar-gap: 2px;
+  --waveform-bar-max: 16px;
+  --waveform-bar-min: 2px;
+  /* Audio range → visual range. Speech RMS is linear 0..1 and sits at
+     0.05-0.3, so a bar drawn straight from it never moves. */
+  --waveform-input-ceiling: 0.35;
+  --waveform-input-gamma: 0.6;
+
+  /* The mark: the waveform at rest (docs/04 §12). Ratios, not pixels, so it is
+     one shape at every size — bar width and gap stay fixed, because scaling
+     the stroke with the height turns the mark into a blob. */
+  --mark-bar-width: 2px;
+  --mark-bar-gap: 2px;
+  --mark-size-md: 24px;
+  --mark-size-lg: 40px;
+  --mark-ratio-outer: 0.25;
+  --mark-ratio-mid: 0.5;
+  --mark-ratio-peak: 0.75;
+}
+
+/**
+ * WHAT:  The light palette (docs/04 §2).
+ * WHY:   Driven by the system only — the app ships no theme switch, so there is
+ *        no class to toggle and nothing to persist. Everything not listed here
+ *        is identical in both schemes by design.
+ *
+ *        Echo was dark-only before this, so light is the genuinely new surface
+ *        and the one to check first when something looks wrong.
+ */
+@media (prefers-color-scheme: light) {
+  :root {
+    --surface-glass: rgba(252, 250, 247, 0.55);
+    --surface-elevated: rgba(255, 254, 252, 0.72);
+    --surface-sunken: rgba(40, 34, 28, 0.04);
+    --surface-sunken-strong: rgba(40, 34, 28, 0.07);
+    --surface-opaque: #f7f4f0;
+    --surface-opaque-elevated: #fdfbf8;
+
+    --border-hairline: rgba(40, 34, 28, 0.09);
+    --border-highlight: rgba(255, 255, 255, 0.7);
+
+    --text-primary: rgba(28, 24, 20, 0.9);
+    --text-secondary: rgba(28, 24, 20, 0.54);
+    --text-tertiary: rgba(28, 24, 20, 0.32);
+
+    --accent: rgba(28, 24, 20, 0.9);
+    --accent-soft: rgba(40, 34, 28, 0.06);
+    --success: rgba(28, 24, 20, 0.9);
+    --success-soft: rgba(40, 34, 28, 0.06);
+    --warning: rgba(28, 24, 20, 0.54);
+    --warning-soft: rgba(40, 34, 28, 0.06);
+    --danger: #a8342c;
+    --danger-soft: rgba(168, 52, 44, 0.1);
+
+    --shadow-pill: 0 12px 40px rgba(28, 24, 20, 0.16);
+    --shadow-panel: 0 24px 64px rgba(28, 24, 20, 0.14);
+    --shadow-card: 0 8px 24px rgba(28, 24, 20, 0.1);
+  }
+}
+
+/**
+ * WHAT:  Opaque surfaces under prefers-reduced-transparency (docs/04 §10).
+ * WHY:   Swapping the surface token is the whole implementation — every
+ *        material resolves through --material-*-surface, so no component and
+ *        no utility needs a branch for it. Under this setting glass is an
+ *        opaque solid, which is a supported look and not a degradation.
+ */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --material-pill-surface: var(--surface-opaque);
+    --material-panel-surface: var(--surface-opaque);
+    --material-elevated-surface: var(--surface-opaque-elevated);
+    --noise-opacity: 0;
+    --glass-backdrop-blur: 0px;
+  }
+}

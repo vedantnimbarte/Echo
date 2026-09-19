@@ -1,3 +1,5 @@
+pub mod latency;
+
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use rusqlite::{params, Connection};
@@ -5,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Aggregated count of telemetry events of one type.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct TelemetrySummaryItem {
     pub event_type: String,
     pub count: i64,

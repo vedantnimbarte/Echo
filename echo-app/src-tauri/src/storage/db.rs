@@ -225,5 +225,36 @@ fn migrate(conn: &Connection) -> Result<()> {
         )?;
     }
 
+    if version < 9 {
+        conn.execute_batch(
+            "
+            -- Per-stage latency, one row per measurement.
+            --
+            -- Raw samples rather than running aggregates, because the number
+            -- worth showing is a PERCENTILE: an average hides exactly the
+            -- behaviour people notice, which is the occasional slow one. A
+            -- mean cannot be recovered into a p95 after the fact, so the
+            -- samples are what is kept.
+            --
+            -- `stage` holds the LatencyStage enum's string form, never free
+            -- text — see core::telemetry::latency.
+            CREATE TABLE IF NOT EXISTS latency_samples (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                stage      TEXT NOT NULL,
+                ms         INTEGER NOT NULL,
+                engine     TEXT,
+                recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            -- Every query is 'this stage, most recent N', which is exactly
+            -- this index.
+            CREATE INDEX IF NOT EXISTS idx_latency_stage_time
+                ON latency_samples (stage, id DESC);
+
+            INSERT INTO schema_migrations (version) VALUES (9);
+        ",
+        )?;
+    }
+
     Ok(())
 }

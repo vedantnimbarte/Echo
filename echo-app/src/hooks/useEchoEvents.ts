@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { echoEvents } from "../ipc/events";
 import { commands } from "../ipc/commands";
 import { normalizeMode, useRecordingStore } from "../store/recordingStore";
+import { errorMessage } from "../lib/errors";
 
 interface Options {
   /**
@@ -15,6 +16,7 @@ interface Options {
 export function useEchoEvents({ controlHotkey = false }: Options = {}) {
   const {
     setRecording,
+    setDictation,
     setSpeaking,
     setTranscribing,
     setMode,
@@ -29,8 +31,14 @@ export function useEchoEvents({ controlHotkey = false }: Options = {}) {
   }, [setMode]);
 
   useEffect(() => {
-    const report = (e: unknown) => setError(String(e));
+    const report = (e: unknown) => setError(errorMessage(e));
     const unlisten = Promise.all([
+      echoEvents.onDictationState(({ payload }) => {
+        setDictation(
+          payload.state as import("../store/recordingStore").DictationState,
+          payload.cancel_countdown_ms,
+        );
+      }),
       echoEvents.onRecordingStarted(() => {
         setRecording(true);
         setTranscribing(false);

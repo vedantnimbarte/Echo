@@ -8,10 +8,12 @@ import { useRecordingStore } from "../../store/recordingStore";
 import { t } from "../../i18n";
 import { commands } from "../../ipc/commands";
 import { echoEvents } from "../../ipc/events";
-import type { SettingsPage } from "../settings/SettingsPanel";
+import type { SettingsPage } from "../settings/SettingsView";
 import { EngineTag, useEngineStatus } from "../common/EngineTag";
 import { Waveform, type WaveMode } from "./Waveform";
 import { RingMeter } from "./RingMeter";
+import { errorMessage } from "../../lib/errors";
+import { CountdownLine } from "./CountdownLine";
 
 /**
  * `"line"` is the Minimal variant. The stored value keeps its original name so
@@ -22,7 +24,7 @@ export type PillSize = "large" | "small" | "line";
 /** Movement, in px, before a press on a control counts as a drag not a click. */
 const DRAG_THRESHOLD = 4;
 
-type View = "idle" | "active" | "transcribing" | "done" | "error";
+type View = "idle" | "active" | "cancelling" | "transcribing" | "done" | "error";
 
 /**
  * Bring Settings forward — on `page` if one is given, otherwise on whatever
@@ -63,6 +65,8 @@ function formatElapsed(sec: number): string {
 function usePillState() {
   const {
     isRecording,
+    dictation,
+    cancelCountdownMs,
     speaking,
     transcribing,
     mode,
@@ -120,15 +124,21 @@ function usePillState() {
     return () => clearTimeout(id);
   }, [error, setError]);
 
+  // Cancelling outranks recording, and has to: audio really is still flowing
+  // in CANCEL_ARMED — that is what makes the second Escape able to resume — so
+  // a pill that drew it as ordinary recording would be telling the truth about
+  // the microphone and the wrong thing about what is about to happen.
   const view: View = error
     ? "error"
-    : transcribing
-      ? "transcribing"
-      : isRecording
-        ? "active"
-        : flash
-          ? "done"
-          : "idle";
+    : dictation === "CANCEL_ARMED"
+      ? "cancelling"
+      : transcribing
+        ? "transcribing"
+        : isRecording
+          ? "active"
+          : flash
+            ? "done"
+            : "idle";
 
   // A "hot" indicator when actually capturing speech; calm while merely armed.
   const live = view === "transcribing" || speaking || (isRecording && mode !== "auto");
@@ -138,7 +148,7 @@ function usePillState() {
       void commands.stopRecording();
     } else {
       // Surface capture failures (no mic, permission denied) in the pill.
-      void commands.startRecording().catch((e) => setError(String(e)));
+      void commands.startRecording().catch((e) => setError(errorMessage(e)));
     }
   }
 
@@ -153,6 +163,7 @@ function usePillState() {
     mode,
     engine,
     isRecording,
+    cancelCountdownMs,
     elapsed,
     error,
     partialTranscript,
@@ -263,6 +274,7 @@ function PillLarge({
   live,
   mode,
   isRecording,
+  cancelCountdownMs,
   elapsed,
   error,
   partialTranscript,
@@ -336,8 +348,12 @@ function PillLarge({
 
         {/* ---- Center ---------------------------------------------------- */}
         <div className="flex min-w-0 items-center gap-2.5 px-2">
-          {(view === "idle" || view === "active" || view === "transcribing") && (
-            <Waveform mode={waveMode} />
+          {view === "cancelling" ? (
+            <CountdownLine durationMs={cancelCountdownMs} />
+          ) : (
+            (view === "idle" || view === "active" || view === "transcribing") && (
+              <Waveform mode={waveMode} />
+            )
           )}
 
           {/* Only at rest: mid-dictation the centre is already carrying the

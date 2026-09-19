@@ -128,7 +128,7 @@ fn sha256_for(file: &str) -> Result<&'static str> {
 }
 
 /// A wake phrase and its local availability, for the settings UI.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct WakePhraseInfo {
     pub id: String,
     pub label: String,

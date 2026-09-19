@@ -10,7 +10,7 @@
 
 use serde::Serialize;
 
-#[derive(Serialize, Clone, Copy)]
+#[derive(Serialize, Clone, Copy, specta::Type)]
 pub struct Language {
     /// Whisper's code, and the value stored in the `language` setting.
     pub code: &'static str,

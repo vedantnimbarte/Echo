@@ -1,7 +1,7 @@
 import { listen, emit } from "@tauri-apps/api/event";
 import type { RecordingMode } from "../store/recordingStore";
 import type { PillSize } from "../components/pill/Pill";
-import type { SettingsPage } from "../components/settings/SettingsPanel";
+import type { SettingsPage } from "../components/settings/SettingsView";
 
 export interface TranscriptPartialPayload {
   type: "TranscriptPartial";
@@ -55,6 +55,20 @@ export const echoEvents = {
 
   onNemoEngineProgress: (cb: (progress: number) => void) =>
     listen<number>("echo://nemo-engine-progress", (e) => cb(e.payload)),
+
+  /**
+   * The dictation state machine moved.
+   *
+   * The countdown length comes with the event rather than being a constant
+   * here, so the line the pill drains matches the window the backend will
+   * actually wait — two copies of that number would drift and the animation
+   * would finish before or after the thing it is animating.
+   */
+  onDictationState: (
+    cb: (e: {
+      payload: { state: string; cancel_countdown_ms: number };
+    }) => void,
+  ) => listen("echo://dictation-state", cb),
 
   onHotkeyToggle: (cb: () => void) => listen("echo://hotkey-toggle", cb),
 

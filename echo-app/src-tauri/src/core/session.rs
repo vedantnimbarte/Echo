@@ -14,7 +14,7 @@
 use serde::Serialize;
 
 /// The windowing system in use, as far as we can tell from the environment.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum SessionKind {
     /// Windows or macOS, where application-registered global hotkeys work.
@@ -28,7 +28,7 @@ pub enum SessionKind {
 }
 
 /// How well global hotkeys can be expected to work here.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct HotkeySupport {
     pub session: SessionKind,
     /// Desktop environment, when the session advertises one ("GNOME", "KDE").

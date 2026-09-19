@@ -7,6 +7,7 @@ use crate::{error::Result, state::AppState};
 /// On macOS this reflects the Accessibility permission; other platforms don't
 /// gate keyboard injection, so they always return `true`.
 #[tauri::command]
+#[specta::specta]
 pub fn check_accessibility_permission() -> bool {
     #[cfg(target_os = "macos")]
     {
@@ -26,6 +27,7 @@ pub fn check_accessibility_permission() -> bool {
 /// worse off than one who knows. Asking costs a D-Bus round trip there, so it
 /// runs off the async runtime.
 #[tauri::command]
+#[specta::specta]
 pub async fn secure_field_detection() -> crate::core::field::Detection {
     tokio::task::spawn_blocking(crate::core::field::detection)
         .await
@@ -35,6 +37,7 @@ pub async fn secure_field_detection() -> crate::core::field::Detection {
 /// Type `text` into the focused application. Used by the History panel to
 /// re-insert a past transcript and by onboarding to test text output.
 #[tauri::command]
+#[specta::specta]
 pub async fn inject_text(state: State<'_, AppState>, text: String) -> Result<()> {
     if text.is_empty() {
         return Ok(());

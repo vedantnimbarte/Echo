@@ -8,7 +8,7 @@ use crate::error::{EchoError, Result};
 /// Which local engine runs a model. The file name on disk follows from it, and
 /// so does which provider can load it: a GGUF transducer means nothing to
 /// whisper.cpp and a ggml whisper model means nothing to NeMo-Speech.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum Engine {
     Whisper,
@@ -129,7 +129,7 @@ impl ModelSpec {
 }
 
 /// Information about a model returned to the frontend.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ModelInfo {
     pub name: String,
     pub downloaded: bool,
