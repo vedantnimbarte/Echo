@@ -96,12 +96,27 @@ pub fn run() {
     // `bindings_export::every_command_is_in_the_bindings` is the guard that
     // catches a command added without a dev run since.
     #[cfg(debug_assertions)]
-    builder
-        .export(
-            specta_typescript::Typescript::default(),
-            "../src/lib/bindings.ts",
-        )
-        .expect("failed to write src/lib/bindings.ts");
+    {
+        let exporter = specta_typescript::Typescript::default()
+            // i64 as `number`, not the default hard failure.
+            //
+            // Every i64 that crosses this boundary is a SQLite rowid or a count
+            // of words, and SQLite's own AUTOINCREMENT ceiling is far below the
+            // 2^53 where a JS number stops being exact. The default refuses to
+            // guess and is right to, but here the range genuinely is safe and
+            // `bigint` would be a lie in the other direction: the values arrive
+            // as JSON numbers, so the frontend could never have received a
+            // BigInt anyway.
+            .bigint(specta_typescript::BigIntExportBehavior::Number);
+
+        // LOGGED, NEVER FATAL. This is a developer convenience that happens to
+        // run inside the application; a failure to write it must not stop Echo
+        // starting. It did exactly that once — an `.expect` here panicked the
+        // app on launch over a TypeScript file the user has no interest in.
+        if let Err(e) = builder.export(exporter, "../src/lib/bindings.ts") {
+            eprintln!("Could not regenerate src/lib/bindings.ts: {e}");
+        }
+    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
