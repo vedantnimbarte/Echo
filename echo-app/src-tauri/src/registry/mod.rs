@@ -37,12 +37,13 @@ use std::sync::LazyLock;
 pub use capability::{
     Capability, CapabilityKey, ChoiceSource, HotkeyDef, LatencyStage, MetricDef, NavDef,
     OsPermission, SettingChoice, SettingDef, SettingKind, SettingSection, SettingValue,
+    VisibleWhen,
 };
 
+use crate::core::asr::model_manager::{DEFAULT_MODEL, DEFAULT_NEMO_MODEL};
 use crate::core::hotkeys::{
     DEFAULT_HOTKEY, DEFAULT_MODE, DEFAULT_RETRY_HOTKEY, DEFAULT_UNDO_HOTKEY,
 };
-use crate::core::asr::model_manager::{DEFAULT_MODEL, DEFAULT_NEMO_MODEL};
 use crate::core::injection::DEFAULT_SETTLE_MS;
 use crate::core::wake::DEFAULT_THRESHOLD;
 
@@ -65,7 +66,17 @@ fn setting(
         default,
         requires_permission: Vec::new(),
         advanced: false,
+        visible_when: None,
     }
+}
+
+/// Shows this setting only when `key` holds one of `any_of`. See VisibleWhen.
+fn only_when(mut def: SettingDef, key: &str, any_of: &[&str]) -> SettingDef {
+    def.visible_when = Some(VisibleWhen {
+        key: key.to_string(),
+        any_of: any_of.iter().map(|v| v.to_string()).collect(),
+    });
+    def
 }
 
 fn toggle(
@@ -207,7 +218,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "hotkey",
                     "Dictation hotkey",
                     "Held or tapped, depending on the mode below.",
-                    SettingSection::Recording,
+                    SettingSection::SettingsDictation,
                     SettingKind::Hotkey,
                     SettingValue::Text(DEFAULT_HOTKEY.into()),
                 ),
@@ -215,7 +226,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "recording_mode",
                     "How recording ends",
                     "The hotkey always starts it. What stops it is the choice.",
-                    SettingSection::Recording,
+                    SettingSection::SettingsDictation,
                     vec![
                         SettingChoice::described(
                             "toggle",
@@ -240,7 +251,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                         "audio_device",
                         "Microphone",
                         "Empty means whichever device the system is using.",
-                        SettingSection::Recording,
+                        SettingSection::SettingsMicrophone,
                         ChoiceSource::InputDevices,
                         "",
                     ),
@@ -248,10 +259,10 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                 ),
                 toggle(
                     "warm_mic",
-                    "Keep the microphone warm",
+                    "Keep the microphone ready",
                     "Opens the input stream before you press the hotkey, so the first word is \
                      not the one that gets clipped. Costs a little battery.",
-                    SettingSection::Recording,
+                    SettingSection::SettingsMicrophone,
                     true,
                 ),
                 toggle(
@@ -260,24 +271,24 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "The pill is often not where you are looking — that is the point of \
                      dictating into another app — so a sound is the feedback that reliably \
                      lands.",
-                    SettingSection::Recording,
+                    SettingSection::SettingsGeneral,
                     false,
                 ),
                 choice(
                     "vad_engine",
-                    "Voice detection",
+                    "Speech detection",
                     "How Echo decides you have stopped talking.",
-                    SettingSection::Recording,
+                    SettingSection::SettingsMicrophone,
                     vec![
                         SettingChoice::described(
                             "silero",
-                            "Silero",
-                            "A small neural model. Accurate in noise.",
+                            "Neural — ignores background noise",
+                            "A small model that tells speech from keyboard clatter and fans.",
                         ),
                         SettingChoice::described(
                             "energy",
-                            "Loudness only",
-                            "Cheaper, and fooled by a noisy room.",
+                            "Simple — loudness only",
+                            "Worth trying if speech is cut off, or a noisy room keeps it awake.",
                         ),
                         SettingChoice::described(
                             "none",
@@ -291,7 +302,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "pill_size",
                     "Pill size",
                     "How much of the screen the recording indicator takes.",
-                    SettingSection::Recording,
+                    SettingSection::SettingsGeneral,
                     vec![
                         SettingChoice::new("large", "Large"),
                         SettingChoice::new("small", "Small"),
@@ -320,7 +331,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "Engine",
                     "Offline runs on this machine and the audio never leaves it. A cloud \
                      provider is faster on a slow machine and costs you an API key.",
-                    SettingSection::Transcription,
+                    SettingSection::EngineSpeech,
                     vec![
                         SettingChoice::described(
                             "local",
@@ -341,7 +352,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "Whisper model",
                     "Bigger models are more accurate and slower. The `.en` models are \
                      English-only and better at it than the multilingual model of the same size.",
-                    SettingSection::Transcription,
+                    SettingSection::EngineSpeech,
                     ChoiceSource::WhisperModels,
                     DEFAULT_MODEL,
                 ),
@@ -349,7 +360,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "nemo_model",
                     "NeMo model",
                     "Used when the NeMo engine is selected.",
-                    SettingSection::Transcription,
+                    SettingSection::EngineSpeech,
                     ChoiceSource::NemoModels,
                     DEFAULT_NEMO_MODEL,
                 ),
@@ -358,7 +369,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "Spoken language",
                     "Auto-detect costs a little accuracy. Pinning the language you actually \
                      speak is the cheapest accuracy win available.",
-                    SettingSection::Transcription,
+                    SettingSection::EngineSpeech,
                     ChoiceSource::Languages,
                     "auto",
                 ),
@@ -367,7 +378,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "Use the GPU when one is available",
                     "Falls back to the processor by itself if a run fails, and stays there \
                      for the rest of the session.",
-                    SettingSection::Transcription,
+                    SettingSection::EngineAdvanced,
                     true,
                 ),
                 advanced(number(
@@ -375,7 +386,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "Processor threads",
                     "Zero lets Whisper choose. Raise it only if decoding is slow and the \
                      machine is otherwise idle.",
-                    SettingSection::Transcription,
+                    SettingSection::EngineAdvanced,
                     0.0,
                     32.0,
                     1.0,
@@ -387,7 +398,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "Show words as you say them",
                     "Types a running approximation into the app and corrects it when you \
                      stop. Off by default because the correction is visible.",
-                    SettingSection::Transcription,
+                    SettingSection::SettingsDictation,
                     false,
                 ),
             ],
@@ -432,7 +443,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                         "auto_inject",
                         "Type the transcript into the focused app",
                         "Off leaves it on the clipboard for you to paste.",
-                        SettingSection::Output,
+                        SettingSection::OutputInsert,
                         true,
                     ),
                     OsPermission::Accessibility,
@@ -442,7 +453,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "How to insert it",
                     "Pasting is instant but borrows the clipboard. Typing is slower and \
                      survives apps that refuse a paste.",
-                    SettingSection::Output,
+                    SettingSection::OutputInsert,
                     vec![
                         SettingChoice::described(
                             "auto",
@@ -452,64 +463,72 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                         SettingChoice::new("paste", "Always paste"),
                         SettingChoice::new("type", "Always type"),
                     ],
-                    "auto",
+                    // NOT "auto". An unset injection_method is read as typing by
+                    // core::injection::use_paste_for, so declaring "auto" here
+                    // would show every untouched install a control that
+                    // disagrees with what the app actually does.
+                    "type",
                 ),
-                advanced(number(
+                number(
                     "inject_delay_ms",
-                    "Wait before inserting",
+                    "Insert delay",
                     "For an app that needs a moment to take focus back after the hotkey.",
-                    SettingSection::Output,
+                    SettingSection::OutputAdvanced,
                     0.0,
                     2000.0,
                     10.0,
                     Some("ms"),
                     0.0,
-                )),
-                advanced(number(
-                    "clipboard_settle_ms",
-                    "Let the app read the clipboard for",
-                    "How long Echo waits before putting your old clipboard back. Raise it if \
-                     a paste lands empty on a slow machine.",
-                    SettingSection::Output,
-                    0.0,
-                    2000.0,
-                    10.0,
-                    Some("ms"),
-                    DEFAULT_SETTLE_MS as f64,
-                )),
+                ),
+                only_when(
+                    number(
+                        "clipboard_settle_ms",
+                        "Clipboard hold",
+                        "How long Echo waits before putting your old clipboard back. Raise it \
+                         if a paste lands empty on a slow machine.",
+                        SettingSection::OutputAdvanced,
+                        0.0,
+                        2000.0,
+                        10.0,
+                        Some("ms"),
+                        DEFAULT_SETTLE_MS as f64,
+                    ),
+                    "injection_method",
+                    &["paste", "auto"],
+                ),
                 toggle(
                     "auto_edit",
                     "Clean up filler and stutters",
                     "Drops \"um\" and the repeated half-word, in the languages that have rules.",
-                    SettingSection::Output,
+                    SettingSection::OutputFormatting,
                     true,
                 ),
                 toggle(
                     "spoken_punctuation",
                     "Take spoken punctuation",
                     "Saying \"comma\" writes one. Off by default: it costs you the word.",
-                    SettingSection::Output,
+                    SettingSection::OutputFormatting,
                     false,
                 ),
                 toggle(
                     "format_numbers",
                     "Write numbers as digits",
                     "\"Twenty past nine\" becomes \"9:20\".",
-                    SettingSection::Output,
+                    SettingSection::OutputFormatting,
                     true,
                 ),
                 toggle(
                     "format_tidy",
                     "Tidy spacing and capitals",
                     "Sentence case, one space after a full stop.",
-                    SettingSection::Output,
+                    SettingSection::OutputFormatting,
                     true,
                 ),
                 toggle(
                     "app_style_enabled",
                     "Follow the focused app's house style",
                     "A terminal takes the words exactly as spoken; a chat box does not.",
-                    SettingSection::Output,
+                    SettingSection::OutputApps,
                     false,
                 ),
                 needs(
@@ -518,7 +537,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                         "Never type into a password field",
                         "Echo asks the accessibility API what the focused field is. Where the \
                          API will not answer, Echo declines rather than guesses.",
-                        SettingSection::Output,
+                        SettingSection::OutputApps,
                         true,
                     ),
                     OsPermission::Accessibility,
@@ -546,14 +565,14 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "Learn from corrections",
                     "When you fix a word by hand just after dictating it, Echo offers to \
                      remember the correction.",
-                    SettingSection::Vocabulary,
+                    SettingSection::OutputAdvanced,
                     true,
                 ),
                 toggle(
                     "scratch_that_enabled",
                     "\"Scratch that\" deletes the last thing said",
                     "Spoken, not typed.",
-                    SettingSection::Vocabulary,
+                    SettingSection::OutputAdvanced,
                     false,
                 ),
                 toggle(
@@ -561,14 +580,14 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "Voice commands",
                     "A spoken prefix turns the rest of the sentence into an instruction \
                      rather than text.",
-                    SettingSection::Vocabulary,
+                    SettingSection::OutputAdvanced,
                     false,
                 ),
                 setting(
                     "command_prefix",
                     "Command prefix",
                     "The words that mark a sentence as an instruction.",
-                    SettingSection::Vocabulary,
+                    SettingSection::OutputAdvanced,
                     SettingKind::Text {
                         placeholder: Some("hey echo".into()),
                         max_len: Some(64),
@@ -579,7 +598,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "command_llm_provider",
                     "Which model runs commands",
                     "Ollama runs on this machine. Anything else sends the sentence out.",
-                    SettingSection::Vocabulary,
+                    SettingSection::OutputAdvanced,
                     vec![
                         SettingChoice::described("ollama", "Ollama", "Local. Nothing leaves."),
                         SettingChoice::new("openai", "OpenAI"),
@@ -590,7 +609,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "command_llm_model",
                     "Command model",
                     "The model name as that provider spells it.",
-                    SettingSection::Vocabulary,
+                    SettingSection::OutputAdvanced,
                     SettingKind::Text {
                         placeholder: Some("llama3.2".into()),
                         max_len: Some(128),
@@ -601,7 +620,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "ollama_endpoint",
                     "Ollama endpoint",
                     "Where your Ollama is listening.",
-                    SettingSection::Vocabulary,
+                    SettingSection::OutputAdvanced,
                     SettingKind::Text {
                         placeholder: Some("http://localhost:11434".into()),
                         max_len: Some(256),
@@ -613,7 +632,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "Let a model rewrite the transcript",
                     "Reads better and takes longer. Off by default because it is the one \
                      stage that can change what you said.",
-                    SettingSection::Vocabulary,
+                    SettingSection::OutputFormatting,
                     false,
                 ),
             ],
@@ -632,14 +651,14 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "Listen for a wake word",
                     "Keeps the microphone open and runs a small spotter on it. Nothing is \
                      transcribed until the phrase is heard.",
-                    SettingSection::Recording,
+                    SettingSection::SettingsDictation,
                     false,
                 ),
                 dynamic(
                     "wake_word_model",
                     "Wake phrase",
                     "Each phrase is its own downloaded model.",
-                    SettingSection::Recording,
+                    SettingSection::SettingsDictation,
                     ChoiceSource::WakeWordModels,
                     "",
                 ),
@@ -647,7 +666,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "wake_word_sensitivity",
                     "Sensitivity",
                     "Higher triggers more easily, and on more things that were not the phrase.",
-                    SettingSection::Recording,
+                    SettingSection::SettingsDictation,
                     0.0,
                     1.0,
                     0.05,
@@ -772,7 +791,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "ui_language",
                     "Language of this window",
                     "Separate from the language you dictate in.",
-                    SettingSection::General,
+                    SettingSection::SettingsGeneral,
                     vec![
                         SettingChoice::new("auto", "Match the system"),
                         SettingChoice::new("en", "English"),
@@ -787,14 +806,14 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                     "Retry on a stronger model",
                     "A second hotkey re-runs the last dictation on a bigger model, because by \
                      the time you notice a mistake the focus has moved on.",
-                    SettingSection::General,
+                    SettingSection::SettingsDictation,
                     true,
                 ),
                 dynamic(
                     "retry_target",
                     "Retry with",
                     "Empty picks the best installed model that is not the one you just used.",
-                    SettingSection::General,
+                    SettingSection::SettingsDictation,
                     ChoiceSource::WhisperModels,
                     "",
                 ),
@@ -812,7 +831,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                 "onboarding_complete",
                 "Setup finished",
                 "Not shown in settings; set by the setup flow.",
-                SettingSection::General,
+                SettingSection::SettingsGeneral,
                 false,
             )],
         },
@@ -833,7 +852,7 @@ pub static CAPABILITIES: LazyLock<Vec<Capability>> = LazyLock::new(|| {
                 "check_updates_on_start",
                 "Check for updates at launch",
                 "The only network request Echo makes on its own. Off means Echo never reaches                  out unless you ask it to.",
-                SettingSection::General,
+                SettingSection::SettingsGeneral,
                 true,
             )],
         },
@@ -882,7 +901,10 @@ pub fn nav_items() -> Vec<(&'static CapabilityKey, &'static NavDef)> {
 
 /// Every hotkey the app binds, so conflict detection has one list to check.
 pub fn hotkey_defs() -> Vec<&'static HotkeyDef> {
-    CAPABILITIES.iter().filter_map(|c| c.hotkey.as_ref()).collect()
+    CAPABILITIES
+        .iter()
+        .filter_map(|c| c.hotkey.as_ref())
+        .collect()
 }
 
 #[cfg(test)]
@@ -944,6 +966,38 @@ mod tests {
                 _ => false,
             };
             assert!(ok, "{} has a default of the wrong kind", setting.key);
+        }
+    }
+
+    /// A condition pointing at a key that does not exist hides the control
+    /// forever, and does it silently — the row simply never renders, which
+    /// looks exactly like the setting not existing.
+    #[test]
+    fn every_condition_names_a_real_setting() {
+        for setting in all_settings() {
+            let Some(condition) = &setting.visible_when else {
+                continue;
+            };
+            let target = setting_def(&condition.key).unwrap_or_else(|| {
+                panic!(
+                    "{} is shown only when {:?} has certain values, but there is no such setting",
+                    setting.key, condition.key
+                )
+            });
+
+            // And the values it waits for must be values that key can hold, or
+            // the control is equally invisible for a subtler reason.
+            if let SettingKind::Choice { options } = &target.kind {
+                for wanted in &condition.any_of {
+                    assert!(
+                        options.iter().any(|o| &o.value == wanted),
+                        "{} waits for {} to be {:?}, which is not one of its options",
+                        setting.key,
+                        condition.key,
+                        wanted
+                    );
+                }
+            }
         }
     }
 

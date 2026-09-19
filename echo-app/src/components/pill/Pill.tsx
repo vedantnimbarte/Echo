@@ -8,7 +8,7 @@ import { useRecordingStore } from "../../store/recordingStore";
 import { t } from "../../i18n";
 import { commands } from "../../ipc/commands";
 import { echoEvents } from "../../ipc/events";
-import type { SettingsPage } from "../settings/SettingsPanel";
+import type { SettingsPage } from "../settings/SettingsView";
 import { EngineTag, useEngineStatus } from "../common/EngineTag";
 import { Waveform, type WaveMode } from "./Waveform";
 import { RingMeter } from "./RingMeter";

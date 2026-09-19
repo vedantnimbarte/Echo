@@ -95,10 +95,7 @@ fn sources() -> Vec<(PathBuf, String)> {
 /// Where a needle is read, if anywhere. The quotes matter: a bare substring
 /// search would match `history_enabled` inside `history_enabled_at` and call a
 /// dead setting live.
-fn consumption_site<'a>(
-    sources: &'a [(PathBuf, String)],
-    needle: &str,
-) -> Option<&'a Path> {
+fn consumption_site<'a>(sources: &'a [(PathBuf, String)], needle: &str) -> Option<&'a Path> {
     let quoted = [format!("\"{needle}\""), format!("'{needle}'")];
     sources
         .iter()
@@ -206,12 +203,17 @@ fn the_scan_finds_source_to_scan() {
         sources.len()
     );
 
-    let has_rust = sources.iter().any(|(p, _)| p.extension().is_some_and(|e| e == "rs"));
+    let has_rust = sources
+        .iter()
+        .any(|(p, _)| p.extension().is_some_and(|e| e == "rs"));
     let has_ts = sources
         .iter()
         .any(|(p, _)| p.extension().is_some_and(|e| e == "ts" || e == "tsx"));
     assert!(has_rust, "no Rust source found");
-    assert!(has_ts, "no frontend source found — a TypeScript-only setting would read as dead");
+    assert!(
+        has_ts,
+        "no frontend source found — a TypeScript-only setting would read as dead"
+    );
 }
 
 /// Keys are matched by exact quoted string, so a key that is a prefix of

@@ -16,7 +16,7 @@ import { listen } from "@tauri-apps/api/event";
 
 import { settings, invoked, ANSWERS } from "./setup";
 import App from "../App";
-import { SettingsPanel, type SettingsPage } from "../components/settings/SettingsPanel";
+import { SettingsView, type SettingsPage } from "../components/settings/SettingsView";
 import { DictionaryPanel } from "../components/dictionary/DictionaryPanel";
 import { HistoryPanel } from "../components/history/HistoryPanel";
 import { InsightsPanel } from "../components/insights/InsightsPanel";
@@ -97,20 +97,20 @@ describe("every settings page", () => {
   // real page list catches a new page added without being exercised, which a
   // hand-written test per page would not.
   it.each(PAGES)("renders without throwing: %s", async (page) => {
-    const { container } = mount(<SettingsPanel page={page} />);
+    const { container } = mount(<SettingsView page={page} />);
     await waitFor(() => {
       expect(container.textContent?.length ?? 0).toBeGreaterThan(0);
     });
   });
 
   it("offers the launch-at-login toggle on the settings page", async () => {
-    mount(<SettingsPanel page="settings" />);
+    mount(<SettingsView page="settings" />);
     expect(await screen.findByText(/Start Echo when I log in/i)).toBeTruthy();
   });
 
   it("lists the microphone the backend reported", async () => {
     const user = userEvent.setup();
-    mount(<SettingsPanel page="settings" />);
+    mount(<SettingsView page="settings" />);
     await openSection(user, "Microphone");
     expect(await screen.findByText(/Test Microphone/)).toBeTruthy();
   });
@@ -121,7 +121,7 @@ describe("every settings page", () => {
   it("offers the microphone controls whichever engine is running", async () => {
     settings.set("asr_provider", "openai");
     const user = userEvent.setup();
-    mount(<SettingsPanel page="settings" />);
+    mount(<SettingsView page="settings" />);
 
     await openSection(user, "Microphone");
     expect(await screen.findByText(/Keep the microphone ready/i)).toBeTruthy();
@@ -134,20 +134,21 @@ describe("every settings page", () => {
   // got. Both were silent failures waiting to happen.
   it("finds a control from a section that is not open", async () => {
     const user = userEvent.setup();
-    mount(<SettingsPanel page="settings" />);
+    mount(<SettingsView page="settings" />);
 
     // Speech detection lives under Microphone; General is what opens.
     expect(screen.queryByLabelText("Speech detection")).toBeNull();
     await user.type(await screen.findByLabelText(/search/i), "silero");
 
     expect(await screen.findByLabelText("Speech detection")).toBeTruthy();
-    // Out of context, so it says where it lives — page, then section.
-    expect(await screen.findByText(/Settings · Microphone · Speech detection/)).toBeTruthy();
+    // Out of context, so it says where it lives. The control carries its own
+    // name now, so the heading is the page and the section and stops there.
+    expect(await screen.findByText(/Settings · Microphone/)).toBeTruthy();
   });
 
   it("opens each page on its own first section", async () => {
     const user = userEvent.setup();
-    const { rerender } = mount(<SettingsPanel page="settings" />);
+    const { rerender } = mount(<SettingsView page="settings" />);
 
     await openSection(user, "Microphone");
     expect(await screen.findByLabelText("Speech detection")).toBeTruthy();
@@ -156,7 +157,7 @@ describe("every settings page", () => {
     // across, and there is no "Microphone" on it to carry it to.
     rerender(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <SettingsPanel page="output" />
+        <SettingsView page="output" />
       </QueryClientProvider>
     );
     expect(await screen.findByText(/Insert the transcript as soon as/i)).toBeTruthy();
@@ -178,15 +179,15 @@ describe("every settings page", () => {
     if (chosen === null) settings.delete("injection_method");
     else settings.set("injection_method", chosen);
     const user = userEvent.setup();
-    mount(<SettingsPanel page="output" />);
+    mount(<SettingsView page="output" />);
 
     await openSection(user, "Advanced");
-    // Awaited first: Insert delay shares the group and is always there, so
-    // reaching it means the group has settled and "not here" means something.
-    // Exact labels: each field's hint icon is a button whose accessible name
-    // is "About <the same words>", which a regex would match as well.
-    expect(await screen.findByLabelText("Insert delay (ms)")).toBeTruthy();
-    expect(screen.queryByLabelText("Clipboard hold (ms)") !== null).toBe(offered);
+    // Awaited first: Insert delay shares the section and is always there, so
+    // reaching it means the section has settled and "not here" means something.
+    // The unit now sits beside the input rather than inside its label, so the
+    // accessible name is the label alone.
+    expect(await screen.findByLabelText("Insert delay")).toBeTruthy();
+    expect(screen.queryByLabelText("Clipboard hold") !== null).toBe(offered);
   });
 
   // The one screen a user only ever sees after a crash, which is exactly the
@@ -194,7 +195,7 @@ describe("every settings page", () => {
   // offering the audio back when there is.
   it("says nothing about recovered audio when there is none", async () => {
     const user = userEvent.setup();
-    mount(<SettingsPanel page="engine" />);
+    mount(<SettingsView page="engine" />);
     await openSection(user, "Tools");
     expect(await screen.findByText(/Choose an audio file/i)).toBeTruthy();
     expect(screen.queryByText(/stopped before it could transcribe/i)).toBeNull();
@@ -219,7 +220,7 @@ describe("every settings page", () => {
     try {
       settings.set("command_llm_provider", "openai");
       const user = userEvent.setup();
-      mount(<SettingsPanel page="output" />);
+      mount(<SettingsView page="output" />);
       await openSection(user, "Apps");
 
       const field = await screen.findByLabelText("Writing style");
@@ -235,7 +236,7 @@ describe("every settings page", () => {
     ANSWERS.recovered_recordings = ["/data/recovered-1700000000.wav"];
     try {
       const user = userEvent.setup();
-      mount(<SettingsPanel page="engine" />);
+      mount(<SettingsView page="engine" />);
 
       // No section clicked on purpose: recovered audio is the one thing nobody
       // would think to go looking for on a tab, so the page has to open on it.
@@ -256,7 +257,7 @@ describe("every settings page", () => {
     ANSWERS.silero_available = false;
     try {
       const user = userEvent.setup();
-      mount(<SettingsPanel page="settings" />);
+      mount(<SettingsView page="settings" />);
       await openSection(user, "Microphone");
       // Awaited first on purpose: the warning renders only once the probe has
       // answered, so reaching it means the picker below has settled too. The
@@ -276,7 +277,7 @@ describe("every settings page", () => {
   // that the move happened on both ends — the groups arrived, and they did not
   // stay behind as a second copy.
   it("keeps the open-source groups on About, not on Settings", async () => {
-    const { unmount } = mount(<SettingsPanel page="about" />);
+    const { unmount } = mount(<SettingsView page="about" />);
     // `findAll`: "Updates" is the group's name and also a word in the sentence
     // on its checkbox, and the assertion is that the group arrived at all.
     for (const group of [/Report an issue/i, /Contribute/i, /Updates/i]) {
@@ -286,7 +287,7 @@ describe("every settings page", () => {
     expect(await screen.findByDisplayValue(/OS: windows/)).toBeTruthy();
     unmount();
 
-    mount(<SettingsPanel page="settings" />);
+    mount(<SettingsView page="settings" />);
     // Waited for, not asserted on an empty render: the page has to have drawn
     // something before "it is not here" means anything.
     expect(await screen.findByText(/Start Echo when I log in/i)).toBeTruthy();
@@ -300,7 +301,7 @@ describe("every settings page", () => {
   // answer.
   it("shows cloud providers without switching the engine to one", async () => {
     const user = userEvent.setup();
-    mount(<SettingsPanel page="engine" />);
+    mount(<SettingsView page="engine" />);
 
     expect(await screen.findByText("Local models")).toBeTruthy();
 
@@ -314,7 +315,7 @@ describe("every settings page", () => {
   it("switches back to the offline engine when local is picked", async () => {
     settings.set("asr_provider", "openai");
     const user = userEvent.setup();
-    mount(<SettingsPanel page="engine" />);
+    mount(<SettingsView page="engine" />);
 
     // Opens on the lane that is actually running.
     expect(await screen.findByText("OpenAI")).toBeTruthy();

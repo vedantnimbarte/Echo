@@ -8,7 +8,6 @@ use crate::{
     storage::repositories,
 };
 
-
 /// Tap the hotkey: start if idle, stop if recording.
 const TOGGLE: &str = "echo://hotkey-toggle";
 /// Hold the hotkey: these bracket a single utterance.

@@ -154,22 +154,65 @@ impl LatencyStage {
 
 /**
  * SOURCE OF TRUTH KEYWORDS: SettingSection
- * WHAT:  Which group of the settings window a setting renders in.
- * WHY:   Grouping is presentation, but it belongs to the declaration — a
- *        setting that does not say where it goes forces the settings view to
- *        keep its own ordering list, which is the exact duplication the
- *        registry exists to remove.
- * WHERE: On every SettingDef; used by the settings view to build its sections.
+ * WHAT:  Which page and section of the settings window a setting renders in.
+ * WHY:   Grouping is presentation, but it belongs to the DECLARATION. A setting
+ *        that does not say where it goes forces the settings view to keep its
+ *        own ordering list, which is the exact duplication the registry exists
+ *        to remove — and that list is the thing that silently goes stale when a
+ *        setting is added.
+ *
+ *        The variants are page-and-section rather than a coarse topic, because
+ *        the window is split that way: four pages, each with its own tabs, and
+ *        a setting placed only to the page would still need a second list to
+ *        decide its tab. Written as `PageSection` in one name so a setting
+ *        declares its whole home in one value.
+ *
+ *        `*Advanced` sections are for settings that exist to unstick a specific
+ *        machine. That is a different question from `SettingDef::advanced`,
+ *        which hides a row behind a disclosure within whatever section it is
+ *        in; a setting can be in an Advanced section without being hidden, and
+ *        usually is.
+ * WHERE: On every SettingDef; read by the settings view to place its controls.
  */
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Type)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum SettingSection {
-    Recording,
-    Transcription,
-    Output,
-    Vocabulary,
+    SettingsGeneral,
+    SettingsDictation,
+    SettingsMicrophone,
+    EngineSpeech,
+    /// Holds no settings — only the file-transcription and crash-recovery
+    /// blocks. A section can be all EXTRAS: audio a crash interrupted is
+    /// something nobody would think to look for on a tab they did not know
+    /// existed, so it gets a name of its own rather than being tucked under
+    /// Advanced.
+    EngineTools,
+    EngineAdvanced,
+    OutputInsert,
+    OutputFormatting,
+    OutputApps,
+    OutputAdvanced,
     Privacy,
-    General,
+}
+
+impl SettingSection {
+    /// Which settings page this section belongs to. The page ids are the ones
+    /// the frontend router already uses.
+    pub fn page(&self) -> &'static str {
+        match self {
+            SettingSection::SettingsGeneral
+            | SettingSection::SettingsDictation
+            | SettingSection::SettingsMicrophone => "settings",
+            SettingSection::EngineSpeech
+            | SettingSection::EngineTools
+            | SettingSection::EngineAdvanced => "engine",
+            SettingSection::OutputInsert
+            | SettingSection::OutputFormatting
+            | SettingSection::OutputApps
+            | SettingSection::OutputAdvanced => "output",
+            SettingSection::Privacy => "privacy",
+        }
+    }
 }
 
 /**
@@ -305,6 +348,33 @@ impl SettingValue {
 }
 
 /**
+ * SOURCE OF TRUTH KEYWORDS: VisibleWhen
+ * WHAT:  A condition on ANOTHER setting that decides whether this one is shown.
+ * WHY:   Some controls only mean anything for certain values of another. The
+ *        clipboard hold is the worked example: it says how long to let the
+ *        target app read the clipboard, and Echo only borrows the clipboard
+ *        when it is pasting — so on "always type" the control is there,
+ *        adjustable, and governs nothing.
+ *
+ *        Declared rather than coded in the view, for the same reason placement
+ *        is: a condition living in the frontend is a second place that has to
+ *        learn about every new setting, and the one that silently goes stale.
+ *
+ *        Deliberately only "this key is one of these values" — not an
+ *        expression language. Every condition the app actually has fits, and a
+ *        richer form would invite logic into a table that other layers have to
+ *        be able to read without evaluating anything.
+ * WHERE: On SettingDef::visible_when; honoured by the settings view.
+ */
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct VisibleWhen {
+    /// The setting this one depends on.
+    pub key: String,
+    /// Values of that setting for which this control is shown.
+    pub any_of: Vec<String>,
+}
+
+/**
  * SOURCE OF TRUTH KEYWORDS: SettingDef
  * WHAT:  One setting, fully described: how it renders, what it defaults to, and
  *        what it requires to be usable.
@@ -336,6 +406,9 @@ pub struct SettingDef {
     /// Hidden behind a disclosure. For settings that exist to unstick a
     /// specific machine, not ones people are expected to browse.
     pub advanced: bool,
+    /// Shown only when another setting has one of a set of values. None means
+    /// always shown.
+    pub visible_when: Option<VisibleWhen>,
 }
 
 /**

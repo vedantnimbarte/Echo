@@ -155,9 +155,7 @@ fn nothing_imports_upward() {
                 continue;
             };
 
-            if target_rank > rank
-                && !KNOWN_UPWARD_IMPORTS.contains(&(module.as_str(), target))
-            {
+            if target_rank > rank && !KNOWN_UPWARD_IMPORTS.contains(&(module.as_str(), target)) {
                 violations.push(format!(
                     "{}: {} (layer {}) imports {} (layer {})",
                     path.display(),

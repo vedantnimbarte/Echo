@@ -168,7 +168,10 @@ impl ExclusiveRegistry {
     pub fn begin(&self, key: CapabilityKey) -> Option<ExclusiveGuard<'_>> {
         let mut held = self.held.lock().ok()?;
         if held.insert(key) {
-            Some(ExclusiveGuard { registry: self, key })
+            Some(ExclusiveGuard {
+                registry: self,
+                key,
+            })
         } else {
             None
         }
@@ -389,6 +392,9 @@ mod tests {
         assert!(held.is_some());
 
         let result = execute(&exclusive, spec, (), |_| async { Ok::<(), EchoError>(()) }).await;
-        assert!(result.is_ok(), "a concurrent command waited on an exclusive claim");
+        assert!(
+            result.is_ok(),
+            "a concurrent command waited on an exclusive claim"
+        );
     }
 }

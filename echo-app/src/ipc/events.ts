@@ -1,7 +1,7 @@
 import { listen, emit } from "@tauri-apps/api/event";
 import type { RecordingMode } from "../store/recordingStore";
 import type { PillSize } from "../components/pill/Pill";
-import type { SettingsPage } from "../components/settings/SettingsPanel";
+import type { SettingsPage } from "../components/settings/SettingsView";
 
 export interface TranscriptPartialPayload {
   type: "TranscriptPartial";

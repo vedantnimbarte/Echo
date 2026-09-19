@@ -23,7 +23,7 @@ import { TitleBar } from "./components/common/TitleBar";
 import { DictionaryPanel } from "./components/dictionary/DictionaryPanel";
 import { HistoryPanel } from "./components/history/HistoryPanel";
 import { InsightsPanel } from "./components/insights/InsightsPanel";
-import { SettingsPanel, type SettingsPage } from "./components/settings/SettingsPanel";
+import { SettingsView, type SettingsPage } from "./components/settings/SettingsView";
 import { PluginsPanel } from "./components/plugins/PluginsPanel";
 import { Onboarding } from "./components/onboarding/Onboarding";
 
@@ -331,7 +331,7 @@ export default function App() {
         </nav>
 
         <main className="min-w-0 flex-1 overflow-y-auto">
-          {isSettingsPage(page) && <SettingsPanel page={page} />}
+          {isSettingsPage(page) && <SettingsView page={page} />}
           {page === "insights" && <InsightsPanel />}
           {page === "dictionary" && <DictionaryPanel />}
           {page === "dictation" && (
